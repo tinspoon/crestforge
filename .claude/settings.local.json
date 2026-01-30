@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:clashroyale.fandom.com)",
+      "WebFetch(domain:www.reddit.com)",
+      "WebFetch(domain:i.redd.it)",
+      "Bash(git remote add:*)"
+    ]
+  }
+}

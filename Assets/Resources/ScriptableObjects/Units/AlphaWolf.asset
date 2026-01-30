@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: AlphaWolf
+  m_EditorClassIdentifier: 
+  unitId: alphawolf
+  unitName: AlphaWolf
+  description: 
+  cost: 3
+  traits:
+  - {fileID: 11400000, guid: 2277a9fc851cc444484930116c5e06b8, type: 2}
+  - {fileID: 11400000, guid: eba9270f05ac94174ac418611edf41f3, type: 2}
+  baseStats:
+    health: 700
+    armor: 30
+    magicResist: 25
+    attack: 85
+    attackSpeed: 0.85
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 60
+  ability:
+    abilityName: Pack Howl
+    description: 
+    type: 3
+    damageType: 0
+    baseDamage: 0
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 4
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 5
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

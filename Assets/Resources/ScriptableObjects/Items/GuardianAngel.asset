@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7e7e9efa65514377abb87d4c69f4674, type: 3}
+  m_Name: GuardianAngel
+  m_EditorClassIdentifier: 
+  itemId: guardianangel
+  itemName: Guardian Angel
+  description: Revive with 400 HP
+  rarity: 2
+  icon: {fileID: 0}
+  bonusHealth: 0
+  bonusAttack: 0
+  bonusArmor: 25
+  bonusMagicResist: 25
+  bonusAttackSpeed: 0
+  bonusMana: 0
+  effect: 9
+  effectValue1: 400
+  effectValue2: 0

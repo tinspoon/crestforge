@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Warden
+  m_EditorClassIdentifier: 
+  unitId: warden
+  unitName: Warden
+  description: 
+  cost: 3
+  traits:
+  - {fileID: 11400000, guid: 421caebb233b045a4b96f6eb616bb657, type: 2}
+  - {fileID: 11400000, guid: eba9270f05ac94174ac418611edf41f3, type: 2}
+  - {fileID: 11400000, guid: 9547e38546fb941259c06ad8c09edcd3, type: 2}
+  baseStats:
+    health: 900
+    armor: 55
+    magicResist: 35
+    attack: 70
+    attackSpeed: 0.6
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 70
+  ability:
+    abilityName: Shockwave
+    description: 
+    type: 7
+    damageType: 0
+    baseDamage: 200
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 2
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 0
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

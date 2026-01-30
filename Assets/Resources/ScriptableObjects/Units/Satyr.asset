@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Satyr
+  m_EditorClassIdentifier: 
+  unitId: satyr
+  unitName: Satyr
+  description: 
+  cost: 2
+  traits:
+  - {fileID: 11400000, guid: 7c355cd169fe944e6bb861de1534d419, type: 2}
+  - {fileID: 11400000, guid: a06740fe118c04ea38225d514942fa00, type: 2}
+  baseStats:
+    health: 550
+    armor: 20
+    magicResist: 25
+    attack: 70
+    attackSpeed: 0.8
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 60
+  ability:
+    abilityName: Wild Charge
+    description: 
+    type: 0
+    damageType: 0
+    baseDamage: 180
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 0
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

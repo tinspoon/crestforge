@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7e7e9efa65514377abb87d4c69f4674, type: 3}
+  m_Name: BlazingSword
+  m_EditorClassIdentifier: 
+  itemId: blazingsword
+  itemName: Blazing Sword
+  description: Burn for 50 over 3s
+  rarity: 2
+  icon: {fileID: 0}
+  bonusHealth: 0
+  bonusAttack: 20
+  bonusArmor: 0
+  bonusMagicResist: 0
+  bonusAttackSpeed: 0
+  bonusMana: 0
+  effect: 2
+  effectValue1: 50
+  effectValue2: 3

@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Archdruid
+  m_EditorClassIdentifier: 
+  unitId: archdruid
+  unitName: Archdruid
+  description: 
+  cost: 4
+  traits:
+  - {fileID: 11400000, guid: 2277a9fc851cc444484930116c5e06b8, type: 2}
+  - {fileID: 11400000, guid: 7c355cd169fe944e6bb861de1534d419, type: 2}
+  - {fileID: 11400000, guid: f28c1da2ed09d427e8ee9ea9ab3fdb4b, type: 2}
+  baseStats:
+    health: 700
+    armor: 30
+    magicResist: 50
+    attack: 65
+    attackSpeed: 0.6
+    range: 3
+    moveSpeed: 2
+    startingMana: 40
+    maxMana: 100
+  ability:
+    abilityName: Nature's Wrath
+    description: 
+    type: 1
+    damageType: 0
+    baseDamage: 0
+    baseHealing: 250
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 5
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

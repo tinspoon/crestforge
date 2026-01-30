@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Footman
+  m_EditorClassIdentifier: 
+  unitId: footman
+  unitName: Footman
+  description: 
+  cost: 1
+  traits:
+  - {fileID: 11400000, guid: 421caebb233b045a4b96f6eb616bb657, type: 2}
+  - {fileID: 11400000, guid: eba9270f05ac94174ac418611edf41f3, type: 2}
+  baseStats:
+    health: 550
+    armor: 25
+    magicResist: 20
+    attack: 50
+    attackSpeed: 0.7
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 60
+  ability:
+    abilityName: Shield Bash
+    description: 
+    type: 0
+    damageType: 0
+    baseDamage: 100
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 0
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}
