@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Werewolf
+  m_EditorClassIdentifier: 
+  unitId: werewolf
+  unitName: Werewolf
+  description: 
+  cost: 3
+  traits:
+  - {fileID: 11400000, guid: a9c420798e49b41fdbb53608c66434a8, type: 2}
+  - {fileID: 11400000, guid: 2fb9479b5705943c887c5773286fb33f, type: 2}
+  baseStats:
+    health: 750
+    armor: 30
+    magicResist: 25
+    attack: 85
+    attackSpeed: 0.85
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 55
+  ability:
+    abilityName: Savage Leap
+    description: Leaps to target dealing 300 damage, gaining 40% attack speed for
+      4s
+    type: 8
+    damageType: 0
+    baseDamage: 300
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 4
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0.4
+    targeting: 0
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

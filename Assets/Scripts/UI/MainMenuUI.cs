@@ -186,22 +186,22 @@ namespace Crestforge.UI
                 OnPvEWaveClicked
             );
 
-            // PvP Mode (coming soon)
+            // PvP Mode (now available)
             CreateGameModeCard(
                 "PvP BATTLE",
-                "Challenge other players in ranked matches. " +
-                "Climb the leaderboard and prove your skills!",
-                false,
-                null
+                "Battle against 3 AI opponents! " +
+                "Eliminate them all to claim victory!",
+                true,
+                OnPvPClicked
             );
 
-            // Co-op Mode (coming soon)
+            // Multiplayer Mode
             CreateGameModeCard(
-                "CO-OP SURVIVAL",
-                "Team up with a friend to survive endless waves together. " +
-                "Share units and combine strategies!",
-                false,
-                null
+                "MULTIPLAYER",
+                "Battle against a real player online! " +
+                "Create or join a room to fight head-to-head!",
+                true,
+                OnMultiplayerClicked
             );
 
             // Flexible spacer
@@ -496,23 +496,62 @@ namespace Crestforge.UI
         {
             // Hide menu
             Hide();
-            
+
             // Show game UI first
             GameUI gameUI = GameUI.Instance;
             if (gameUI == null)
             {
-                gameUI = Object.FindObjectOfType<GameUI>(true); // true = include inactive
+                gameUI = Object.FindAnyObjectByType<GameUI>(FindObjectsInactive.Include);
             }
             if (gameUI != null)
             {
                 gameUI.gameObject.SetActive(true);
             }
-            
-            // Start the game
+
+            // Start the game in PvE mode
             if (RoundManager.Instance != null)
             {
-                RoundManager.Instance.StartGame();
+                RoundManager.Instance.StartGame(GameMode.PvEWave);
             }
+        }
+
+        private void OnPvPClicked()
+        {
+            // Hide menu
+            Hide();
+
+            // Show game UI first
+            GameUI gameUI = GameUI.Instance;
+            if (gameUI == null)
+            {
+                gameUI = Object.FindAnyObjectByType<GameUI>(FindObjectsInactive.Include);
+            }
+            if (gameUI != null)
+            {
+                gameUI.gameObject.SetActive(true);
+            }
+
+            // Start the game in PvP mode
+            if (RoundManager.Instance != null)
+            {
+                RoundManager.Instance.StartGame(GameMode.PvP);
+            }
+        }
+
+        private void OnMultiplayerClicked()
+        {
+            // Hide menu
+            Hide();
+
+            // Show lobby UI
+            LobbyUI lobbyUI = LobbyUI.Instance;
+            if (lobbyUI == null)
+            {
+                // Create LobbyUI if it doesn't exist
+                GameObject lobbyObj = new GameObject("LobbyUI");
+                lobbyUI = lobbyObj.AddComponent<LobbyUI>();
+            }
+            lobbyUI.Show();
         }
 
         // ========== Panel Management ==========
@@ -573,7 +612,7 @@ namespace Crestforge.UI
             }
             Text text = obj.AddComponent<Text>();
             text.text = content;
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.fontSize = 18;
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleLeft;

@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: BlueSlime
+  m_EditorClassIdentifier: 
+  unitId: blueslime
+  unitName: Blue Slime
+  description: 
+  cost: 1
+  traits:
+  - {fileID: 11400000, guid: 7ec944bdb553c4bd79ce46cf56b0f17f, type: 2}
+  - {fileID: 11400000, guid: 3fc19abad78dd4791a003bdfe51e0142, type: 2}
+  baseStats:
+    health: 550
+    armor: 25
+    magicResist: 25
+    attack: 40
+    attackSpeed: 0.6
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 60
+  ability:
+    abilityName: Gel Shield
+    description: Grants self a shield equal to 30% max HP for 4 seconds
+    type: 2
+    damageType: 1
+    baseDamage: 0
+    baseHealing: 0
+    baseShieldAmount: 165
+    duration: 4
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 8
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

@@ -679,8 +679,24 @@ namespace Crestforge.Visuals
             shadow.transform.localScale = new Vector3(0.5f * scale, 0.5f * scale, 1f);
             Object.Destroy(shadow.GetComponent<Collider>());
 
-            Material shadowMat = new Material(Shader.Find("Sprites/Default"));
-            shadowMat.color = new Color(0, 0, 0, 0.35f);
+            // Use URP-compatible unlit shader for shadow
+            Shader shadowShader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shadowShader == null)
+                shadowShader = Shader.Find("Sprites/Default");
+
+            Material shadowMat = new Material(shadowShader);
+            shadowMat.SetColor("_BaseColor", new Color(0, 0, 0, 0.35f));
+            shadowMat.color = new Color(0, 0, 0, 0.35f); // Fallback for non-URP
+
+            // Enable transparency for URP/Unlit
+            shadowMat.SetFloat("_Surface", 1); // 1 = Transparent
+            shadowMat.SetFloat("_Blend", 0); // 0 = Alpha
+            shadowMat.SetOverrideTag("RenderType", "Transparent");
+            shadowMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            shadowMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            shadowMat.SetInt("_ZWrite", 0);
+            shadowMat.renderQueue = 3000;
+
             shadow.GetComponent<Renderer>().material = shadowMat;
             shadow.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             shadow.GetComponent<Renderer>().receiveShadows = false;

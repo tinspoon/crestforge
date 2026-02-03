@@ -44,6 +44,9 @@ namespace Crestforge.Visuals
             [Tooltip("Death animation clip name")]
             public string deathClip;
 
+            [Tooltip("Victory/celebration animation clip name")]
+            public string victoryClip;
+
             [Header("Animation Speed")]
             [Tooltip("Speed multiplier for attack animation (1 = normal, 2 = twice as fast)")]
             [Range(0.5f, 4f)]

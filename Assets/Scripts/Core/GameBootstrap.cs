@@ -46,7 +46,7 @@ namespace Crestforge.Core
 
         private void EnsureManagerExists<T>(GameObject prefab, string name) where T : MonoBehaviour
         {
-            if (FindObjectOfType<T>() == null)
+            if (FindAnyObjectByType<T>() == null)
             {
                 GameObject go;
                 if (prefab != null)

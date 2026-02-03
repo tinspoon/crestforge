@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 092a7b2eeb0a25e45886f37e1e5b68a4
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 253591
+  packageName: RPG Monster Wave 3 PBR
+  packageVersion: 1.1
+  assetPath: Assets/RPGMonsterWave03PBR/Shader/PBRMaskTint.shader
+  uploadId: 581226

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: a09aad1b2fa8436a8b9e448ce2e0f514
+timeCreated: 1575300022
+licenseType: Store
+DefaultImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 158727
+  packageName: RPG Monster Wave PBR
+  packageVersion: 1.5
+  assetPath: Assets/RPG Monster Wave PBR/Scenes/PBRMaskTint03.unity
+  uploadId: 634944

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 756833c3743a4da099046c68ab9ee74c
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 253591
+  packageName: RPG Monster Wave 3 PBR
+  packageVersion: 1.1
+  assetPath: Assets/RPGMonsterWave03PBR/Material/PBR_Default.mat
+  uploadId: 581226

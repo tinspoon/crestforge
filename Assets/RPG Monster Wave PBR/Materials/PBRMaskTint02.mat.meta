@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: ac1795a4f5b24093bd477d747825f30b
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 158727
+  packageName: RPG Monster Wave PBR
+  packageVersion: 1.5
+  assetPath: Assets/RPG Monster Wave PBR/Materials/PBRMaskTint02.mat
+  uploadId: 634944

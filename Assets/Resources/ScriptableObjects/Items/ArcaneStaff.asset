@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d7e7e9efa65514377abb87d4c69f4674, type: 3}
   m_Name: ArcaneStaff
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.ItemData
   itemId: arcanestaff
   itemName: Arcane Staff
   description: +20% Ability Damage

@@ -26,7 +26,8 @@ namespace Crestforge.Editor
             GenerateAllUnits();
             GenerateAllItems();
             GenerateAllCrests();
-            
+            GeneratePvECritters();
+
             // Refresh asset database
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -54,10 +55,11 @@ namespace Crestforge.Editor
             var gameState = gameStateGO.GetComponent<GameState>();
             
             // Load assets directly using AssetDatabase (more reliable than Resources.LoadAll)
-            gameState.allUnits = LoadAssetsFromFolder<UnitData>("Assets/Resources/ScriptableObjects/Units");
+            // Use NewUnits and NewTraits folders for the updated 40-unit roster
+            gameState.allUnits = LoadAssetsFromFolder<UnitData>("Assets/Resources/ScriptableObjects/NewUnits");
             gameState.allItems = LoadAssetsFromFolder<ItemData>("Assets/Resources/ScriptableObjects/Items");
             gameState.allCrests = LoadAssetsFromFolder<CrestData>("Assets/Resources/ScriptableObjects/Crests");
-            gameState.allTraits = LoadAssetsFromFolder<TraitData>("Assets/Resources/ScriptableObjects/Traits");
+            gameState.allTraits = LoadAssetsFromFolder<TraitData>("Assets/Resources/ScriptableObjects/NewTraits");
             
             Debug.Log($"GameState linked: {gameState.allUnits.Length} units, {gameState.allItems.Length} items, {gameState.allCrests.Length} crests, {gameState.allTraits.Length} traits");
 
@@ -77,7 +79,7 @@ namespace Crestforge.Editor
             bootstrapGO.GetComponent<GameBootstrap>().autoStartGame = false;
 
             // 6. DebugUI - disable old UI
-            var debugUI = Object.FindObjectOfType<DebugUI>();
+            var debugUI = Object.FindFirstObjectByType<DebugUI>();
             if (debugUI != null)
             {
                 debugUI.gameObject.SetActive(false);
@@ -92,8 +94,11 @@ namespace Crestforge.Editor
             // 9. HexGridRenderer
             CreateOrFind<HexGridRenderer>("HexGrid");
 
-            // 10. CombatVisualizer
-            CreateOrFind<CombatVisualizer>("CombatVisualizer");
+            // 10. CombatVisualizer (UI effects)
+            CreateOrFind<Crestforge.UI.CombatVisualizer>("CombatVisualizer");
+
+            // 11. ServerCombatVisualizer (multiplayer combat playback)
+            CreateOrFind<Crestforge.Systems.ServerCombatVisualizer>("ServerCombatVisualizer");
 
             // 11. Camera Controller
             var mainCamera = Camera.main;
@@ -147,7 +152,7 @@ namespace Crestforge.Editor
 
         private static GameObject CreateOrFind<T>(string name) where T : MonoBehaviour
         {
-            var existing = Object.FindObjectOfType<T>();
+            var existing = Object.FindFirstObjectByType<T>();
             if (existing != null)
             {
                 return existing.gameObject;
@@ -171,7 +176,7 @@ namespace Crestforge.Editor
             DeleteAllAssetsInFolder(path);
 
             // Origins
-            CreateTrait(path, "Human", TraitCategory.Origin, new int[] { 2, 4, 6 },
+            CreateTrait(path, "Human", false, new int[] { 2, 4, 6 },
                 "Strength in unity",
                 new TraitBonus[] {
                     new TraitBonus { bonusHealth = 25, bonusAttack = 5, bonusDescription = "+5% stats per Human" },
@@ -179,7 +184,7 @@ namespace Crestforge.Editor
                     new TraitBonus { bonusHealth = 75, bonusAttack = 15, bonusArmor = 10, bonusDescription = "+15% stats, +10 Armor" }
                 });
 
-            CreateTrait(path, "Undead", TraitCategory.Origin, new int[] { 2, 4, 6 },
+            CreateTrait(path, "Undead", false, new int[] { 2, 4, 6 },
                 "Death is only the beginning",
                 new TraitBonus[] {
                     new TraitBonus { specialEffect = TraitEffect.Lifesteal, effectValue1 = 0.15f, bonusDescription = "15% Lifesteal" },
@@ -187,7 +192,7 @@ namespace Crestforge.Editor
                     new TraitBonus { specialEffect = TraitEffect.Lifesteal, effectValue1 = 0.35f, bonusDescription = "35% Lifesteal + revive" }
                 });
 
-            CreateTrait(path, "Beast", TraitCategory.Origin, new int[] { 2, 4, 6 },
+            CreateTrait(path, "Beast", false, new int[] { 2, 4, 6 },
                 "The pack hunts as one",
                 new TraitBonus[] {
                     new TraitBonus { bonusAttackSpeed = 0.15f, bonusDescription = "+15% Attack Speed" },
@@ -195,21 +200,21 @@ namespace Crestforge.Editor
                     new TraitBonus { bonusAttackSpeed = 0.50f, bonusDescription = "+50% AS, double strike" }
                 });
 
-            CreateTrait(path, "Elemental", TraitCategory.Origin, new int[] { 2, 4 },
+            CreateTrait(path, "Elemental", false, new int[] { 2, 4 },
                 "Primordial forces unleashed",
                 new TraitBonus[] {
                     new TraitBonus { bonusAttack = 20, bonusDescription = "+20 magic damage" },
                     new TraitBonus { bonusAttack = 40, bonusDescription = "+40 magic damage, -20 MR" }
                 });
 
-            CreateTrait(path, "Demon", TraitCategory.Origin, new int[] { 2, 4 },
+            CreateTrait(path, "Demon", false, new int[] { 2, 4 },
                 "Power demands sacrifice",
                 new TraitBonus[] {
                     new TraitBonus { bonusAttack = 30, bonusDescription = "+30% damage" },
                     new TraitBonus { bonusAttack = 50, bonusDescription = "+50% damage, heal on kill" }
                 });
 
-            CreateTrait(path, "Fey", TraitCategory.Origin, new int[] { 2, 4 },
+            CreateTrait(path, "Fey", false, new int[] { 2, 4 },
                 "Now you see me...",
                 new TraitBonus[] {
                     new TraitBonus { bonusMagicResist = 20, bonusDescription = "20% dodge, +20 MR" },
@@ -217,7 +222,7 @@ namespace Crestforge.Editor
                 });
 
             // Classes
-            CreateTrait(path, "Warrior", TraitCategory.Class, new int[] { 2, 4, 6 },
+            CreateTrait(path, "Warrior", false, new int[] { 2, 4, 6 },
                 "First into battle",
                 new TraitBonus[] {
                     new TraitBonus { bonusArmor = 25, bonusDescription = "+25 Armor" },
@@ -225,14 +230,14 @@ namespace Crestforge.Editor
                     new TraitBonus { bonusArmor = 75, bonusDescription = "+75 Armor, 50% cleave" }
                 });
 
-            CreateTrait(path, "Ranger", TraitCategory.Class, new int[] { 2, 4 },
+            CreateTrait(path, "Ranger", false, new int[] { 2, 4 },
                 "Death from afar",
                 new TraitBonus[] {
                     new TraitBonus { bonusAttack = 20, bonusDescription = "+20 Attack, armor pen" },
                     new TraitBonus { bonusAttack = 40, bonusAttackSpeed = 0.2f, bonusDescription = "+40 Attack, 40% pen" }
                 });
 
-            CreateTrait(path, "Mage", TraitCategory.Class, new int[] { 2, 4, 6 },
+            CreateTrait(path, "Mage", false, new int[] { 2, 4, 6 },
                 "Knowledge is power",
                 new TraitBonus[] {
                     new TraitBonus { specialEffect = TraitEffect.AbilityDamageBonus, effectValue1 = 0.2f, bonusDescription = "+20% ability damage" },
@@ -240,34 +245,34 @@ namespace Crestforge.Editor
                     new TraitBonus { specialEffect = TraitEffect.AbilityDamageBonus, effectValue1 = 0.7f, bonusDescription = "+70% ability damage" }
                 });
 
-            CreateTrait(path, "Tank", TraitCategory.Class, new int[] { 2, 4 },
+            CreateTrait(path, "Tank", false, new int[] { 2, 4 },
                 "Unbreakable",
                 new TraitBonus[] {
                     new TraitBonus { bonusHealth = 300, bonusDescription = "+300 HP, 10% DR" },
                     new TraitBonus { bonusHealth = 600, bonusDescription = "+600 HP, 20% DR" }
                 });
 
-            CreateTrait(path, "Assassin", TraitCategory.Class, new int[] { 2, 4 },
+            CreateTrait(path, "Assassin", false, new int[] { 2, 4 },
                 "Strike from shadows",
                 new TraitBonus[] {
                     new TraitBonus { specialEffect = TraitEffect.JumpToBackline, bonusDescription = "Jump backline, +25% crit" },
                     new TraitBonus { specialEffect = TraitEffect.JumpToBackline, bonusDescription = "Jump, +75% crit damage" }
                 });
 
-            CreateTrait(path, "Support", TraitCategory.Class, new int[] { 2, 4 },
+            CreateTrait(path, "Support", false, new int[] { 2, 4 },
                 "Together we stand",
                 new TraitBonus[] {
                     new TraitBonus { bonusDescription = "Heal lowest ally 50 HP/3s" },
                     new TraitBonus { globalBonusAttackSpeed = 0.15f, bonusDescription = "Heal all, +15% team AS" }
                 });
 
-            CreateTrait(path, "Berserker", TraitCategory.Class, new int[] { 2 },
+            CreateTrait(path, "Berserker", false, new int[] { 2 },
                 "Pain fuels rage",
                 new TraitBonus[] {
                     new TraitBonus { bonusDescription = "+1% AS per 1% missing HP" }
                 });
 
-            CreateTrait(path, "Summoner", TraitCategory.Class, new int[] { 2, 4 },
+            CreateTrait(path, "Summoner", false, new int[] { 2, 4 },
                 "Rise, my minions",
                 new TraitBonus[] {
                     new TraitBonus { bonusDescription = "Summon 1-star copy" },
@@ -277,12 +282,12 @@ namespace Crestforge.Editor
             Debug.Log("Generated 14 traits");
         }
 
-        private static void CreateTrait(string path, string name, TraitCategory category, int[] tiers, string desc, TraitBonus[] bonuses)
+        private static void CreateTrait(string path, string name, bool isUnique, int[] tiers, string desc, TraitBonus[] bonuses)
         {
             var trait = ScriptableObject.CreateInstance<TraitData>();
             trait.traitId = name.ToLower().Replace(" ", "_");
             trait.traitName = name;
-            trait.category = category;
+            trait.isUnique = isUnique;
             trait.description = desc;
             trait.tierThresholds = tiers;
             trait.tierBonuses = bonuses;
@@ -321,7 +326,7 @@ namespace Crestforge.Editor
 
             CreateUnit(path, "Imp", 1, new[] { "Demon", "Mage" }, traits,
                 new UnitStats { health = 350, attack = 40, armor = 10, magicResist = 25, attackSpeed = 0.75f, range = 3, startingMana = 20, maxMana = 60 },
-                new AbilityData { abilityName = "Firebolt", baseDamage = 180, type = AbilityType.Damage, damageType = DamageType.Fire });
+                new AbilityData { abilityName = "Firebolt", baseDamage = 180, type = AbilityType.Damage, damageType = DamageType.Elemental });
 
             CreateUnit(path, "Sprite", 1, new[] { "Fey", "Support" }, traits,
                 new UnitStats { health = 320, attack = 35, armor = 10, magicResist = 30, attackSpeed = 0.8f, range = 3, startingMana = 30, maxMana = 70 },
@@ -346,7 +351,7 @@ namespace Crestforge.Editor
 
             CreateUnit(path, "Ghoul", 2, new[] { "Undead", "Assassin" }, traits,
                 new UnitStats { health = 500, attack = 65, armor = 20, magicResist = 20, attackSpeed = 0.85f, range = 1, maxMana = 50 },
-                new AbilityData { abilityName = "Life Drain", baseDamage = 150, type = AbilityType.DamageAndHeal, damageType = DamageType.Magic });
+                new AbilityData { abilityName = "Life Drain", baseDamage = 150, type = AbilityType.DamageAndHeal, damageType = DamageType.Dark });
 
             CreateUnit(path, "Druid", 2, new[] { "Beast", "Support", "Summoner" }, traits,
                 new UnitStats { health = 480, attack = 45, armor = 20, magicResist = 35, attackSpeed = 0.7f, range = 3, startingMana = 20, maxMana = 80 },
@@ -354,11 +359,11 @@ namespace Crestforge.Editor
 
             CreateUnit(path, "FireMage", 2, new[] { "Elemental", "Mage" }, traits,
                 new UnitStats { health = 420, attack = 50, armor = 15, magicResist = 40, attackSpeed = 0.65f, range = 4, startingMana = 25, maxMana = 70 },
-                new AbilityData { abilityName = "Flame Wave", baseDamage = 220, type = AbilityType.AreaDamage, damageType = DamageType.Fire, radius = 1 });
+                new AbilityData { abilityName = "Flame Wave", baseDamage = 220, type = AbilityType.AreaDamage, damageType = DamageType.Elemental, radius = 1 });
 
             CreateUnit(path, "Shadow", 2, new[] { "Undead", "Assassin" }, traits,
                 new UnitStats { health = 420, attack = 70, armor = 15, magicResist = 25, attackSpeed = 0.9f, range = 1, maxMana = 45 },
-                new AbilityData { abilityName = "Shadow Strike", baseDamage = 250, type = AbilityType.Damage, damageType = DamageType.Magic, targeting = AbilityTargeting.BacklineEnemy });
+                new AbilityData { abilityName = "Shadow Strike", baseDamage = 250, type = AbilityType.Damage, damageType = DamageType.Dark, targeting = AbilityTargeting.BacklineEnemy });
 
             CreateUnit(path, "Satyr", 2, new[] { "Fey", "Berserker" }, traits,
                 new UnitStats { health = 550, attack = 70, armor = 20, magicResist = 25, attackSpeed = 0.8f, range = 1, maxMana = 60 },
@@ -387,11 +392,11 @@ namespace Crestforge.Editor
 
             CreateUnit(path, "StormElemental", 3, new[] { "Elemental", "Mage" }, traits,
                 new UnitStats { health = 520, attack = 60, armor = 20, magicResist = 50, attackSpeed = 0.7f, range = 3, startingMana = 25, maxMana = 80 },
-                new AbilityData { abilityName = "Chain Lightning", baseDamage = 180, type = AbilityType.AreaDamage, damageType = DamageType.Magic, projectileCount = 3 });
+                new AbilityData { abilityName = "Chain Lightning", baseDamage = 180, type = AbilityType.AreaDamage, damageType = DamageType.Elemental, projectileCount = 3 });
 
             CreateUnit(path, "Succubus", 3, new[] { "Demon", "Assassin" }, traits,
                 new UnitStats { health = 550, attack = 90, armor = 20, magicResist = 30, attackSpeed = 0.9f, range = 1, maxMana = 55 },
-                new AbilityData { abilityName = "Soul Kiss", baseDamage = 300, type = AbilityType.DamageAndHeal, damageType = DamageType.Magic });
+                new AbilityData { abilityName = "Soul Kiss", baseDamage = 300, type = AbilityType.DamageAndHeal, damageType = DamageType.Dark });
 
             CreateUnit(path, "Enchantress", 3, new[] { "Fey", "Mage", "Support" }, traits,
                 new UnitStats { health = 480, attack = 50, armor = 15, magicResist = 55, attackSpeed = 0.65f, range = 4, startingMana = 35, maxMana = 85 },
@@ -408,7 +413,7 @@ namespace Crestforge.Editor
 
             CreateUnit(path, "DeathKnight", 4, new[] { "Undead", "Tank", "Warrior" }, traits,
                 new UnitStats { health = 1100, attack = 85, armor = 55, magicResist = 45, attackSpeed = 0.6f, range = 1, maxMana = 90 },
-                new AbilityData { abilityName = "Death Coil", baseDamage = 300, baseHealing = 300, type = AbilityType.DamageAndHeal, damageType = DamageType.Magic });
+                new AbilityData { abilityName = "Death Coil", baseDamage = 300, baseHealing = 300, type = AbilityType.DamageAndHeal, damageType = DamageType.Dark });
 
             CreateUnit(path, "Phoenix", 4, new[] { "Elemental", "Support" }, traits,
                 new UnitStats { health = 600, attack = 70, armor = 25, magicResist = 55, attackSpeed = 0.75f, range = 3, startingMana = 30, maxMana = 100 },
@@ -416,7 +421,7 @@ namespace Crestforge.Editor
 
             CreateUnit(path, "DemonLord", 4, new[] { "Demon", "Tank", "Berserker" }, traits,
                 new UnitStats { health = 1000, attack = 95, armor = 45, magicResist = 40, attackSpeed = 0.65f, range = 1, maxMana = 85 },
-                new AbilityData { abilityName = "Hellfire", baseDamage = 350, type = AbilityType.AreaDamage, damageType = DamageType.Fire, radius = 2 });
+                new AbilityData { abilityName = "Hellfire", baseDamage = 350, type = AbilityType.AreaDamage, damageType = DamageType.Elemental, radius = 2 });
 
             CreateUnit(path, "Archdruid", 4, new[] { "Beast", "Fey", "Summoner" }, traits,
                 new UnitStats { health = 700, attack = 65, armor = 30, magicResist = 50, attackSpeed = 0.6f, range = 3, startingMana = 40, maxMana = 100 },
@@ -424,15 +429,15 @@ namespace Crestforge.Editor
 
             CreateUnit(path, "Archmage", 4, new[] { "Human", "Mage" }, traits,
                 new UnitStats { health = 550, attack = 60, armor = 20, magicResist = 60, attackSpeed = 0.6f, range = 4, startingMana = 40, maxMana = 100 },
-                new AbilityData { abilityName = "Meteor", baseDamage = 600, type = AbilityType.AreaDamage, damageType = DamageType.Fire, radius = 2 });
+                new AbilityData { abilityName = "Meteor", baseDamage = 600, type = AbilityType.AreaDamage, damageType = DamageType.Elemental, radius = 2 });
 
             CreateUnit(path, "Lich", 4, new[] { "Undead", "Mage", "Summoner" }, traits,
                 new UnitStats { health = 580, attack = 65, armor = 15, magicResist = 55, attackSpeed = 0.55f, range = 4, startingMana = 35, maxMana = 95 },
-                new AbilityData { abilityName = "Death Nova", baseDamage = 400, type = AbilityType.AreaDamage, damageType = DamageType.Magic, radius = 2 });
+                new AbilityData { abilityName = "Death Nova", baseDamage = 400, type = AbilityType.AreaDamage, damageType = DamageType.Dark, radius = 2 });
 
             CreateUnit(path, "Dragon", 4, new[] { "Beast", "Elemental", "Warrior" }, traits,
                 new UnitStats { health = 1200, attack = 110, armor = 45, magicResist = 45, attackSpeed = 0.5f, range = 2, maxMana = 100 },
-                new AbilityData { abilityName = "Dragon Breath", baseDamage = 500, type = AbilityType.AreaDamage, damageType = DamageType.Fire, radius = 2 });
+                new AbilityData { abilityName = "Dragon Breath", baseDamage = 500, type = AbilityType.AreaDamage, damageType = DamageType.Elemental, radius = 2 });
 
             Debug.Log("Generated 32 units");
         }
@@ -533,6 +538,43 @@ namespace Crestforge.Editor
             CreateCrest(path, "LifeBond", "Life Bond", CrestType.Major, "Support abilities heal all for 50", 0, 0, 0, 0, 0, 0, CrestEffect.AllyDeathHeal, 50, 0, 0);
 
             Debug.Log("Generated 15 crests");
+        }
+
+        [MenuItem("Crestforge/Generate PvE Critters")]
+        public static void GeneratePvECritters()
+        {
+            string path = "Assets/Resources/ScriptableObjects/PvEUnits";
+            EnsureDirectoryExists(path);
+
+            // Create very weak critter units for PvE intro
+            CreatePvEUnit(path, "Stingray", "Stingray", 80, 15, 0, 0, 0.6f, 1);
+            CreatePvEUnit(path, "Cactus", "Cactus", 100, 10, 5, 0, 0.5f, 1);
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("Generated 2 PvE critter units in " + path);
+        }
+
+        private static void CreatePvEUnit(string path, string id, string name, int health, int attack, int armor, int mr, float atkSpd, int range)
+        {
+            var unit = ScriptableObject.CreateInstance<UnitData>();
+            unit.unitId = id.ToLower();
+            unit.unitName = name;
+            unit.cost = 0; // PvE units have no cost
+            unit.baseStats = new UnitStats
+            {
+                health = health,
+                attack = attack,
+                armor = armor,
+                magicResist = mr,
+                attackSpeed = atkSpd,
+                range = range,
+                maxMana = 100,
+                startingMana = 0
+            };
+            unit.traits = new TraitData[0];
+            unit.ability = new AbilityData { abilityName = "None", type = AbilityType.Damage };
+            AssetDatabase.CreateAsset(unit, $"{path}/{id}.asset");
         }
 
         private static void CreateCrest(string path, string id, string name, CrestType type, string desc, int hp, int atk, int armor, int mr, float atkSpd, int mana, CrestEffect effect, float v1, float v2, float v3)

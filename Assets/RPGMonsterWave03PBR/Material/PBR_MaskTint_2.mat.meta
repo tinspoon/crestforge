@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 60efe51af8ee0ba41945f11aac16d5c7
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 253591
+  packageName: RPG Monster Wave 3 PBR
+  packageVersion: 1.1
+  assetPath: Assets/RPGMonsterWave03PBR/Material/PBR_MaskTint_2.mat
+  uploadId: 581226

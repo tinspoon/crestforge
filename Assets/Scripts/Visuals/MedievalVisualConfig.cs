@@ -10,21 +10,17 @@ namespace Crestforge.Visuals
     /// </summary>
     public static class MedievalVisualConfig
     {
-        // Cached shader references
-        private static Shader _toonShader;
-        private static Shader _toonTransparentShader;
-
+        // Get shader fresh each time to avoid caching issues
         public static Shader ToonShader
         {
             get
             {
-                if (_toonShader == null)
-                {
-                    _toonShader = Shader.Find("Crestforge/MedievalToon");
-                    if (_toonShader == null)
-                        _toonShader = Shader.Find("Standard");
-                }
-                return _toonShader;
+                Shader shader = Shader.Find("Crestforge/MedievalToon");
+                if (shader == null)
+                    shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null)
+                    shader = Shader.Find("Standard");
+                return shader;
             }
         }
 
@@ -32,13 +28,12 @@ namespace Crestforge.Visuals
         {
             get
             {
-                if (_toonTransparentShader == null)
-                {
-                    _toonTransparentShader = Shader.Find("Crestforge/MedievalToonTransparent");
-                    if (_toonTransparentShader == null)
-                        _toonTransparentShader = Shader.Find("Transparent/Diffuse");
-                }
-                return _toonTransparentShader;
+                Shader shader = Shader.Find("Crestforge/MedievalToonTransparent");
+                if (shader == null)
+                    shader = Shader.Find("Universal Render Pipeline/Lit");
+                if (shader == null)
+                    shader = Shader.Find("Transparent/Diffuse");
+                return shader;
             }
         }
 
@@ -139,15 +134,15 @@ namespace Crestforge.Visuals
         public static class BoardColors
         {
             // Player side - Bright grass green
-            public static readonly Color PlayerTileBase = new Color(0.45f, 0.65f, 0.32f);
-            public static readonly Color PlayerTileLight = new Color(0.5f, 0.7f, 0.38f);
-            public static readonly Color PlayerTileDark = new Color(0.35f, 0.55f, 0.25f);
+            public static readonly Color PlayerTileBase = new Color(0.35f, 0.7f, 0.25f);   // Brighter green
+            public static readonly Color PlayerTileLight = new Color(0.4f, 0.78f, 0.3f);
+            public static readonly Color PlayerTileDark = new Color(0.28f, 0.55f, 0.2f);
             public static readonly Color PlayerHighlight = new Color(0.55f, 0.75f, 0.4f);
 
             // Enemy side - Slightly different shade of grass (darker/cooler)
-            public static readonly Color EnemyTileBase = new Color(0.4f, 0.58f, 0.32f);
-            public static readonly Color EnemyTileLight = new Color(0.45f, 0.63f, 0.38f);
-            public static readonly Color EnemyTileDark = new Color(0.32f, 0.48f, 0.25f);
+            public static readonly Color EnemyTileBase = new Color(0.55f, 0.65f, 0.3f);   // Olive/yellow-green
+            public static readonly Color EnemyTileLight = new Color(0.6f, 0.7f, 0.35f);
+            public static readonly Color EnemyTileDark = new Color(0.45f, 0.55f, 0.25f);
             public static readonly Color EnemyHighlight = new Color(0.6f, 0.4f, 0.35f);
 
             // Hex outline color
@@ -168,24 +163,38 @@ namespace Crestforge.Visuals
         {
             Material mat = new Material(ToonShader);
 
-            mat.SetColor("_MainColor", mainColor);
-            mat.SetColor("_ShadowColor", shadowColor ?? Color.Lerp(mainColor, Color.black, 0.5f));
-            mat.SetFloat("_ShadowThreshold", 0.5f);
-            mat.SetFloat("_ShadowSoftness", 0.05f);
+            // Check if we're using URP/Lit shader (fallback) or custom toon shader
+            bool isURPLit = ToonShader.name.Contains("Universal Render Pipeline");
 
-            mat.SetColor("_RimColor", Color.Lerp(mainColor, Color.white, 0.5f));
-            mat.SetFloat("_RimPower", 3f);
-            mat.SetFloat("_RimIntensity", rimIntensity);
+            if (isURPLit)
+            {
+                // URP/Lit shader properties
+                mat.SetColor("_BaseColor", mainColor);
+                mat.SetFloat("_Smoothness", 0.3f);
+                mat.SetFloat("_Metallic", 0f);
+            }
+            else
+            {
+                // Custom toon shader properties
+                mat.SetColor("_MainColor", mainColor);
+                mat.SetColor("_ShadowColor", shadowColor ?? Color.Lerp(mainColor, Color.black, 0.5f));
+                mat.SetFloat("_ShadowThreshold", 0.5f);
+                mat.SetFloat("_ShadowSoftness", 0.05f);
 
-            mat.SetColor("_SpecularColor", Color.white);
-            mat.SetFloat("_SpecularIntensity", 0.2f);
-            mat.SetFloat("_SpecularSize", 0.05f);
+                mat.SetColor("_RimColor", Color.Lerp(mainColor, Color.white, 0.5f));
+                mat.SetFloat("_RimPower", 3f);
+                mat.SetFloat("_RimIntensity", rimIntensity);
 
-            mat.SetColor("_OutlineColor", Color.Lerp(mainColor, Color.black, 0.7f));
-            mat.SetFloat("_OutlineWidth", 0.008f);
+                mat.SetColor("_SpecularColor", Color.white);
+                mat.SetFloat("_SpecularIntensity", 0.2f);
+                mat.SetFloat("_SpecularSize", 0.05f);
 
-            mat.SetColor("_EmissionColor", Color.black);
-            mat.SetFloat("_EmissionIntensity", 0f);
+                mat.SetColor("_OutlineColor", Color.Lerp(mainColor, Color.black, 0.7f));
+                mat.SetFloat("_OutlineWidth", 0.008f);
+
+                mat.SetColor("_EmissionColor", Color.black);
+                mat.SetFloat("_EmissionIntensity", 0f);
+            }
 
             return mat;
         }

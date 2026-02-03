@@ -11,12 +11,12 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 97a84588212144e908e2529be8d7ba76, type: 3}
   m_Name: Beast
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.TraitData
   traitId: beast
   traitName: Beast
   description: The pack hunts as one
   icon: {fileID: 0}
-  category: 0
+  isUnique: 0
   tierThresholds: 020000000400000006000000
   tierBonuses:
   - bonusHealth: 0

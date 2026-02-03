@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: BattleBee
+  m_EditorClassIdentifier: 
+  unitId: battlebee
+  unitName: Battle Bee
+  description: 
+  cost: 2
+  traits:
+  - {fileID: 11400000, guid: 43bf2e8f9ed5e44dfa377e77c3c5e04b, type: 2}
+  - {fileID: 11400000, guid: b69a8b2bca1c045baae64cb18a5a6f1c, type: 2}
+  baseStats:
+    health: 480
+    armor: 20
+    magicResist: 20
+    attack: 60
+    attackSpeed: 0.85
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 45
+  ability:
+    abilityName: Swarm Strike
+    description: Rapidly stings target 4 times for 60 damage each
+    type: 0
+    damageType: 1
+    baseDamage: 240
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 4
+    attackSpeedBonus: 0
+    targeting: 0
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

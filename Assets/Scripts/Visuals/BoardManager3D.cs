@@ -6,6 +6,8 @@ using Crestforge.Core;
 using Crestforge.Systems;
 using Crestforge.Data;
 using Crestforge.Combat;
+using Crestforge.Networking;
+using Crestforge.UI;
 
 namespace Crestforge.Visuals
 {
@@ -37,11 +39,41 @@ namespace Crestforge.Visuals
         private Vector3 dragStartPos;
         private Vector2Int dragStartCoord;
         private bool isDragging;
+        private bool isPendingDrag; // Waiting to see if this becomes a drag or tap
+        private bool isDraggingFromBench;
+        private int benchDragIndex;
         private GameObject dragPlaceholder;
+        private Vector3 dragStartMousePos;
+        private const float TAP_THRESHOLD = 10f; // pixels
 
         // Hover
         private GameObject hoveredTile;
         private UnitVisual3D hoveredUnit;
+
+        // Bench visuals (slots are created by Game3DSetup)
+        private Dictionary<int, UnitVisual3D> benchVisuals = new Dictionary<int, UnitVisual3D>();
+
+        // Multiplayer support
+        private bool IsMultiplayer => ServerGameState.Instance != null && ServerGameState.Instance.IsInGame;
+        private ServerGameState serverState => ServerGameState.Instance;
+        private HashSet<string> recentlyMovedUnits = new HashSet<string>(); // Units moved by drag, skip sync until server confirms
+        private HashSet<string> recentlySoldUnits = new HashSet<string>(); // Units sold, skip sync until server confirms
+
+        /// <summary>
+        /// Get the visual registry for the player's board
+        /// </summary>
+        private BoardVisualRegistry Registry => hexBoard?.Registry;
+
+        // Dictionary accessors that delegate to registry - for drag/drop operations
+        // These allow existing drag code to continue working while using the registry as backing store
+        private Dictionary<string, UnitVisual3D> serverUnitVisuals =>
+            Registry?.BoardVisualsInternal ?? _fallbackServerUnitVisuals;
+        private Dictionary<int, UnitVisual3D> serverBenchVisuals =>
+            Registry?.BenchVisualsInternal ?? _fallbackServerBenchVisuals;
+
+        // Fallback dictionaries if registry not available yet
+        private Dictionary<string, UnitVisual3D> _fallbackServerUnitVisuals = new Dictionary<string, UnitVisual3D>();
+        private Dictionary<int, UnitVisual3D> _fallbackServerBenchVisuals = new Dictionary<int, UnitVisual3D>();
 
         private void Awake()
         {
@@ -52,22 +84,43 @@ namespace Crestforge.Visuals
         private void Start()
         {
             state = GameState.Instance;
-            
-            // Find or create board
-            if (hexBoard == null)
+
+            // Subscribe to server state updates to clear recently moved units
+            if (ServerGameState.Instance != null)
             {
-                hexBoard = FindObjectOfType<HexBoard3D>();
+                ServerGameState.Instance.OnStateUpdated += OnServerStateUpdated;
+                ServerGameState.Instance.OnBoardUpdated += OnServerStateUpdated;
+            }
+
+            // For multiplayer, DON'T set hexBoard here - wait for SetPlayerBoard to be called
+            // This prevents using the wrong board when there are multiple boards
+            if (!IsMultiplayer)
+            {
+                // Single player: Find or create board - prefer the player's board (HexBoard3D.Instance)
                 if (hexBoard == null)
                 {
-                    GameObject boardObj = new GameObject("HexBoard3D");
-                    hexBoard = boardObj.AddComponent<HexBoard3D>();
+                    // Use HexBoard3D.Instance which should be the player's board
+                    hexBoard = HexBoard3D.Instance;
+
+                    // Fallback to finding any board if Instance not set yet
+                    if (hexBoard == null)
+                    {
+                        hexBoard = FindAnyObjectByType<HexBoard3D>();
+                    }
+
+                    // Create new board as last resort
+                    if (hexBoard == null)
+                    {
+                        GameObject boardObj = new GameObject("HexBoard3D");
+                        hexBoard = boardObj.AddComponent<HexBoard3D>();
+                    }
                 }
             }
 
             // Find or create camera
             if (cameraSetup == null)
             {
-                cameraSetup = FindObjectOfType<IsometricCameraSetup>();
+                cameraSetup = FindAnyObjectByType<IsometricCameraSetup>();
                 if (cameraSetup == null && Camera.main != null)
                 {
                     cameraSetup = Camera.main.gameObject.AddComponent<IsometricCameraSetup>();
@@ -77,6 +130,8 @@ namespace Crestforge.Visuals
             // Create drag placeholder
             CreateDragPlaceholder();
 
+            // Note: Bench slots are created by Game3DSetup for all boards
+
             // Subscribe to combat events (if CombatManager exists)
             if (CombatManager.Instance != null && !subscribedToCombat)
             {
@@ -85,9 +140,72 @@ namespace Crestforge.Visuals
             }
         }
 
+        /// <summary>
+        /// Update the board reference to the player's board.
+        /// Called by Game3DSetup after multi-board layout is created.
+        /// </summary>
+        public void SetPlayerBoard(HexBoard3D board)
+        {
+            if (board != null)
+            {
+                hexBoard = board;
+
+                // Clear existing unit visuals so they get recreated at the correct position
+                // This prevents units from walking from old positions to new positions
+                if (IsMultiplayer)
+                {
+                    ClearMultiplayerVisuals();
+                }
+
+                // Refresh bench positions to align with the new board
+                RefreshBenchPositions();
+
+            }
+            else
+            {
+                Debug.LogWarning("[BoardManager3D] SetPlayerBoard called with null board!");
+            }
+        }
+
+        /// <summary>
+        /// Called when server state is updated - clear recently moved units so sync can proceed
+        /// </summary>
+        private void OnServerStateUpdated()
+        {
+            recentlyMovedUnits.Clear();
+            recentlySoldUnits.Clear();
+        }
+
+        /// <summary>
+        /// Clear all multiplayer unit visuals so they can be recreated at correct positions
+        /// </summary>
+        private void ClearMultiplayerVisuals()
+        {
+            if (Registry != null)
+            {
+                Registry.ClearAll();
+            }
+        }
+
+        /// <summary>
+        /// Refresh bench slot positions - bench slots are managed by Game3DSetup
+        /// </summary>
+        public void RefreshBenchPositions()
+        {
+            // Bench slots are created and managed by Game3DSetup
+            // This method is kept for compatibility but does nothing
+        }
+
         private void OnDestroy()
         {
             UnsubscribeFromCombatEvents();
+
+            // Unsubscribe from server state events
+            if (ServerGameState.Instance != null)
+            {
+                ServerGameState.Instance.OnStateUpdated -= OnServerStateUpdated;
+                ServerGameState.Instance.OnBoardUpdated -= OnServerStateUpdated;
+            }
         }
 
         private void SubscribeToCombatEvents()
@@ -125,6 +243,9 @@ namespace Crestforge.Visuals
                     
                     if (isRanged && ProjectileSystem.Instance != null)
                     {
+                        // Play attack animation for ranged units too
+                        attackerVis.PlayAttackAnimation(targetVis.transform.position);
+
                         // Fire projectile for ranged attacks
                         ProjectileType projType = GetProjectileType(attacker.source.template);
                         ProjectileSystem.Instance.FireProjectile(
@@ -221,7 +342,13 @@ namespace Crestforge.Visuals
                 {
                     // Spawn death VFX
                     VFXSystem.Instance?.SpawnEffect(VFXType.Death, visual.transform.position, 1f);
-                    
+
+                    // Spawn loot orb if this is a PvE enemy with loot
+                    if (unit.team == Team.Enemy && unit.source.lootType != LootType.None)
+                    {
+                        LootOrb.Create(visual.transform.position, unit.source.lootType);
+                    }
+
                     visual.PlayDeathEffect();
                 }
                 unitVisuals.Remove(unit.source);
@@ -285,6 +412,30 @@ namespace Crestforge.Visuals
 
         private void Update()
         {
+            // Multiplayer mode - sync from server state
+            if (IsMultiplayer)
+            {
+                // Don't sync BOARD positions during combat - let ServerCombatVisualizer control unit positions
+                // But ALWAYS sync bench visuals so bought units appear immediately
+                var combatVisualizer = Crestforge.Systems.ServerCombatVisualizer.Instance;
+                bool inServerCombat = combatVisualizer != null && combatVisualizer.isPlaying;
+                bool inVictoryPose = combatVisualizer != null && combatVisualizer.isInVictoryPose;
+
+                // Skip board sync during combat AND during victory pose (results phase)
+                if (!inServerCombat && !inVictoryPose)
+                {
+                    SyncBoardVisualsMultiplayer(); // This also calls SyncBenchVisualsMultiplayer
+                }
+                else
+                {
+                    // During combat or victory pose, still sync bench visuals for purchased units
+                    SyncBenchVisualsMultiplayer();
+                }
+
+                HandleInputMultiplayer();
+                return;
+            }
+
             if (state == null)
             {
                 state = GameState.Instance;
@@ -300,7 +451,7 @@ namespace Crestforge.Visuals
 
             // Sync visuals with game state
             SyncBoardVisuals();
-            
+
             // Handle input
             HandleInput();
         }
@@ -465,6 +616,1084 @@ namespace Crestforge.Visuals
                     unitVisuals.Remove(unit);
                 }
             }
+
+            // Sync bench visuals (units sitting on bench slots)
+            SyncBenchVisuals();
+
+            // Periodically clean up orphaned visuals (not every frame)
+            orphanCleanupTimer += Time.deltaTime;
+            if (orphanCleanupTimer >= ORPHAN_CLEANUP_INTERVAL)
+            {
+                orphanCleanupTimer = 0f;
+                CleanupOrphanedVisuals();
+            }
+        }
+
+        // Orphan cleanup runs periodically, not every frame
+        private const float ORPHAN_CLEANUP_INTERVAL = 1.0f;
+        private float orphanCleanupTimer = 0f;
+
+        /// <summary>
+        /// Find and destroy any UnitVisual3D that isn't tracked in unitVisuals
+        /// </summary>
+        private void CleanupOrphanedVisuals()
+        {
+            // Skip during drag to avoid destroying the drag visual
+            if (isDragging) return;
+
+            // Get all tracked visuals for quick lookup
+            HashSet<UnitVisual3D> trackedVisuals = new HashSet<UnitVisual3D>();
+            foreach (var kvp in unitVisuals)
+            {
+                if (kvp.Value != null)
+                {
+                    trackedVisuals.Add(kvp.Value);
+                }
+            }
+
+            // Also include bench visuals in tracked set
+            foreach (var kvp in benchVisuals)
+            {
+                if (kvp.Value != null)
+                {
+                    trackedVisuals.Add(kvp.Value);
+                }
+            }
+
+            // Find all UnitVisual3D components that are children of this manager
+            UnitVisual3D[] allVisuals = GetComponentsInChildren<UnitVisual3D>();
+            foreach (var visual in allVisuals)
+            {
+                if (visual != null && !trackedVisuals.Contains(visual))
+                {
+                    // This visual isn't tracked - destroy it
+                    Destroy(visual.gameObject);
+                }
+            }
+        }
+
+        // ============================================
+        // MULTIPLAYER BOARD SYNC
+        // ============================================
+
+        /// <summary>
+        /// Sync board visuals from server state (multiplayer mode)
+        /// </summary>
+        private void SyncBoardVisualsMultiplayer()
+        {
+            if (serverState == null) return;
+
+            // Wait for the player's board to be assigned before creating visuals
+            // This prevents creating units at wrong positions
+            if (hexBoard == null || Registry == null)
+            {
+                // Don't fallback to HexBoard3D.Instance - wait for SetPlayerBoard to be called
+                // This ensures we use the correct board for this player
+                return;
+            }
+
+            // Also verify the board is the player's board
+            if (!hexBoard.isPlayerBoard)
+            {
+                Debug.LogWarning("[BoardManager3D] hexBoard is not marked as player board, waiting for correct assignment");
+                return;
+            }
+
+            HashSet<string> currentUnitIds = new HashSet<string>();
+
+            // Sync board units
+            if (serverState.board != null)
+            {
+                int boardUnitsFound = 0;
+                for (int x = 0; x < 7; x++)
+                {
+                    for (int y = 0; y < 4; y++)
+                    {
+                        ServerUnitData serverUnit = serverState.board[x, y];
+                        if (serverUnit != null && !string.IsNullOrEmpty(serverUnit.unitId))
+                        {
+                            boardUnitsFound++;
+                            currentUnitIds.Add(serverUnit.instanceId);
+
+                            // Skip if this unit is being dragged, was recently moved, or was recently sold
+                            if ((isDragging || isPendingDrag) && draggedServerUnitInstanceId == serverUnit.instanceId)
+                            {
+                                continue;
+                            }
+                            if (recentlyMovedUnits.Contains(serverUnit.instanceId) || recentlySoldUnits.Contains(serverUnit.instanceId))
+                            {
+                                continue;
+                            }
+
+                            // Use registry to get or create visual
+                            Registry.GetOrCreateBoardVisual(serverUnit, x, y, false);
+                        }
+                    }
+                }
+
+            }
+
+            // Remove visuals for units no longer on board (via registry)
+            Registry.SyncBoardVisuals(currentUnitIds);
+
+            // Sync bench visuals
+            SyncBenchVisualsMultiplayer();
+        }
+
+        // SyncServerUnitVisual and CreateUnitInstanceFromServerData removed - now handled by BoardVisualRegistry
+
+        /// <summary>
+        /// Sync bench visuals from server state
+        /// </summary>
+        private void SyncBenchVisualsMultiplayer()
+        {
+            if (serverState == null || serverState.bench == null || Registry == null) return;
+
+            HashSet<int> occupiedSlots = new HashSet<int>();
+
+            // Create/update visuals for bench units
+            for (int i = 0; i < serverState.bench.Length && i < GameConstants.Player.BENCH_SIZE; i++)
+            {
+                ServerUnitData serverUnit = serverState.bench[i];
+                if (serverUnit != null && !string.IsNullOrEmpty(serverUnit.unitId))
+                {
+                    occupiedSlots.Add(i);
+
+                    // Skip if we're currently dragging this bench unit
+                    if (isDragging && isDraggingFromBench && benchDragIndex == i)
+                    {
+                        continue;
+                    }
+
+                    // Also skip if this unit is being dragged by instanceId
+                    if ((isDragging || isPendingDrag) && draggedServerUnitInstanceId == serverUnit.instanceId)
+                    {
+                        continue;
+                    }
+
+                    // Skip if this unit was recently moved or sold
+                    if (recentlyMovedUnits.Contains(serverUnit.instanceId) || recentlySoldUnits.Contains(serverUnit.instanceId))
+                    {
+                        continue;
+                    }
+
+                    // Use registry to get or create visual
+                    Registry.GetOrCreateBenchVisual(serverUnit, i);
+                }
+            }
+
+            // Remove visuals for empty bench slots (via registry)
+            Registry.SyncBenchVisuals(occupiedSlots);
+        }
+
+        // Track last phase for detecting phase changes
+        private string lastServerPhase = "planning";
+
+        /// <summary>
+        /// Handle input in multiplayer mode
+        /// </summary>
+        private void HandleInputMultiplayer()
+        {
+            if (serverState == null) return;
+
+            // Detect phase changes and cancel any in-progress drag
+            if (serverState.phase != lastServerPhase)
+            {
+                if (isDragging || isPendingDrag)
+                {
+                    CancelDragMultiplayer();
+                }
+                lastServerPhase = serverState.phase;
+            }
+
+            Vector3 mousePos = Input.mousePosition;
+            Ray ray = Camera.main.ScreenPointToRay(mousePos);
+
+            // Hover detection (simplified for now)
+            UpdateHover(ray);
+
+            // Mouse/touch input for drag & drop
+            // Always allow completing/cancelling an in-progress drag
+            // Starting new drags: bench units always allowed, board units only during planning
+            if (Input.GetMouseButtonDown(0))
+            {
+                OnPointerDownMultiplayer(ray);
+            }
+            else if (Input.GetMouseButton(0) && (isDragging || isPendingDrag))
+            {
+                OnPointerDrag(ray);
+            }
+            else if (Input.GetMouseButtonUp(0))
+            {
+                OnPointerUpMultiplayer(ray);
+            }
+        }
+
+        /// <summary>
+        /// Cancel any in-progress drag and clean up state
+        /// </summary>
+        private void CancelDragMultiplayer()
+        {
+            if (draggedUnit != null)
+            {
+                // Return to original position (don't destroy - server sync might not run during combat)
+                draggedUnit.SetPosition(dragStartPos);
+
+                // Re-enable collider in case it was disabled
+                Collider col = draggedUnit.GetComponent<Collider>();
+                if (col != null) col.enabled = true;
+
+                // Restore tracking
+                if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                {
+                    if (isDraggingFromBench && benchDragIndex >= 0)
+                    {
+                        serverBenchVisuals[benchDragIndex] = draggedUnit;
+                    }
+                    else
+                    {
+                        serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
+                    }
+                }
+            }
+
+            // Reset all drag state
+            isDragging = false;
+            isPendingDrag = false;
+            isDraggingFromBench = false;
+            draggedUnit = null;
+            draggedServerUnitInstanceId = null;
+            benchDragIndex = -1;
+
+            if (dragPlaceholder != null)
+            {
+                dragPlaceholder.SetActive(false);
+            }
+
+            // Clear tile highlights
+            hexBoard?.ClearHighlights();
+
+            // Unblock camera and hide sell mode
+            if (cameraSetup != null)
+            {
+                cameraSetup.inputBlocked = false;
+            }
+            GameUI.Instance?.HideSellMode();
+        }
+
+        /// <summary>
+        /// Cancel any in-progress drag and clean up state (local mode)
+        /// </summary>
+        private void CancelDragLocal()
+        {
+            if (draggedUnit != null)
+            {
+                // Return to original position
+                draggedUnit.SetPosition(dragStartPos);
+
+                // If dragging from bench, restore bench visual tracking
+                if (isDraggingFromBench && benchDragIndex >= 0)
+                {
+                    benchVisuals[benchDragIndex] = draggedUnit;
+                }
+            }
+
+            // Reset all drag state
+            isDragging = false;
+            isPendingDrag = false;
+            isDraggingFromBench = false;
+            draggedUnit = null;
+            benchDragIndex = -1;
+
+            if (dragPlaceholder != null)
+            {
+                dragPlaceholder.SetActive(false);
+            }
+
+            // Clear tile highlights
+            hexBoard?.ClearHighlights();
+
+            // Unblock camera and hide sell mode
+            if (cameraSetup != null)
+            {
+                cameraSetup.inputBlocked = false;
+            }
+            GameUI.Instance?.HideSellMode();
+        }
+
+        private ServerUnitData draggedServerUnit;
+        private string draggedServerUnitInstanceId;
+
+        private void OnPointerDownMultiplayer(Ray ray)
+        {
+            RaycastHit hit;
+            if (Physics.Raycast(ray, out hit, 100f))
+            {
+                // Check if we hit a unit visual
+                UnitVisual3D hitUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
+                if (hitUnit != null)
+                {
+                    // Check bench visuals first - bench dragging is ALWAYS allowed
+                    foreach (var kvp in serverBenchVisuals)
+                    {
+                        if (kvp.Value == hitUnit)
+                        {
+                            draggedServerUnitInstanceId = serverState.bench[kvp.Key]?.instanceId;
+                            draggedUnit = hitUnit;
+                            isPendingDrag = true;
+                            isDraggingFromBench = true;
+                            benchDragIndex = kvp.Key;
+                            dragStartMousePos = Input.mousePosition;
+                            dragStartPos = hitUnit.transform.position;
+                            dragStartCoord = new Vector2Int(-1, -1); // Invalid coord for bench units
+                            return;
+                        }
+                    }
+
+                    // Board units - only allow dragging during planning phase
+                    if (serverState.phase != "planning") return;
+
+                    // Find the server unit this visual represents
+                    foreach (var kvp in serverUnitVisuals)
+                    {
+                        if (kvp.Value == hitUnit)
+                        {
+                            draggedServerUnitInstanceId = kvp.Key;
+                            draggedUnit = hitUnit;
+                            isPendingDrag = true;
+                            isDraggingFromBench = false;
+                            dragStartMousePos = Input.mousePosition;
+                            dragStartPos = hitUnit.transform.position;
+
+                            // Find grid position of this unit for dragStartCoord
+                            dragStartCoord = FindServerUnitGridPosition(kvp.Key);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Find the grid position of a server unit by its instance ID
+        /// </summary>
+        private Vector2Int FindServerUnitGridPosition(string instanceId)
+        {
+            if (serverState == null || serverState.board == null) return new Vector2Int(-1, -1);
+
+            for (int x = 0; x < 7; x++)
+            {
+                for (int y = 0; y < 4; y++)
+                {
+                    if (serverState.board[x, y]?.instanceId == instanceId)
+                    {
+                        return new Vector2Int(x, y);
+                    }
+                }
+            }
+            return new Vector2Int(-1, -1);
+        }
+
+        private void OnPointerUpMultiplayer(Ray ray)
+        {
+            if (!isDragging && !isPendingDrag)
+            {
+                // Check for click on unit to show tooltip (no pending drag started)
+                RaycastHit hit;
+                if (Physics.Raycast(ray, out hit, 100f))
+                {
+                    UnitVisual3D hitUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
+                    if (hitUnit != null)
+                    {
+                        SelectUnitMultiplayer(hitUnit);
+                    }
+                    else
+                    {
+                        // Clicked on something that's not a unit - hide tooltip
+                        Crestforge.UI.GameUI.Instance?.HideTooltipPinned();
+                    }
+                }
+                return;
+            }
+
+            // Handle pending drag that never activated (tap/click on unit)
+            if (isPendingDrag && !isDragging && draggedUnit != null)
+            {
+                isPendingDrag = false;
+                isDraggingFromBench = false;
+
+                // This was a tap, not a drag - show tooltip for this unit
+                SelectUnitMultiplayer(draggedUnit);
+                draggedUnit = null;
+                draggedServerUnitInstanceId = null;
+                benchDragIndex = -1;
+                return;
+            }
+
+            isPendingDrag = false;
+
+            bool isPlanning = serverState.phase == "planning";
+            bool sentServerAction = false; // Track if we sent an action that changes unit location
+
+            if (isDragging && draggedUnit != null && !string.IsNullOrEmpty(draggedServerUnitInstanceId))
+            {
+                // Temporarily disable the dragged unit's collider so raycast hits the tile underneath
+                Collider draggedCollider = draggedUnit.GetComponent<Collider>();
+                if (draggedCollider != null) draggedCollider.enabled = false;
+
+                // Check if dropped on UI sell zone first (only during planning)
+                if (isPlanning && IsOverSellZone())
+                {
+                    if (draggedCollider != null) draggedCollider.enabled = true;
+
+                    // Track as sold to prevent flicker from sync
+                    recentlySoldUnits.Add(draggedServerUnitInstanceId);
+
+                    // Remove from tracking and destroy visual immediately
+                    if (isDraggingFromBench && benchDragIndex >= 0)
+                    {
+                        serverBenchVisuals.Remove(benchDragIndex);
+                    }
+                    else
+                    {
+                        serverUnitVisuals.Remove(draggedServerUnitInstanceId);
+                    }
+
+                    if (draggedUnit != null)
+                    {
+                        Destroy(draggedUnit.gameObject);
+                        draggedUnit = null;
+                    }
+
+                    serverState.SellUnit(draggedServerUnitInstanceId);
+                    AudioManager.Instance?.PlayPurchase();
+                    sentServerAction = true;
+                }
+                else
+                {
+                    // Find drop target
+                    RaycastHit hit;
+                    bool hasHit = Physics.Raycast(ray, out hit, 100f);
+
+                    // Get mouse world position for bench detection (more reliable than raycast hit point)
+                    Vector3 mouseWorldPos = GetWorldPositionFromMouse();
+
+                    // For bench unit dragging, handle bench-to-bench AND bench-to-board
+                    if (isDraggingFromBench)
+                    {
+                        // Check if we hit a bench unit directly
+                        int targetBenchSlot = -1;
+                        if (hasHit)
+                        {
+                            UnitVisual3D hitBenchUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
+                            if (hitBenchUnit != null && hitBenchUnit != draggedUnit)
+                            {
+                                foreach (var kvp in serverBenchVisuals)
+                                {
+                                    if (kvp.Value == hitBenchUnit)
+                                    {
+                                        targetBenchSlot = kvp.Key;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Check if mouse is over bench area (use mouse position, not raycast hit)
+                        bool isBenchArea = IsBenchDropArea(mouseWorldPos);
+                        if (targetBenchSlot < 0 && isBenchArea)
+                        {
+                            targetBenchSlot = GetBenchSlotAtWorldPosition(mouseWorldPos);
+                        }
+
+                        // Bench-to-bench move if we found a valid bench target slot
+                        if (targetBenchSlot >= 0 && targetBenchSlot != benchDragIndex)
+                        {
+                            // Move visuals directly for immediate feedback (both during planning and combat)
+                            Vector3 targetPos = GetBenchSlotWorldPosition(targetBenchSlot);
+                            targetPos.y = unitYOffset;
+                            Vector3 sourcePos = GetBenchSlotWorldPosition(benchDragIndex);
+                            sourcePos.y = unitYOffset;
+
+                            // If there's a unit in target slot, swap positions
+                            if (serverBenchVisuals.TryGetValue(targetBenchSlot, out UnitVisual3D targetVisual) && targetVisual != null)
+                            {
+                                targetVisual.SetPositionAndFaceCamera(sourcePos);
+                                serverBenchVisuals[benchDragIndex] = targetVisual;
+                            }
+                            else
+                            {
+                                serverBenchVisuals.Remove(benchDragIndex);
+                            }
+
+                            // Move dragged unit to target
+                            draggedUnit.SetPositionAndFaceCamera(targetPos);
+                            serverBenchVisuals[targetBenchSlot] = draggedUnit;
+
+                            // Re-enable collider before nulling
+                            if (draggedCollider != null) draggedCollider.enabled = true;
+
+                            // Send server action but DON'T destroy visuals (we moved them directly)
+                            serverState.MoveBenchUnit(draggedServerUnitInstanceId, targetBenchSlot);
+
+                            // Mark as recently moved to prevent sync from moving it back
+                            if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                            {
+                                recentlyMovedUnits.Add(draggedServerUnitInstanceId);
+                            }
+
+                            // Null out draggedUnit so the restoration code doesn't overwrite our changes
+                            draggedUnit = null;
+                        }
+                        else if (!isBenchArea && hasHit && isPlanning)
+                        {
+                            // Not on bench area - check for hex tile placement (bench-to-board)
+                            Vector2Int coord = new Vector2Int(-1, -1);
+                            bool isEnemy = false;
+                            bool foundTile = false;
+
+                            // Try direct tile detection
+                            if (hexBoard != null && hexBoard.TryGetTileCoord(hit.collider.gameObject, out coord, out isEnemy))
+                            {
+                                foundTile = true;
+                            }
+                            // If we hit a board unit, find the tile it's on (for swapping)
+                            else if (hexBoard != null)
+                            {
+                                UnitVisual3D hitUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
+                                if (hitUnit != null && hitUnit != draggedUnit)
+                                {
+                                    // Check if it's a board unit (not bench)
+                                    foreach (var kvp in serverUnitVisuals)
+                                    {
+                                        if (kvp.Value == hitUnit)
+                                        {
+                                            coord = FindServerUnitGridPosition(kvp.Key);
+                                            if (coord.x >= 0 && coord.y >= 0)
+                                            {
+                                                isEnemy = coord.y >= 4;
+                                                foundTile = true;
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (foundTile && !isEnemy && coord.y < 4)
+                            {
+                                // Move visual directly for immediate feedback (no flicker)
+                                Vector3 targetPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
+                                targetPos.y = unitYOffset;
+
+                                // If there's a unit at target, swap to bench
+                                string targetInstanceId = null;
+                                if (serverState.board[coord.x, coord.y] != null)
+                                {
+                                    targetInstanceId = serverState.board[coord.x, coord.y].instanceId;
+                                }
+
+                                if (!string.IsNullOrEmpty(targetInstanceId) && serverUnitVisuals.TryGetValue(targetInstanceId, out UnitVisual3D targetVisual) && targetVisual != null)
+                                {
+                                    // Swap: move target board unit to bench position
+                                    Vector3 benchPos = GetBenchSlotWorldPosition(benchDragIndex);
+                                    benchPos.y = unitYOffset;
+                                    targetVisual.SetPositionAndFaceCamera(benchPos);
+                                    serverBenchVisuals[benchDragIndex] = targetVisual;
+                                    serverUnitVisuals.Remove(targetInstanceId);
+                                }
+                                else
+                                {
+                                    // No swap needed, just clear bench slot
+                                    serverBenchVisuals.Remove(benchDragIndex);
+                                }
+
+                                // Move dragged unit to board
+                                draggedUnit.SetPositionAndFaceCamera(targetPos);
+                                serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
+
+                                // Re-enable collider
+                                if (draggedCollider != null) draggedCollider.enabled = true;
+
+                                // Send place action to server
+                                serverState.PlaceUnit(draggedServerUnitInstanceId, coord.x, coord.y);
+
+                                // Mark as recently moved to prevent sync from moving it back
+                                if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                {
+                                    recentlyMovedUnits.Add(draggedServerUnitInstanceId);
+                                }
+
+                                // Null out draggedUnit so it doesn't get destroyed
+                                draggedUnit = null;
+                            }
+                            else
+                            {
+                                // Invalid placement - return to original bench position
+                                draggedUnit.SetPositionAndFaceCamera(dragStartPos);
+                                serverBenchVisuals[benchDragIndex] = draggedUnit;
+                                if (draggedCollider != null) draggedCollider.enabled = true;
+                                draggedUnit = null;
+                            }
+                        }
+                        else if (isBenchArea && targetBenchSlot == benchDragIndex)
+                        {
+                            // Dropped on same bench slot - return to original
+                            draggedUnit.SetPositionAndFaceCamera(dragStartPos);
+                            serverBenchVisuals[benchDragIndex] = draggedUnit;
+                            if (draggedCollider != null) draggedCollider.enabled = true;
+                            draggedUnit = null;
+                        }
+                        else
+                        {
+                            // No valid drop target - return to original bench position
+                            draggedUnit.SetPositionAndFaceCamera(dragStartPos);
+                            serverBenchVisuals[benchDragIndex] = draggedUnit;
+                            if (draggedCollider != null) draggedCollider.enabled = true;
+                            draggedUnit = null;
+                        }
+                    }
+                    else if (hasHit)
+                    {
+                        // Board unit dragging - check hex tiles first, then bench
+                        Vector2Int coord = new Vector2Int(-1, -1);
+                        bool isEnemy = false;
+                        bool foundTile = false;
+
+                        // First try direct tile detection
+                        if (isPlanning && hexBoard != null && hexBoard.TryGetTileCoord(hit.collider.gameObject, out coord, out isEnemy))
+                        {
+                            foundTile = true;
+                        }
+                        // If we hit a unit, find the tile it's on
+                        else if (isPlanning && hexBoard != null)
+                        {
+                            UnitVisual3D hitUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
+                            if (hitUnit != null && hitUnit != draggedUnit)
+                            {
+                                // Find this unit's grid position
+                                foreach (var kvp in serverUnitVisuals)
+                                {
+                                    if (kvp.Value == hitUnit)
+                                    {
+                                        coord = FindServerUnitGridPosition(kvp.Key);
+                                        if (coord.x >= 0 && coord.y >= 0)
+                                        {
+                                            isEnemy = coord.y >= 4;
+                                            foundTile = true;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (foundTile)
+                        {
+                            if (!isEnemy && coord.y < 4) // Player rows only
+                            {
+                                // Move visual directly for immediate feedback (no flicker)
+                                Vector3 targetPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
+                                targetPos.y = unitYOffset;
+
+                                // If there's a unit at target position, swap them
+                                string targetInstanceId = null;
+                                if (serverState.board[coord.x, coord.y] != null)
+                                {
+                                    targetInstanceId = serverState.board[coord.x, coord.y].instanceId;
+                                }
+
+                                if (!string.IsNullOrEmpty(targetInstanceId) && serverUnitVisuals.TryGetValue(targetInstanceId, out UnitVisual3D targetVisual) && targetVisual != null)
+                                {
+                                    // Swap: move target unit to drag start position
+                                    targetVisual.SetPositionAndFaceCamera(dragStartPos);
+                                }
+
+                                // Move dragged unit to target
+                                draggedUnit.SetPositionAndFaceCamera(targetPos);
+
+                                // Update tracking - remove from old position tracking
+                                if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                {
+                                    serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
+                                }
+
+                                // Re-enable collider
+                                if (draggedCollider != null) draggedCollider.enabled = true;
+
+                                // Send place action to server
+                                serverState.PlaceUnit(draggedServerUnitInstanceId, coord.x, coord.y);
+
+                                // Mark as recently moved to prevent sync from moving it back
+                                if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                {
+                                    recentlyMovedUnits.Add(draggedServerUnitInstanceId);
+                                }
+
+                                // Null out draggedUnit so it doesn't get destroyed
+                                draggedUnit = null;
+                            }
+                            else
+                            {
+                                // Return to original position (enemy row)
+                                draggedUnit.SetPosition(dragStartPos);
+                            }
+                        }
+                        else
+                        {
+                            // Check if we hit a bench unit directly
+                            int targetSlot = -1;
+                            UnitVisual3D hitBenchUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
+                            if (hitBenchUnit != null && hitBenchUnit != draggedUnit)
+                            {
+                                foreach (var kvp in serverBenchVisuals)
+                                {
+                                    if (kvp.Value == hitBenchUnit)
+                                    {
+                                        targetSlot = kvp.Key;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // Check if dropped on bench area
+                            bool isBenchAreaHit = IsBenchDropArea(hit.point);
+                            bool isBenchAreaMouse = IsBenchDropArea(mouseWorldPos);
+                            bool droppedOnBench = targetSlot >= 0 || isBenchAreaHit || isBenchAreaMouse;
+
+                            if (droppedOnBench && isPlanning)
+                            {
+                                // If we didn't hit a bench unit directly, get slot from position
+                                if (targetSlot < 0)
+                                {
+                                    targetSlot = GetBenchSlotAtWorldPosition(mouseWorldPos);
+                                    if (targetSlot < 0)
+                                    {
+                                        targetSlot = GetBenchSlotAtWorldPosition(hit.point);
+                                    }
+                                }
+
+                                // Board-to-bench move: only during planning
+                                if (targetSlot >= 0)
+                                {
+                                    // Move visual directly for immediate feedback (no flicker)
+                                    Vector3 benchPos = GetBenchSlotWorldPosition(targetSlot);
+                                    benchPos.y = unitYOffset;
+
+                                    // If target slot has a unit, swap to board position
+                                    if (serverBenchVisuals.TryGetValue(targetSlot, out UnitVisual3D targetBenchVisual) && targetBenchVisual != null)
+                                    {
+                                        // Move bench unit to the board position we're vacating
+                                        targetBenchVisual.SetPositionAndFaceCamera(dragStartPos);
+                                        serverUnitVisuals[targetBenchVisual.ServerInstanceId] = targetBenchVisual;
+                                        serverBenchVisuals.Remove(targetSlot);
+                                    }
+
+                                    // Move dragged board unit to bench
+                                    draggedUnit.SetPositionAndFaceCamera(benchPos);
+                                    serverBenchVisuals[targetSlot] = draggedUnit;
+
+                                    // Remove from board tracking
+                                    if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                    {
+                                        serverUnitVisuals.Remove(draggedServerUnitInstanceId);
+                                    }
+
+                                    // Re-enable collider
+                                    if (draggedCollider != null) draggedCollider.enabled = true;
+
+                                    // Send server action
+                                    serverState.BenchUnit(draggedServerUnitInstanceId, targetSlot);
+
+                                    // Mark as recently moved to prevent sync from moving it back
+                                    if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                    {
+                                        recentlyMovedUnits.Add(draggedServerUnitInstanceId);
+                                    }
+
+                                    // Null out draggedUnit so it doesn't get destroyed
+                                    draggedUnit = null;
+                                }
+                                else
+                                {
+                                    // Couldn't determine bench slot - return to original
+                                    draggedUnit.SetPosition(dragStartPos);
+                                }
+                            }
+                            else
+                            {
+                                // Return to original position
+                                draggedUnit.SetPosition(dragStartPos);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // No raycast hit - but still check if we're over the bench area (for board-to-bench)
+                        bool isBenchAreaMouse = IsBenchDropArea(mouseWorldPos);
+                        if (isBenchAreaMouse && isPlanning)
+                        {
+                            int targetSlot = GetBenchSlotAtWorldPosition(mouseWorldPos);
+                            if (targetSlot >= 0)
+                            {
+                                // Move visual directly for immediate feedback (no flicker)
+                                Vector3 benchPos = GetBenchSlotWorldPosition(targetSlot);
+                                benchPos.y = unitYOffset;
+
+                                // If target slot has a unit, swap to board position
+                                if (serverBenchVisuals.TryGetValue(targetSlot, out UnitVisual3D targetBenchVisual) && targetBenchVisual != null)
+                                {
+                                    // Move bench unit to the board position we're vacating
+                                    targetBenchVisual.SetPositionAndFaceCamera(dragStartPos);
+                                    serverUnitVisuals[targetBenchVisual.ServerInstanceId] = targetBenchVisual;
+                                    serverBenchVisuals.Remove(targetSlot);
+                                }
+
+                                // Move dragged board unit to bench
+                                draggedUnit.SetPositionAndFaceCamera(benchPos);
+                                serverBenchVisuals[targetSlot] = draggedUnit;
+
+                                // Remove from board tracking
+                                if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                {
+                                    serverUnitVisuals.Remove(draggedServerUnitInstanceId);
+                                }
+
+                                // Re-enable collider
+                                Collider col = draggedUnit.GetComponent<Collider>();
+                                if (col != null) col.enabled = true;
+
+                                // Send server action
+                                serverState.BenchUnit(draggedServerUnitInstanceId, targetSlot);
+
+                                // Mark as recently moved to prevent sync from moving it back
+                                if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                {
+                                    recentlyMovedUnits.Add(draggedServerUnitInstanceId);
+                                }
+
+                                // Null out draggedUnit so it doesn't get destroyed
+                                draggedUnit = null;
+                            }
+                            else
+                            {
+                                // Couldn't determine bench slot - return to original
+                                draggedUnit.SetPosition(dragStartPos);
+                            }
+                        }
+                        else
+                        {
+                            // No valid drop target - return to original position
+                            draggedUnit.SetPosition(dragStartPos);
+                        }
+                    }
+
+                    // Re-enable collider
+                    if (draggedCollider != null) draggedCollider.enabled = true;
+                }
+            }
+
+            // Only destroy the visual if we sent a server action that changes unit location
+            // Server sync will recreate it at the correct position
+            if (sentServerAction && draggedUnit != null)
+            {
+                // Remove from tracking dictionaries if present
+                string instanceIdToRemove = draggedServerUnitInstanceId;
+                if (!string.IsNullOrEmpty(instanceIdToRemove) && serverUnitVisuals.ContainsKey(instanceIdToRemove))
+                {
+                    serverUnitVisuals.Remove(instanceIdToRemove);
+                }
+
+                Destroy(draggedUnit.gameObject);
+            }
+            else if (draggedUnit != null)
+            {
+                // Re-enable collider
+                Collider col = draggedUnit.GetComponent<Collider>();
+                if (col != null) col.enabled = true;
+
+                // Restore visual to tracking (it was removed during drag start)
+                if (isDraggingFromBench && benchDragIndex >= 0)
+                {
+                    serverBenchVisuals[benchDragIndex] = draggedUnit;
+                }
+                else if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                {
+                    serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
+                }
+            }
+
+            // Reset drag state
+            isDragging = false;
+            isDraggingFromBench = false;
+            draggedUnit = null;
+            draggedServerUnitInstanceId = null;
+
+            if (dragPlaceholder != null)
+            {
+                dragPlaceholder.SetActive(false);
+            }
+
+            // Clear tile highlights
+            hexBoard?.ClearHighlights();
+
+            // Unblock camera and hide sell mode
+            if (cameraSetup != null)
+            {
+                cameraSetup.inputBlocked = false;
+            }
+            GameUI.Instance?.HideSellMode();
+
+            // Clear hover highlights
+            hexBoard?.ClearHighlights();
+        }
+
+        private bool IsOverSellZone()
+        {
+            // Check if mouse is over the UI sell overlay
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem == null) return false;
+
+            var pointerData = new UnityEngine.EventSystems.PointerEventData(eventSystem)
+            {
+                position = Input.mousePosition
+            };
+
+            var results = new List<UnityEngine.EventSystems.RaycastResult>();
+            eventSystem.RaycastAll(pointerData, results);
+
+            foreach (var result in results)
+            {
+                if (result.gameObject.GetComponent<SellDropZone>() != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsBenchDropArea(Vector3 worldPoint)
+        {
+            // Delegate to registry if available
+            if (Registry != null)
+            {
+                return Registry.IsBenchDropArea(worldPoint);
+            }
+
+            // Fallback check
+            if (hexBoard == null) return false;
+
+            int benchSize = GameConstants.Player.BENCH_SIZE;
+            for (int i = 0; i < benchSize; i++)
+            {
+                Vector3 slotPos = GetBenchSlotWorldPosition(i);
+                float dist = Vector2.Distance(
+                    new Vector2(worldPoint.x, worldPoint.z),
+                    new Vector2(slotPos.x, slotPos.z)
+                );
+                if (dist < 1.2f)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Sync 3D visuals for units on the bench
+        /// </summary>
+        private void SyncBenchVisuals()
+        {
+            if (state == null) return;
+
+            // Trigger bench initialization if needed
+            _ = state.GetBenchUnitCount();
+
+            if (state.bench == null || state.bench.Length == 0)
+            {
+                return;
+            }
+
+            // Track which bench slots have units
+            HashSet<int> occupiedSlots = new HashSet<int>();
+
+            // Create/update visuals for bench units
+            for (int i = 0; i < state.bench.Length; i++)
+            {
+                UnitInstance unit = state.bench[i];
+                if (unit == null) continue;
+
+                occupiedSlots.Add(i);
+                Vector3 slotPos = GetBenchSlotWorldPosition(i);
+                slotPos.y = unitYOffset;
+
+                // Check if we already have a visual for this slot
+                if (benchVisuals.TryGetValue(i, out UnitVisual3D visual) && visual != null)
+                {
+                    // Check if it's the same unit
+                    if (visual.unit == unit)
+                    {
+                        // Same unit - update position if needed (shouldn't move much)
+                        if (Vector3.Distance(visual.transform.position, slotPos) > 0.1f)
+                        {
+                            // Don't move if we're dragging this unit
+                            if (!(isDragging && isDraggingFromBench && benchDragIndex == i))
+                            {
+                                visual.SetPosition(slotPos);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Different unit in this slot - destroy old, create new
+                        Destroy(visual.gameObject);
+                        benchVisuals[i] = CreateBenchUnitVisual(unit, slotPos, i);
+                    }
+                }
+                else
+                {
+                    // No visual for this slot - create one
+                    // But skip if we're currently dragging from this slot
+                    if (isDragging && isDraggingFromBench && benchDragIndex == i)
+                    {
+                        continue;
+                    }
+                    benchVisuals[i] = CreateBenchUnitVisual(unit, slotPos, i);
+                }
+            }
+
+            // Remove visuals for empty bench slots
+            List<int> slotsToRemove = new List<int>();
+            foreach (var kvp in benchVisuals)
+            {
+                if (!occupiedSlots.Contains(kvp.Key))
+                {
+                    slotsToRemove.Add(kvp.Key);
+                }
+            }
+            foreach (int slot in slotsToRemove)
+            {
+                if (benchVisuals.TryGetValue(slot, out UnitVisual3D visual) && visual != null)
+                {
+                    Destroy(visual.gameObject);
+                }
+                benchVisuals.Remove(slot);
+            }
+        }
+
+        /// <summary>
+        /// Create a visual for a unit on the bench
+        /// </summary>
+        private UnitVisual3D CreateBenchUnitVisual(UnitInstance unit, Vector3 position, int slotIndex)
+        {
+            GameObject visualObj = new GameObject($"BenchUnit_{unit.template.unitName}_{slotIndex}");
+            visualObj.transform.SetParent(transform);
+            visualObj.transform.position = position; // Set position BEFORE adding component to prevent walking from origin
+            UnitVisual3D visual = visualObj.AddComponent<UnitVisual3D>();
+            visual.Initialize(unit, false);
+            visual.SetPosition(position); // Also call SetPosition to set targetPosition correctly
+            return visual;
         }
 
         /// <summary>
@@ -621,6 +1850,12 @@ namespace Crestforge.Visuals
 
             if (!unitVisuals.TryGetValue(unit, out UnitVisual3D visual) || visual == null)
             {
+                // Clean up any stale entry
+                if (unitVisuals.ContainsKey(unit))
+                {
+                    unitVisuals.Remove(unit);
+                }
+
                 // Create new visual
                 GameObject visualObj = new GameObject($"Unit_{unit.template.unitName}");
                 visualObj.transform.SetParent(transform);
@@ -646,13 +1881,23 @@ namespace Crestforge.Visuals
             }
         }
 
+        // Track last phase for detecting phase changes (local mode)
+        private GamePhase lastLocalPhase = GamePhase.Planning;
+
         /// <summary>
         /// Handle mouse/touch input for unit interaction
         /// </summary>
         private void HandleInput()
         {
-            // Only allow interaction during planning phase
-            if (state.round.phase != GamePhase.Planning) return;
+            // Detect phase changes and cancel any in-progress drag
+            if (state.round.phase != lastLocalPhase)
+            {
+                if (isDragging || isPendingDrag)
+                {
+                    CancelDragLocal();
+                }
+                lastLocalPhase = state.round.phase;
+            }
 
             Vector3 mousePos = Input.mousePosition;
             Ray ray = Camera.main.ScreenPointToRay(mousePos);
@@ -665,7 +1910,7 @@ namespace Crestforge.Visuals
             {
                 OnPointerDown(ray);
             }
-            else if (Input.GetMouseButton(0) && isDragging)
+            else if (Input.GetMouseButton(0) && (isDragging || isPendingDrag))
             {
                 OnPointerDrag(ray);
             }
@@ -742,37 +1987,123 @@ namespace Crestforge.Visuals
             if (Physics.Raycast(ray, out RaycastHit hit, 100f))
             {
                 UnitVisual3D unitVis = hit.collider.GetComponent<UnitVisual3D>();
-                if (unitVis != null && unitVis.unit != null)
+
+                if (unitVis != null && unitVis.unit != null && !unitVis.isEnemy)
                 {
-                    // Start dragging
-                    draggedUnit = unitVis;
-                    dragStartPos = unitVis.transform.position;
-                    
-                    // Find current grid position
-                    if (TryGetUnitGridPosition(unitVis.unit, out int x, out int y))
+                    // Check if this is a bench unit
+                    int benchIndex = GetBenchIndexForVisual(unitVis);
+                    if (benchIndex >= 0)
                     {
-                        dragStartCoord = new Vector2Int(x, y);
-                        isDragging = true;
-                        
-                        // Block camera input while dragging
-                        if (cameraSetup != null)
+                        // Bench rearranging is ALWAYS allowed
+                        isPendingDrag = true;
+                        isDraggingFromBench = true;
+                        benchDragIndex = benchIndex;
+                        draggedUnit = unitVis;
+                        dragStartPos = unitVis.transform.position;
+                        dragStartMousePos = Input.mousePosition;
+                    }
+                    else
+                    {
+                        // Set up pending board drag (visual drag starts when mouse moves)
+                        if (state.round.phase != GamePhase.Planning) return;
+
+                        draggedUnit = unitVis;
+                        dragStartPos = unitVis.transform.position;
+                        dragStartMousePos = Input.mousePosition;
+                        benchDragIndex = -1;
+
+                        // Find current grid position
+                        if (TryGetUnitGridPosition(unitVis.unit, out int x, out int y))
                         {
-                            cameraSetup.inputBlocked = true;
+                            dragStartCoord = new Vector2Int(x, y);
+                            isPendingDrag = true;
+                            isDraggingFromBench = false;
                         }
-                        
-                        // Show placeholder at original position
-                        dragPlaceholder.transform.position = dragStartPos;
-                        dragPlaceholder.SetActive(true);
-                        
-                        // Highlight valid placement tiles
-                        HighlightValidTiles();
                     }
                 }
             }
         }
 
+        /// <summary>
+        /// Activate the visual drag state (called when mouse moves past threshold)
+        /// </summary>
+        private void ActivateDrag()
+        {
+            if (!isPendingDrag || draggedUnit == null) return;
+
+            isPendingDrag = false;
+            isDragging = true;
+
+            // Block camera input
+            if (cameraSetup != null)
+            {
+                cameraSetup.inputBlocked = true;
+            }
+
+            // Show sell mode in UI
+            if (draggedUnit.unit != null)
+            {
+                GameUI.Instance?.ShowSellMode(draggedUnit.unit);
+            }
+
+            if (isDraggingFromBench)
+            {
+                // Remove from bench visuals tracking while dragging
+                if (IsMultiplayer)
+                {
+                    serverBenchVisuals.Remove(benchDragIndex);
+                }
+                else
+                {
+                    benchVisuals.Remove(benchDragIndex);
+                }
+            }
+            else
+            {
+                // Show placeholder at original position for board units
+                if (dragPlaceholder != null)
+                {
+                    dragPlaceholder.transform.position = dragStartPos;
+                    dragPlaceholder.SetActive(true);
+                }
+            }
+
+            // Highlight valid placement tiles
+            HighlightValidTiles();
+        }
+
+        /// <summary>
+        /// Get the bench slot index for a visual, or -1 if not a bench unit
+        /// </summary>
+        private int GetBenchIndexForVisual(UnitVisual3D visual)
+        {
+            foreach (var kvp in benchVisuals)
+            {
+                if (kvp.Value == visual)
+                {
+                    return kvp.Key;
+                }
+            }
+            return -1;
+        }
+
         private void OnPointerDrag(Ray ray)
         {
+            // Check if pending drag should become active drag
+            if (isPendingDrag && draggedUnit != null)
+            {
+                float dragDistance = Vector3.Distance(Input.mousePosition, dragStartMousePos);
+                if (dragDistance >= TAP_THRESHOLD)
+                {
+                    ActivateDrag();
+                }
+                else
+                {
+                    // Not yet past threshold, don't move the unit
+                    return;
+                }
+            }
+
             if (!isDragging || draggedUnit == null) return;
 
             // Get ground position
@@ -780,12 +2111,29 @@ namespace Crestforge.Visuals
             if (groundPlane.Raycast(ray, out float distance))
             {
                 Vector3 worldPos = ray.GetPoint(distance);
-                draggedUnit.transform.position = worldPos;
+                // Use SetPosition to update both position and targetPosition
+                // This prevents the visual from trying to animate back if destroyed with delay
+                draggedUnit.SetPosition(worldPos);
             }
+
+            // Update hover preview
+            UpdateHoverPreview();
         }
 
         private void OnPointerUp(Ray ray)
         {
+            // Handle pending drag that never activated (tap/click)
+            if (isPendingDrag && draggedUnit != null)
+            {
+                // This was a tap, not a drag - treat as unit selection
+                isPendingDrag = false;
+                isDraggingFromBench = false;
+
+                SelectUnit(draggedUnit);
+                draggedUnit = null;
+                return;
+            }
+
             if (!isDragging)
             {
                 // Check for unit selection (tap without drag)
@@ -800,17 +2148,54 @@ namespace Crestforge.Visuals
                 return;
             }
 
+            // Handle bench drags separately
+            if (isDraggingFromBench)
+            {
+                EndBenchDrag();
+                return;
+            }
+
             isDragging = false;
             dragPlaceholder.SetActive(false);
             hexBoard.ClearHighlights();
-            
+
             // Unblock camera input
             if (cameraSetup != null)
             {
                 cameraSetup.inputBlocked = false;
             }
 
-            if (draggedUnit == null) return;
+            if (draggedUnit == null)
+            {
+                Crestforge.UI.GameUI.Instance?.HideSellMode();
+                return;
+            }
+
+            // Check if dropped on sell zone first
+            if (IsPointerOverSellZone())
+            {
+                // Sell the unit from the board
+                UnitInstance unit = draggedUnit.unit;
+
+                // Remove from board
+                state.playerBoard[dragStartCoord.x, dragStartCoord.y] = null;
+
+                // Remove visual from tracking
+                if (unitVisuals.ContainsKey(unit))
+                {
+                    unitVisuals.Remove(unit);
+                }
+
+                // Destroy visual
+                Destroy(draggedUnit.gameObject);
+
+                // Sell and get gold
+                Crestforge.UI.GameUI.Instance?.TrySellUnit();
+
+                draggedUnit = null;
+                Crestforge.UI.GameUI.Instance?.HideSellMode();
+                return;
+            }
 
             // Temporarily disable the dragged unit's collider so raycast hits the tile
             Collider draggedCollider = draggedUnit.GetComponent<Collider>();
@@ -818,53 +2203,153 @@ namespace Crestforge.Visuals
 
             // Find target tile
             GameObject targetTile = hexBoard.GetTileAtScreenPosition(Input.mousePosition);
-            
+
+            // Check if over a bench slot
+            Vector3 worldPos = GetWorldPositionFromMouse();
+            int targetBenchSlot = GetBenchSlotAtWorldPosition(worldPos);
+
             // Re-enable collider
             if (draggedCollider != null) draggedCollider.enabled = true;
-            
-            Debug.Log($"[BoardManager3D] OnPointerUp: targetTile={targetTile?.name ?? "null"}");
-            
-            if (targetTile != null && hexBoard.TryGetTileCoord(targetTile, out Vector2Int coord, out bool isEnemy))
+
+            // Check if dropped on a bench slot (board unit -> bench)
+            if (targetBenchSlot >= 0 && targetBenchSlot < state.bench.Length)
             {
-                Debug.Log($"[BoardManager3D] Target coord: ({coord.x},{coord.y}), isEnemy={isEnemy}, playerRows={hexBoard.playerRows}");
-                
-                // Only allow placement in player rows
-                if (coord.y < hexBoard.playerRows)
+                UnitInstance boardUnit = draggedUnit.unit;
+
+                // Check if there's a unit in that bench slot
+                UnitInstance benchUnit = state.bench[targetBenchSlot];
+                if (benchUnit != null)
                 {
-                    // Try to place unit at new position
-                    bool success = TryMoveUnit(draggedUnit.unit, dragStartCoord.x, dragStartCoord.y, coord.x, coord.y);
-                    
-                    Debug.Log($"[BoardManager3D] TryMoveUnit success={success}");
-                    
-                    if (success)
+                    // Swap board unit with bench unit
+                    // Get bench visual BEFORE modifying tracking
+                    benchVisuals.TryGetValue(targetBenchSlot, out UnitVisual3D benchVisual);
+
+                    // Move board unit to bench
+                    state.playerBoard[dragStartCoord.x, dragStartCoord.y] = null;
+                    boardUnit.isOnBoard = false;
+                    state.bench[targetBenchSlot] = boardUnit;
+
+                    // Move bench unit to board
+                    state.playerBoard[dragStartCoord.x, dragStartCoord.y] = benchUnit;
+                    benchUnit.isOnBoard = true;
+                    benchUnit.boardPosition = dragStartCoord;
+
+                    // Update board unit visual (board -> bench)
+                    Vector3 benchPos = GetBenchSlotWorldPosition(targetBenchSlot);
+                    benchPos.y = unitYOffset;
+                    draggedUnit.SetPosition(benchPos);
+                    unitVisuals.Remove(boardUnit);
+                    benchVisuals[targetBenchSlot] = draggedUnit;
+
+                    // Update bench unit visual (bench -> board)
+                    if (benchVisual != null && benchVisual != draggedUnit)
                     {
-                        // Move visual to new position
-                        Vector3 newPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
-                        newPos.y = unitYOffset;
-                        draggedUnit.SetPosition(newPos); // Use SetPosition for immediate placement
-                        Debug.Log($"[BoardManager3D] Set unit position to {newPos}");
+                        Vector3 boardPos = hexBoard.GetTileWorldPosition(dragStartCoord.x, dragStartCoord.y);
+                        boardPos.y = unitYOffset;
+                        benchVisual.SetPosition(boardPos);
+                        unitVisuals[benchUnit] = benchVisual;
+                    }
+
+                    // Refresh UI and recalculate traits
+                    state.RecalculateTraits();
+                    Crestforge.UI.GameUI.Instance?.RefreshBench();
+                }
+                else
+                {
+                    // Empty bench slot - move board unit to bench at this slot
+                    UnitInstance unit = draggedUnit.unit;
+
+                    // Remove from board
+                    state.playerBoard[dragStartCoord.x, dragStartCoord.y] = null;
+                    unit.isOnBoard = false;
+
+                    // Place in target bench slot
+                    state.bench[targetBenchSlot] = unit;
+
+                    // Update visual
+                    Vector3 benchPos = GetBenchSlotWorldPosition(targetBenchSlot);
+                    benchPos.y = unitYOffset;
+                    draggedUnit.SetPosition(benchPos);
+                    unitVisuals.Remove(unit);
+                    benchVisuals[targetBenchSlot] = draggedUnit;
+
+                    // Refresh UI and recalculate traits
+                    state.RecalculateTraits();
+                    Crestforge.UI.GameUI.Instance?.RefreshBench();
+                }
+            }
+            else
+            {
+                // Try raycast first, then fall back to closest tile detection
+                Vector2Int coord;
+                bool isEnemy;
+                bool foundTile = false;
+
+                if (targetTile != null && hexBoard.TryGetTileCoord(targetTile, out coord, out isEnemy))
+                {
+                    foundTile = true;
+                }
+                else
+                {
+                    // Fallback: find closest tile to drop position (reuse worldPos from above)
+                    foundTile = hexBoard.TryGetClosestTileCoord(worldPos, 1.0f, out coord, out isEnemy);
+                }
+
+                if (foundTile)
+                {
+                    // Only allow placement in player rows
+                    if (coord.y < hexBoard.playerRows)
+                    {
+                        // Check if there's a unit to swap with
+                        UnitInstance swappedUnit = state.playerBoard[coord.x, coord.y];
+                        UnitVisual3D swappedVisual = null;
+                        if (swappedUnit != null)
+                        {
+                            unitVisuals.TryGetValue(swappedUnit, out swappedVisual);
+                        }
+
+                        // Try to place unit at new position
+                        bool success = TryMoveUnit(draggedUnit.unit, dragStartCoord.x, dragStartCoord.y, coord.x, coord.y);
+
+                        if (success)
+                        {
+                            // Teleport dragged unit visual to new position
+                            Vector3 newPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
+                            newPos.y = unitYOffset;
+                            draggedUnit.SetPosition(newPos);
+
+                            // If we swapped, teleport the other unit's visual to the old position
+                            if (swappedVisual != null)
+                            {
+                                Vector3 oldPos = hexBoard.GetTileWorldPosition(dragStartCoord.x, dragStartCoord.y);
+                                oldPos.y = unitYOffset;
+                                swappedVisual.SetPosition(oldPos);
+                            }
+                        }
+                        else
+                        {
+                            // Return to original position
+                            draggedUnit.MoveTo(dragStartPos);
+                        }
                     }
                     else
                     {
-                        // Return to original position
+                        // Dropped on enemy side - return to original position
                         draggedUnit.MoveTo(dragStartPos);
                     }
                 }
                 else
                 {
-                    Debug.Log($"[BoardManager3D] Invalid placement - enemy row");
-                    // Invalid placement - return to original
+                    // Dropped outside board - return to original position
                     draggedUnit.MoveTo(dragStartPos);
                 }
             }
-            else
-            {
-                Debug.Log($"[BoardManager3D] No valid tile found");
-                // No valid tile - return to original
-                draggedUnit.MoveTo(dragStartPos);
-            }
 
             draggedUnit = null;
+            Crestforge.UI.GameUI.Instance?.HideSellMode();
+
+            // Trigger orphan cleanup on next sync
+            orphanCleanupTimer = ORPHAN_CLEANUP_INTERVAL;
         }
 
         private void SelectUnit(UnitVisual3D unitVis)
@@ -884,7 +2369,7 @@ namespace Crestforge.Visuals
             {
                 selectedUnit = unitVis;
                 selectedUnit.SetSelected(true);
-                
+
                 // Show unit tooltip/info
                 if (Crestforge.UI.GameUI.Instance != null)
                 {
@@ -893,9 +2378,150 @@ namespace Crestforge.Visuals
             }
         }
 
+        /// <summary>
+        /// Select a unit in multiplayer mode and show its tooltip
+        /// </summary>
+        private void SelectUnitMultiplayer(UnitVisual3D unitVis)
+        {
+            // Deselect previous
+            if (selectedUnit != null)
+            {
+                selectedUnit.SetSelected(false);
+            }
+
+            // Toggle selection if clicking the same unit
+            if (selectedUnit == unitVis)
+            {
+                selectedUnit = null;
+                Crestforge.UI.GameUI.Instance?.HideTooltipPinned();
+                return;
+            }
+
+            selectedUnit = unitVis;
+            selectedUnit.SetSelected(true);
+
+            // First, check if this is a combat unit or bench unit (during combat phase)
+            if (ServerCombatVisualizer.Instance != null && ServerCombatVisualizer.Instance.IsPlayingCombat)
+            {
+                // Check combat units
+                var combatUnit = ServerCombatVisualizer.Instance.GetCombatUnitByVisual(unitVis);
+                if (combatUnit != null && combatUnit.CombatUnitData != null)
+                {
+                    Crestforge.UI.GameUI.Instance?.ShowTooltipPinned(combatUnit.CombatUnitData);
+                    return;
+                }
+
+                // Check bench units shown during combat
+                var benchUnit = ServerCombatVisualizer.Instance.GetBenchUnitByVisual(unitVis);
+                if (benchUnit != null)
+                {
+                    Crestforge.UI.GameUI.Instance?.ShowTooltipPinned(benchUnit);
+                    return;
+                }
+            }
+
+            // Find the ServerUnitData for this visual
+            ServerUnitData serverUnit = null;
+
+            // Check board visuals
+            foreach (var kvp in serverUnitVisuals)
+            {
+                if (kvp.Value == unitVis)
+                {
+                    // Find the unit data by instance ID
+                    serverUnit = FindServerUnitByInstanceId(kvp.Key);
+                    break;
+                }
+            }
+
+            // Check bench visuals
+            if (serverUnit == null)
+            {
+                foreach (var kvp in serverBenchVisuals)
+                {
+                    if (kvp.Value == unitVis && kvp.Key >= 0 && kvp.Key < serverState.bench.Length)
+                    {
+                        serverUnit = serverState.bench[kvp.Key];
+                        break;
+                    }
+                }
+            }
+
+            // Show tooltip if we found the unit data
+            if (serverUnit != null && Crestforge.UI.GameUI.Instance != null)
+            {
+                Crestforge.UI.GameUI.Instance.ShowTooltipPinned(serverUnit);
+            }
+        }
+
+        /// <summary>
+        /// Find a ServerUnitData by its instance ID in the board
+        /// </summary>
+        private ServerUnitData FindServerUnitByInstanceId(string instanceId)
+        {
+            if (serverState == null || serverState.board == null || string.IsNullOrEmpty(instanceId))
+                return null;
+
+            // Check board
+            for (int x = 0; x < 7; x++)
+            {
+                for (int y = 0; y < 4; y++)
+                {
+                    var unit = serverState.board[x, y];
+                    if (unit != null && unit.instanceId == instanceId)
+                    {
+                        return unit;
+                    }
+                }
+            }
+
+            // Check bench
+            if (serverState.bench != null)
+            {
+                foreach (var unit in serverState.bench)
+                {
+                    if (unit != null && unit.instanceId == instanceId)
+                    {
+                        return unit;
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private void HighlightValidTiles()
         {
+            if (hexBoard == null)
+            {
+                Debug.LogWarning("[BoardManager3D] hexBoard is null in HighlightValidTiles");
+                return;
+            }
+
             int playerRows = hexBoard.playerRows;
+
+            // In multiplayer mode, use serverState board
+            if (IsMultiplayer && serverState != null)
+            {
+                for (int x = 0; x < GameConstants.Grid.WIDTH; x++)
+                {
+                    for (int y = 0; y < playerRows; y++)
+                    {
+                        bool isEmpty = serverState.board[x, y] == null;
+                        bool isStart = (x == dragStartCoord.x && y == dragStartCoord.y);
+
+                        if (isEmpty || isStart)
+                        {
+                            hexBoard.HighlightTile(x, y, true);
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Single player mode
+            if (state == null || state.playerBoard == null) return;
+
             for (int x = 0; x < GameConstants.Grid.WIDTH; x++)
             {
                 for (int y = 0; y < playerRows; y++)
@@ -904,7 +2530,7 @@ namespace Crestforge.Visuals
                     {
                         bool isEmpty = state.playerBoard[x, y] == null;
                         bool isStart = (x == dragStartCoord.x && y == dragStartCoord.y);
-                        
+
                         if (isEmpty || isStart)
                         {
                             hexBoard.HighlightTile(x, y, true);
@@ -947,7 +2573,7 @@ namespace Crestforge.Visuals
             if (fromX == toX && fromY == toY) return true; // Same position
 
             // Bounds check
-            if (toX < 0 || toX >= state.playerBoard.GetLength(0) || 
+            if (toX < 0 || toX >= state.playerBoard.GetLength(0) ||
                 toY < 0 || toY >= state.playerBoard.GetLength(1))
             {
                 Debug.LogWarning($"[BoardManager3D] TryMoveUnit: target ({toX},{toY}) out of bounds");
@@ -956,13 +2582,13 @@ namespace Crestforge.Visuals
 
             // Check if target is empty
             UnitInstance targetUnit = state.playerBoard[toX, toY];
-            
+
             if (targetUnit == null)
             {
                 // Move to empty tile
                 state.playerBoard[fromX, fromY] = null;
                 state.playerBoard[toX, toY] = unit;
-                Debug.Log($"[BoardManager3D] Moved unit from ({fromX},{fromY}) to ({toX},{toY})");
+                unit.boardPosition = new Vector2Int(toX, toY);
                 return true;
             }
             else
@@ -970,8 +2596,52 @@ namespace Crestforge.Visuals
                 // Swap units
                 state.playerBoard[fromX, fromY] = targetUnit;
                 state.playerBoard[toX, toY] = unit;
-                Debug.Log($"[BoardManager3D] Swapped units at ({fromX},{fromY}) and ({toX},{toY})");
+                targetUnit.boardPosition = new Vector2Int(fromX, fromY);
+                unit.boardPosition = new Vector2Int(toX, toY);
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// Return a unit from the board to the bench
+        /// </summary>
+        private void ReturnUnitToBench(UnitVisual3D unitVisual)
+        {
+            if (unitVisual == null || unitVisual.unit == null) return;
+
+            UnitInstance unit = unitVisual.unit;
+
+            // Try to return to bench via game state
+            bool success = state.ReturnToBench(unit);
+
+            if (success)
+            {
+                // Remove visual from board tracking
+                if (unitVisuals.ContainsKey(unit))
+                {
+                    unitVisuals.Remove(unit);
+                }
+
+                // Find the bench slot index for this unit
+                int benchIndex = state.FindBenchIndex(unit);
+                if (benchIndex >= 0)
+                {
+                    // Move visual to bench slot position
+                    Vector3 benchPos = GetBenchSlotWorldPosition(benchIndex);
+                    benchPos.y = unitYOffset;
+                    unitVisual.SetPosition(benchPos);
+                    benchVisuals[benchIndex] = unitVisual;
+                }
+                else
+                {
+                    // Couldn't find in bench - destroy as fallback
+                    Destroy(unitVisual.gameObject);
+                }
+            }
+            else
+            {
+                // Bench is full, return to original position on board
+                unitVisual.MoveTo(dragStartPos);
             }
         }
 
@@ -980,13 +2650,557 @@ namespace Crestforge.Visuals
             dragPlaceholder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             dragPlaceholder.name = "DragPlaceholder";
             dragPlaceholder.transform.SetParent(transform);
-            dragPlaceholder.transform.localScale = new Vector3(0.4f, 0.02f, 0.4f);
+            dragPlaceholder.transform.localScale = new Vector3(0.5f, 0.05f, 0.5f);
             Destroy(dragPlaceholder.GetComponent<Collider>());
-            
-            Material mat = dragPlaceholder.GetComponent<Renderer>().material;
-            mat.color = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-            
+
+            // Create a glowing green material for valid placement preview
+            Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            if (mat == null)
+            {
+                mat = new Material(Shader.Find("Standard"));
+            }
+            mat.color = new Color(0.2f, 0.9f, 0.3f, 0.7f);
+            mat.SetFloat("_Smoothness", 0.8f);
+            // Enable transparency
+            mat.SetFloat("_Surface", 1); // Transparent
+            mat.SetFloat("_Blend", 0); // Alpha
+            mat.renderQueue = 3000;
+            dragPlaceholder.GetComponent<Renderer>().material = mat;
+
             dragPlaceholder.SetActive(false);
+        }
+
+        /// <summary>
+        /// Get world position for an away bench slot index (far side of board, behind row 7)
+        /// </summary>
+        public Vector3 GetAwayBenchSlotWorldPosition(int index)
+        {
+            if (hexBoard == null) return Vector3.zero;
+
+            int benchSize = GameConstants.Player.BENCH_SIZE;
+            float slotSpacing = 0.8f; // Space between bench slots
+            float totalWidth = (benchSize - 1) * slotSpacing;
+
+            // Position behind the enemy's last row (positive Z from board center)
+            // Get the position of the last enemy row (row 7) to align with
+            int lastRow = GameConstants.Grid.HEIGHT * 2 - 1; // Row 7 (0-indexed)
+            Vector3 lastRowPos = hexBoard.GetTileWorldPosition(0, lastRow);
+
+            // Away bench is positioned behind (positive Z) the last enemy row
+            float benchZ = lastRowPos.z + 1.5f; // 1.5 units behind last row
+
+            // Center the bench horizontally relative to board center
+            Vector3 boardCenter = hexBoard.BoardCenter;
+            float startX = boardCenter.x - totalWidth / 2f;
+            float x = startX + index * slotSpacing;
+
+            return new Vector3(x, 0.025f, benchZ); // Slightly above ground
+        }
+
+        /// <summary>
+        /// Get world position for a bench slot index
+        /// </summary>
+        public Vector3 GetBenchSlotWorldPosition(int index)
+        {
+            // Delegate to registry if available
+            if (Registry != null)
+            {
+                return Registry.GetBenchSlotWorldPosition(index);
+            }
+
+            // Fallback calculation
+            if (hexBoard == null) return Vector3.zero;
+
+            int benchSize = GameConstants.Player.BENCH_SIZE;
+            float slotSpacing = 0.8f;
+            float totalWidth = (benchSize - 1) * slotSpacing;
+
+            Vector3 firstRowPos = hexBoard.GetTileWorldPosition(0, 0);
+            float benchZ = firstRowPos.z - 1.5f;
+            float startX = hexBoard.transform.position.x - totalWidth / 2f;
+            float x = startX + index * slotSpacing;
+
+            return new Vector3(x, unitYOffset, benchZ);
+        }
+
+        /// <summary>
+        /// Get the bench slot index at a world position, or -1 if not over a bench slot
+        /// </summary>
+        private int GetBenchSlotAtWorldPosition(Vector3 worldPos)
+        {
+            // Delegate to registry if available
+            if (Registry != null)
+            {
+                return Registry.GetBenchSlotAtWorldPosition(worldPos);
+            }
+
+            // Fallback calculation
+            if (hexBoard == null) return -1;
+
+            int benchSize = GameConstants.Player.BENCH_SIZE;
+            float snapRadius = 1.2f;
+            float closestDist = float.MaxValue;
+            int closestSlot = -1;
+
+            for (int i = 0; i < benchSize; i++)
+            {
+                Vector3 slotPos = GetBenchSlotWorldPosition(i);
+                float dist = Vector2.Distance(
+                    new Vector2(worldPos.x, worldPos.z),
+                    new Vector2(slotPos.x, slotPos.z)
+                );
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    closestSlot = i;
+                }
+            }
+
+            return closestDist < snapRadius ? closestSlot : -1;
+        }
+
+        /// <summary>
+        /// Update the hover preview to show where unit will be placed
+        /// </summary>
+        private void UpdateHoverPreview()
+        {
+            if (!isDragging || draggedUnit == null)
+            {
+                if (dragPlaceholder != null)
+                    dragPlaceholder.SetActive(false);
+                return;
+            }
+
+            if (hexBoard == null)
+            {
+                if (dragPlaceholder != null)
+                    dragPlaceholder.SetActive(false);
+                return;
+            }
+
+            // Find hex under cursor
+            GameObject targetTile = hexBoard.GetTileAtScreenPosition(Input.mousePosition);
+
+            if (targetTile != null && hexBoard.TryGetTileCoord(targetTile, out Vector2Int coord, out bool isEnemy))
+            {
+                // Only show preview on valid player tiles
+                if (coord.y < hexBoard.playerRows)
+                {
+                    // Check if tile is empty (or is our original position for board drags)
+                    bool isValidPlacement = false;
+                    bool tileOccupied = false;
+
+                    // Use appropriate state based on game mode
+                    if (IsMultiplayer && serverState != null)
+                    {
+                        tileOccupied = serverState.board[coord.x, coord.y] != null;
+                    }
+                    else if (state != null)
+                    {
+                        tileOccupied = state.playerBoard[coord.x, coord.y] != null;
+                    }
+
+                    if (isDraggingFromBench)
+                    {
+                        isValidPlacement = !tileOccupied;
+                    }
+                    else
+                    {
+                        // Board drag - valid if empty or same tile
+                        isValidPlacement = !tileOccupied ||
+                                          (coord.x == dragStartCoord.x && coord.y == dragStartCoord.y);
+                    }
+
+                    if (isValidPlacement && dragPlaceholder != null)
+                    {
+                        Vector3 previewPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
+                        previewPos.y = 0.1f;
+                        dragPlaceholder.transform.position = previewPos;
+                        dragPlaceholder.SetActive(true);
+                        return;
+                    }
+                }
+            }
+
+            // Hide preview if not over valid tile
+            if (dragPlaceholder != null)
+                dragPlaceholder.SetActive(false);
+        }
+
+        /// <summary>
+        /// Start dragging a unit from the bench
+        /// </summary>
+        public void StartBenchDrag(UnitInstance unit, int benchIndex)
+        {
+            if (unit == null || isDragging) return;
+            // Bench rearranging is ALWAYS allowed
+
+            isDragging = true;
+            isDraggingFromBench = true;
+            benchDragIndex = benchIndex;
+
+            // Use the existing bench visual if available
+            if (benchVisuals.TryGetValue(benchIndex, out UnitVisual3D existingVisual) && existingVisual != null)
+            {
+                draggedUnit = existingVisual;
+                dragStartPos = existingVisual.transform.position;
+                // Remove from bench visuals tracking while dragging
+                benchVisuals.Remove(benchIndex);
+            }
+            else
+            {
+                // Fallback: Create temporary visual at cursor position
+                Vector3 startPos = GetWorldPositionFromMouse();
+                startPos.y = unitYOffset;
+
+                GameObject visualObj = new GameObject($"Unit_{unit.template.unitName}_BenchDrag");
+                visualObj.transform.SetParent(transform);
+                UnitVisual3D visual = visualObj.AddComponent<UnitVisual3D>();
+                visual.Initialize(unit, false);
+                visual.SetPosition(startPos);
+
+                draggedUnit = visual;
+                dragStartPos = startPos;
+            }
+
+            // Block camera input
+            if (cameraSetup != null)
+            {
+                cameraSetup.inputBlocked = true;
+            }
+
+            // Show sell mode in UI
+            Crestforge.UI.GameUI.Instance?.ShowSellMode(unit);
+
+            // Highlight valid placement tiles
+            HighlightValidTiles();
+        }
+
+        /// <summary>
+        /// Update bench drag position (called from UnitCardUI)
+        /// </summary>
+        public void UpdateBenchDrag(Vector2 screenPos)
+        {
+            if (!isDragging || !isDraggingFromBench || draggedUnit == null) return;
+
+            Vector3 worldPos = GetWorldPositionFromMouse();
+            worldPos.y = unitYOffset;
+            // Use SetPosition to update both position and targetPosition
+            // This prevents the visual from trying to animate back if destroyed with delay
+            draggedUnit.SetPosition(worldPos);
+
+            // Update hover preview
+            UpdateHoverPreview();
+        }
+
+        /// <summary>
+        /// End bench drag (called from UnitCardUI)
+        /// </summary>
+        public void EndBenchDrag()
+        {
+            if (!isDragging || !isDraggingFromBench)
+            {
+                isDragging = false;
+                isDraggingFromBench = false;
+                Crestforge.UI.GameUI.Instance?.HideSellMode();
+                return;
+            }
+
+            isDragging = false;
+            isDraggingFromBench = false;
+            hexBoard.ClearHighlights();
+            dragPlaceholder.SetActive(false);
+
+            // Unblock camera input
+            if (cameraSetup != null)
+            {
+                cameraSetup.inputBlocked = false;
+            }
+
+            if (draggedUnit == null)
+            {
+                Crestforge.UI.GameUI.Instance?.HideSellMode();
+                return;
+            }
+
+            // Get the unit before destroying the visual
+            UnitInstance unit = draggedUnit.unit;
+
+            // Temporarily disable the dragged unit's collider so raycast hits the tile
+            Collider draggedCollider = draggedUnit.GetComponent<Collider>();
+            if (draggedCollider != null) draggedCollider.enabled = false;
+
+            // Find target tile
+            GameObject targetTile = hexBoard.GetTileAtScreenPosition(Input.mousePosition);
+
+            // Check if over a bench slot
+            Vector3 worldPos = GetWorldPositionFromMouse();
+            int targetBenchSlot = GetBenchSlotAtWorldPosition(worldPos);
+
+            // Re-enable collider
+            if (draggedCollider != null) draggedCollider.enabled = true;
+
+            bool placed = false;
+            bool sold = false;
+
+            // Check if dropped on sell zone (UI raycast)
+            if (IsPointerOverSellZone())
+            {
+                // Sell the unit
+                if (benchDragIndex >= 0 && benchDragIndex < state.bench.Length)
+                {
+                    state.bench[benchDragIndex] = null;
+                }
+                Crestforge.UI.GameUI.Instance?.TrySellUnit();
+                sold = true;
+            }
+            // Check if dropped on another bench slot (swap or move)
+            else if (targetBenchSlot >= 0 && targetBenchSlot < state.bench.Length && targetBenchSlot != benchDragIndex)
+            {
+                UnitInstance otherUnit = state.bench[targetBenchSlot];
+                if (otherUnit != null && benchDragIndex >= 0 && benchDragIndex < state.bench.Length)
+                {
+                    // Swap with existing bench unit
+                    state.bench[targetBenchSlot] = unit;
+                    state.bench[benchDragIndex] = otherUnit;
+
+                    // Get the other unit's visual BEFORE overwriting
+                    benchVisuals.TryGetValue(targetBenchSlot, out UnitVisual3D otherVisual);
+
+                    // Update dragged unit visual (move to target slot)
+                    Vector3 newPos = GetBenchSlotWorldPosition(targetBenchSlot);
+                    newPos.y = unitYOffset;
+                    draggedUnit.SetPosition(newPos);
+                    benchVisuals[targetBenchSlot] = draggedUnit;
+
+                    // Move the other unit's visual to the original slot
+                    if (otherVisual != null && otherVisual != draggedUnit)
+                    {
+                        Vector3 otherPos = GetBenchSlotWorldPosition(benchDragIndex);
+                        otherPos.y = unitYOffset;
+                        otherVisual.SetPosition(otherPos);
+                        benchVisuals[benchDragIndex] = otherVisual;
+                    }
+
+                    draggedUnit = null;
+                    placed = true;
+                }
+                else if (benchDragIndex >= 0 && benchDragIndex < state.bench.Length)
+                {
+                    // Move to empty bench slot
+                    // Clear old slot, set new slot
+                    state.bench[benchDragIndex] = null;
+                    state.bench[targetBenchSlot] = unit;
+
+                    // Update visual position
+                    Vector3 newPos = GetBenchSlotWorldPosition(targetBenchSlot);
+                    newPos.y = unitYOffset;
+                    draggedUnit.SetPosition(newPos);
+                    benchVisuals[targetBenchSlot] = draggedUnit;
+                    benchVisuals.Remove(benchDragIndex);
+
+                    draggedUnit = null;
+                    placed = true;
+                }
+
+                // Refresh to ensure visuals are correct
+                Crestforge.UI.GameUI.Instance?.RefreshBench();
+            }
+            else
+            {
+                // Try raycast first, then fall back to closest tile detection
+                Vector2Int coord;
+                bool isEnemy;
+                bool foundTile = false;
+
+                if (targetTile != null && hexBoard.TryGetTileCoord(targetTile, out coord, out isEnemy))
+                {
+                    foundTile = true;
+                }
+                else
+                {
+                    // Fallback: find closest tile to drop position
+                    foundTile = hexBoard.TryGetClosestTileCoord(worldPos, 1.0f, out coord, out isEnemy);
+                }
+
+                if (foundTile)
+                {
+                    // Don't allow bench-to-board during combat
+                    if (state.round.phase == GamePhase.Combat)
+                    {
+                        // Return to original bench slot
+                    }
+                    // Only allow placement in player rows during planning
+                    else if (coord.y < hexBoard.playerRows && benchDragIndex >= 0 && benchDragIndex < state.bench.Length)
+                    {
+                        UnitInstance boardUnit = state.playerBoard[coord.x, coord.y];
+
+                        if (boardUnit == null)
+                        {
+                            // Empty tile - place bench unit on board
+                            state.bench[benchDragIndex] = null;
+                            state.playerBoard[coord.x, coord.y] = unit;
+
+                            // Set unit state for proper tracking
+                            unit.isOnBoard = true;
+                            unit.boardPosition = new UnityEngine.Vector2Int(coord.x, coord.y);
+
+                            // Update the visual position
+                            Vector3 newPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
+                            newPos.y = unitYOffset;
+                            draggedUnit.SetPosition(newPos);
+
+                            // Add to tracking - keep visual, don't destroy
+                            unitVisuals[unit] = draggedUnit;
+                            draggedUnit = null;
+                            placed = true;
+
+                            // Refresh UI and recalculate traits
+                            state.RecalculateTraits();
+                            Crestforge.UI.GameUI.Instance?.RefreshBench();
+                        }
+                        else
+                        {
+                            // Occupied tile - swap bench unit with board unit
+                            // Place bench unit on board
+                            state.playerBoard[coord.x, coord.y] = unit;
+                            unit.isOnBoard = true;
+                            unit.boardPosition = new UnityEngine.Vector2Int(coord.x, coord.y);
+
+                            // Move board unit to the bench slot where dragged unit was
+                            boardUnit.isOnBoard = false;
+                            state.bench[benchDragIndex] = boardUnit;
+
+                            // Update dragged unit visual (bench -> board)
+                            Vector3 boardPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
+                            boardPos.y = unitYOffset;
+                            draggedUnit.SetPosition(boardPos);
+                            unitVisuals[unit] = draggedUnit;
+
+                            // Update board unit visual (board -> bench)
+                            if (unitVisuals.TryGetValue(boardUnit, out UnitVisual3D boardVisual) && boardVisual != null)
+                            {
+                                unitVisuals.Remove(boardUnit);
+                                Vector3 benchPos = GetBenchSlotWorldPosition(benchDragIndex);
+                                benchPos.y = unitYOffset;
+                                boardVisual.SetPosition(benchPos);
+                                benchVisuals[benchDragIndex] = boardVisual;
+                            }
+
+                            draggedUnit = null;
+                            placed = true;
+
+                            // Refresh UI and recalculate traits
+                            state.RecalculateTraits();
+                            Crestforge.UI.GameUI.Instance?.RefreshBench();
+                        }
+                    }
+                }
+            }
+
+            // Handle the visual based on outcome
+            if (draggedUnit != null)
+            {
+                if (sold)
+                {
+                    // Sold - destroy the visual
+                    Destroy(draggedUnit.gameObject);
+                }
+                else if (!placed)
+                {
+                    // Invalid drop - return visual to bench
+                    Vector3 benchPos = GetBenchSlotWorldPosition(benchDragIndex);
+                    benchPos.y = unitYOffset;
+                    draggedUnit.SetPosition(benchPos);
+                    benchVisuals[benchDragIndex] = draggedUnit;
+                }
+            }
+
+            draggedUnit = null;
+
+            // Hide sell mode
+            Crestforge.UI.GameUI.Instance?.HideSellMode();
+
+            // Trigger orphan cleanup on next sync to catch any stray visuals
+            orphanCleanupTimer = ORPHAN_CLEANUP_INTERVAL;
+        }
+
+        /// <summary>
+        /// Check if pointer is over the sell zone UI
+        /// </summary>
+        private bool IsPointerOverSellZone()
+        {
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem == null) return false;
+
+            var pointerData = new UnityEngine.EventSystems.PointerEventData(eventSystem)
+            {
+                position = Input.mousePosition
+            };
+
+            var results = new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
+            eventSystem.RaycastAll(pointerData, results);
+
+            foreach (var result in results)
+            {
+                if (result.gameObject.GetComponent<Crestforge.UI.SellDropZone>() != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Check if currently dragging from bench
+        /// </summary>
+        public bool IsDraggingFromBench => isDragging && isDraggingFromBench;
+
+        /// <summary>
+        /// Cancel any in-progress bench drag and return unit to bench
+        /// Called when combat starts to prevent stuck units
+        /// </summary>
+        public void CancelBenchDrag()
+        {
+            if (!isDragging) return;
+
+            // Clean up drag state
+            isDragging = false;
+            isDraggingFromBench = false;
+            hexBoard?.ClearHighlights();
+            if (dragPlaceholder != null) dragPlaceholder.SetActive(false);
+
+            // Unblock camera input
+            if (cameraSetup != null)
+            {
+                cameraSetup.inputBlocked = false;
+            }
+
+            // Return the dragged unit to its bench position
+            if (draggedUnit != null && benchDragIndex >= 0)
+            {
+                Vector3 benchPos = GetBenchSlotWorldPosition(benchDragIndex);
+                benchPos.y = unitYOffset;
+                draggedUnit.SetPosition(benchPos);
+                benchVisuals[benchDragIndex] = draggedUnit;
+            }
+
+            draggedUnit = null;
+
+            // Hide sell mode
+            Crestforge.UI.GameUI.Instance?.HideSellMode();
+        }
+
+        private Vector3 GetWorldPositionFromMouse()
+        {
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            Plane groundPlane = new Plane(Vector3.up, new Vector3(0, unitYOffset, 0));
+            if (groundPlane.Raycast(ray, out float distance))
+            {
+                return ray.GetPoint(distance);
+            }
+            return Vector3.zero;
         }
 
         /// <summary>
@@ -996,6 +3210,57 @@ namespace Crestforge.Visuals
         {
             unitVisuals.TryGetValue(unit, out UnitVisual3D visual);
             return visual;
+        }
+
+        /// <summary>
+        /// Get unit visual by server instance ID (for multiplayer combat visualization)
+        /// </summary>
+        public UnitVisual3D GetUnitVisualByInstanceId(string instanceId)
+        {
+            if (string.IsNullOrEmpty(instanceId)) return null;
+
+            // Delegate to registry
+            if (Registry != null)
+            {
+                return Registry.GetVisualByInstanceId(instanceId);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Show or hide board unit visuals only (used during combat to prevent duplication)
+        /// Bench units are NOT affected - they should remain visible during combat
+        /// </summary>
+        public void SetBoardUnitVisualsVisible(bool visible)
+        {
+            if (Registry != null)
+            {
+                Registry.SetBoardVisualsVisible(visible);
+            }
+        }
+
+        /// <summary>
+        /// Show or hide all unit visuals including bench (legacy method)
+        /// </summary>
+        public void SetAllUnitVisualsVisible(bool visible)
+        {
+            if (Registry != null)
+            {
+                Registry.SetBoardVisualsVisible(visible);
+                Registry.SetBenchVisualsVisible(visible);
+            }
+        }
+
+        /// <summary>
+        /// Convert grid coordinates to world position (for combat visualization)
+        /// </summary>
+        public Vector3 GridToWorld(int x, int y)
+        {
+            if (hexBoard == null) return Vector3.zero;
+            Vector3 pos = hexBoard.GetTileWorldPosition(x, y);
+            pos.y = unitYOffset;
+            return pos;
         }
 
         /// <summary>
@@ -1089,46 +3354,6 @@ namespace Crestforge.Visuals
             FloatingText ft = textObj.AddComponent<FloatingText>();
             ft.lifetime = 1.5f;
             ft.floatSpeed = 0.5f;
-        }
-    }
-
-    /// <summary>
-    /// Simple floating text animation
-    /// </summary>
-    public class FloatingText : MonoBehaviour
-    {
-        public float floatSpeed = 1f;
-        public float lifetime = 1f;
-        
-        private float elapsed;
-        private Vector3 startPos;
-        private TextMesh textMesh;
-
-        private void Start()
-        {
-            startPos = transform.position;
-            textMesh = GetComponent<TextMesh>();
-        }
-
-        private void Update()
-        {
-            elapsed += Time.deltaTime;
-            
-            // Float upward
-            transform.position = startPos + Vector3.up * elapsed * floatSpeed;
-            
-            // Fade out
-            if (textMesh != null)
-            {
-                Color c = textMesh.color;
-                c.a = 1f - (elapsed / lifetime);
-                textMesh.color = c;
-            }
-            
-            if (elapsed >= lifetime)
-            {
-                Destroy(gameObject);
-            }
         }
     }
 }

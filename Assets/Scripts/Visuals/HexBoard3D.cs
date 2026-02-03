@@ -9,17 +9,30 @@ namespace Crestforge.Visuals
     /// <summary>
     /// Generates and manages 3D hexagonal tiles for the game board.
     /// Creates extruded hex prisms with proper materials and hover effects.
+    /// Supports multiple instances for PvP mode.
     /// </summary>
     public class HexBoard3D : MonoBehaviour
     {
-        public static HexBoard3D Instance { get; private set; }
+        // Primary instance (player's board) - for backwards compatibility
+        public static HexBoard3D Instance { get; set; }
+
+        // All board instances for multi-board PvP
+        public static List<HexBoard3D> AllBoards { get; private set; } = new List<HexBoard3D>();
 
         [Header("Board Settings")]
         public float hexRadius = 0.5f;
         public float hexHeight = 0.15f;
         public float hexSpacing = 0.05f;
         public int playerRows = 4;  // Player gets 4 rows
-        
+
+        [Header("Board Identity")]
+        [Tooltip("Is this the main player's board?")]
+        public bool isPlayerBoard = true;
+        [Tooltip("Owner ID for opponent boards")]
+        public string ownerId = "";
+        [Tooltip("Display name for this board")]
+        public string boardLabel = "Player";
+
         [Header("Visual Settings")]
         public Color playerTileColor;
         public Color enemyTileColor;
@@ -39,10 +52,63 @@ namespace Crestforge.Visuals
         private GameObject selectedTile;
         private Vector3 boardCenter;
 
+        // Visual registry - single source of truth for all unit visuals on this board
+        private BoardVisualRegistry _registry;
+
+        /// <summary>
+        /// The visual registry that owns all unit visuals for this board.
+        /// Single source of truth - use this instead of creating visuals directly.
+        /// </summary>
+        public BoardVisualRegistry Registry
+        {
+            get
+            {
+                if (_registry == null)
+                {
+                    _registry = GetComponent<BoardVisualRegistry>();
+                    if (_registry == null)
+                    {
+                        _registry = gameObject.AddComponent<BoardVisualRegistry>();
+                    }
+                }
+                return _registry;
+            }
+        }
+
         private void Awake()
         {
-            if (Instance == null) Instance = this;
-            else Destroy(gameObject);
+            // Register this board
+            if (!AllBoards.Contains(this))
+            {
+                AllBoards.Add(this);
+            }
+
+            // Set as primary instance if it's the player board and no instance exists
+            if (isPlayerBoard && Instance == null)
+            {
+                Instance = this;
+            }
+
+            // Create visual registry for this board
+            if (_registry == null)
+            {
+                _registry = GetComponent<BoardVisualRegistry>();
+                if (_registry == null)
+                {
+                    _registry = gameObject.AddComponent<BoardVisualRegistry>();
+                }
+            }
+
+            // Note: Bench slots (visual platforms) are created by Game3DSetup at startup.
+        }
+
+        private void OnDestroy()
+        {
+            AllBoards.Remove(this);
+            if (Instance == this)
+            {
+                Instance = null;
+            }
         }
 
         private void Start()
@@ -51,11 +117,11 @@ namespace Crestforge.Visuals
             {
                 CreateDefaultMaterial();
             }
-            
+
             GenerateBoard();
-            
-            // Center camera on board
-            if (IsometricCameraSetup.Instance != null)
+
+            // Only center camera on player's board
+            if (isPlayerBoard && IsometricCameraSetup.Instance != null)
             {
                 // Total board is HEIGHT * 2 (player + enemy sides)
                 int totalRows = GameConstants.Grid.HEIGHT * 2;
@@ -78,11 +144,13 @@ namespace Crestforge.Visuals
             }
             else
             {
-                // Fallback to toon shader
-                Shader toonShader = Shader.Find("Crestforge/MedievalToon");
-                if (toonShader != null)
+                // Use URP/Lit shader
+                Shader urpShader = Shader.Find("Universal Render Pipeline/Lit");
+                if (urpShader != null)
                 {
-                    tileMaterial = new Material(toonShader);
+                    tileMaterial = new Material(urpShader);
+                    tileMaterial.SetFloat("_Smoothness", 0.2f);
+                    tileMaterial.SetFloat("_Metallic", 0.05f);
                 }
                 else
                 {
@@ -114,8 +182,6 @@ namespace Crestforge.Visuals
             int rowsPerSide = GameConstants.Grid.HEIGHT;
             int totalRows = rowsPerSide * 2;
             playerRows = rowsPerSide;  // Update playerRows to match
-            
-            Debug.Log($"[HexBoard3D] Generating board: {width}x{totalRows} (rowsPerSide={rowsPerSide}, playerRows={playerRows})");
 
             playerTiles = new GameObject[width, playerRows];
             enemyTiles = new GameObject[width, rowsPerSide];
@@ -124,8 +190,6 @@ namespace Crestforge.Visuals
             float totalWidth = width * (hexRadius * 2 + hexSpacing);
             float totalHeight = totalRows * (hexRadius * 1.732f + hexSpacing);
             Vector3 offset = new Vector3(-totalWidth / 2f + hexRadius, 0, -totalHeight / 2f + hexRadius);
-
-            Debug.Log($"[HexBoard3D] Board offset: {offset}, totalWidth: {totalWidth}, totalHeight: {totalHeight}");
 
             // Generate player tiles (bottom rows)
             for (int y = 0; y < playerRows; y++)
@@ -139,13 +203,10 @@ namespace Crestforge.Visuals
                     tileIsEnemy[tile] = false;
                 }
             }
-            
-            Debug.Log($"[HexBoard3D] Created {playerRows} player rows");
 
             // Generate enemy tiles (top rows)
             int enemyRowCount = rowsPerSide;
-            Debug.Log($"[HexBoard3D] Creating {enemyRowCount} enemy rows");
-            
+
             for (int y = playerRows; y < totalRows; y++)
             {
                 for (int x = 0; x < width; x++)
@@ -158,10 +219,8 @@ namespace Crestforge.Visuals
                 }
             }
 
-            // Calculate board center
-            boardCenter = new Vector3(0, 0, 0);
-            
-            Debug.Log($"[HexBoard3D] Board generation complete. Player tiles: {playerTiles.Length}, Enemy tiles: {enemyTiles.Length}");
+            // Calculate board center (relative to board transform)
+            boardCenter = transform.position;
         }
 
         /// <summary>
@@ -172,7 +231,8 @@ namespace Crestforge.Visuals
             float xOffset = (y % 2 == 1) ? (hexRadius + hexSpacing / 2f) : 0;
             float worldX = x * (hexRadius * 2 + hexSpacing) + xOffset;
             float worldZ = y * (hexRadius * 1.732f + hexSpacing);
-            return new Vector3(worldX, 0, worldZ);
+            // Raise tiles above ground to prevent Z-fighting
+            return new Vector3(worldX, 0.05f, worldZ);
         }
 
         /// <summary>
@@ -185,8 +245,9 @@ namespace Crestforge.Visuals
             float totalWidth = GameConstants.Grid.WIDTH * (hexRadius * 2 + hexSpacing);
             float totalHeight = totalRows * (hexRadius * 1.732f + hexSpacing);
             Vector3 offset = new Vector3(-totalWidth / 2f + hexRadius, 0, -totalHeight / 2f + hexRadius);
-            
-            return HexToWorldPosition(x, y) + offset;
+
+            // Add board's world position to get correct world coordinates
+            return transform.position + HexToWorldPosition(x, y) + offset;
         }
 
         /// <summary>
@@ -196,7 +257,7 @@ namespace Crestforge.Visuals
         {
             GameObject tile = new GameObject(name);
             tile.transform.SetParent(transform);
-            tile.transform.position = position;
+            tile.transform.localPosition = position;  // Use localPosition so tiles are relative to board
 
             // Create hex mesh
             MeshFilter mf = tile.AddComponent<MeshFilter>();
@@ -232,14 +293,27 @@ namespace Crestforge.Visuals
                 }
                 else
                 {
-                    // Fallback to toon material
-                    Color shadowColor = Color.Lerp(variedColor, Color.black, 0.3f);
-                    mat = MedievalVisualConfig.CreateToonMaterial(variedColor, shadowColor, 0.15f);
+                    // Fallback to URP/Lit material with grass-like appearance
+                    Shader urpShader = Shader.Find("Universal Render Pipeline/Lit");
+                    if (urpShader != null)
+                    {
+                        mat = new Material(urpShader);
+                        mat.SetColor("_BaseColor", variedColor);
+                        mat.SetFloat("_Smoothness", 0.1f); // Low smoothness for matte grass look
+                        mat.SetFloat("_Metallic", 0f);
+                    }
+                    else
+                    {
+                        Color shadowColor = Color.Lerp(variedColor, Color.black, 0.3f);
+                        mat = MedievalVisualConfig.CreateToonMaterial(variedColor, shadowColor, 0.15f);
+                    }
                 }
             }
             else
             {
                 mat = new Material(tileMaterial);
+                // Set color for both URP and Standard shaders
+                mat.SetColor("_BaseColor", variedColor);
                 mat.color = variedColor;
             }
             mr.material = mat;
@@ -474,109 +548,47 @@ namespace Crestforge.Visuals
             return null;
         }
 
+        /// <summary>
+        /// Find the closest tile to a world position (more reliable than raycasting)
+        /// </summary>
+        public bool TryGetClosestTileCoord(Vector3 worldPos, float maxDistance, out Vector2Int coord, out bool isEnemy)
+        {
+            coord = Vector2Int.zero;
+            isEnemy = false;
+
+            float closestDist = float.MaxValue;
+            GameObject closestTile = null;
+
+            foreach (var kvp in tileToCoord)
+            {
+                GameObject tile = kvp.Key;
+                if (tile == null) continue;
+
+                float dist = Vector2.Distance(
+                    new Vector2(worldPos.x, worldPos.z),
+                    new Vector2(tile.transform.position.x, tile.transform.position.z)
+                );
+
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    closestTile = tile;
+                }
+            }
+
+            if (closestTile != null && closestDist < maxDistance)
+            {
+                coord = tileToCoord[closestTile];
+                isEnemy = tileIsEnemy[closestTile];
+                return true;
+            }
+
+            return false;
+        }
+
         public Vector3 BoardCenter => boardCenter;
         public float TileRadius => hexRadius;
         public float TileHeight => hexHeight;
     }
 
-    /// <summary>
-    /// Component attached to each hex tile for interaction
-    /// </summary>
-    public class HexTile3D : MonoBehaviour
-    {
-        public Color baseColor;
-        public bool useMedievalTheme = true;
-        private Material material;
-        private bool isHighlighted;
-        private float pulseTime;
-
-        private void Awake()
-        {
-            material = GetComponent<MeshRenderer>()?.material;
-        }
-
-        private void Update()
-        {
-            // Subtle pulse effect when highlighted
-            if (isHighlighted && material != null && useMedievalTheme)
-            {
-                pulseTime += Time.deltaTime * 2f;
-                float pulse = Mathf.Sin(pulseTime) * 0.05f + 0.95f;
-                material.SetFloat("_RimIntensity", 0.3f + pulse * 0.2f);
-            }
-        }
-
-        public void SetHighlight(Color color)
-        {
-            isHighlighted = true;
-            pulseTime = 0;
-
-            if (material != null)
-            {
-                if (useMedievalTheme)
-                {
-                    material.SetColor("_MainColor", color);
-                    material.SetColor("_RimColor", Color.Lerp(color, Color.white, 0.5f));
-                    material.SetFloat("_RimIntensity", 0.5f);
-                }
-                else
-                {
-                    material.color = color;
-                }
-            }
-        }
-
-        public void ClearHighlight()
-        {
-            isHighlighted = false;
-
-            if (material != null)
-            {
-                if (useMedievalTheme)
-                {
-                    material.SetColor("_MainColor", baseColor);
-                    material.SetColor("_RimColor", Color.Lerp(baseColor, Color.white, 0.3f));
-                    material.SetFloat("_RimIntensity", 0.15f);
-                }
-                else
-                {
-                    material.color = baseColor;
-                }
-            }
-        }
-
-        public void SetHover(bool hover)
-        {
-            if (isHighlighted) return;
-
-            if (material != null)
-            {
-                if (hover)
-                {
-                    Color hoverColor = Color.Lerp(baseColor, Color.white, 0.15f);
-                    if (useMedievalTheme)
-                    {
-                        material.SetColor("_MainColor", hoverColor);
-                        material.SetFloat("_RimIntensity", 0.25f);
-                    }
-                    else
-                    {
-                        material.color = hoverColor;
-                    }
-                }
-                else
-                {
-                    if (useMedievalTheme)
-                    {
-                        material.SetColor("_MainColor", baseColor);
-                        material.SetFloat("_RimIntensity", 0.15f);
-                    }
-                    else
-                    {
-                        material.color = baseColor;
-                    }
-                }
-            }
-        }
-    }
 }

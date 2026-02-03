@@ -32,6 +32,22 @@ namespace Crestforge.Systems
         /// </summary>
         public UnitInstance[,] GenerateWave(int round)
         {
+            // Check for special PvE rounds
+            var roundType = GetRoundType(round);
+            if (roundType == RoundType.PvEIntro)
+            {
+                return GeneratePvEIntroWave();
+            }
+            else if (roundType == RoundType.PvELoot)
+            {
+                return GeneratePvELootWave(round);
+            }
+            else if (roundType == RoundType.PvEBoss)
+            {
+                return GeneratePvEBossWave(round);
+            }
+
+            // Standard wave generation
             var template = GetWaveTemplate(round);
             var board = new UnitInstance[GameConstants.Grid.WIDTH, GameConstants.Grid.HEIGHT];
             var usedPositions = new HashSet<Vector2Int>();
@@ -56,7 +72,7 @@ namespace Crestforge.Systems
 
                 // Calculate power cost
                 int powerCost = CalculatePowerCost(unitData.cost, starLevel);
-                if (powerCost > remainingBudget) 
+                if (powerCost > remainingBudget)
                 {
                     starLevel = 1;
                     powerCost = unitData.cost;
@@ -76,6 +92,179 @@ namespace Crestforge.Systems
             }
 
             Debug.Log($"Generated wave {round}: {unitsPlaced} units, {template.budget - remainingBudget} power used");
+            return board;
+        }
+
+        private RoundType GetRoundType(int round)
+        {
+            int roundIndex = round - 1;
+            if (roundIndex >= 0 && roundIndex < GameConstants.Rounds.ROUND_TYPES.Length)
+            {
+                return GameConstants.Rounds.ROUND_TYPES[roundIndex];
+            }
+            return RoundType.PvP;
+        }
+
+        /// <summary>
+        /// Generate PvE Intro wave (Round 1): 2 weak critters with loot
+        /// </summary>
+        private UnitInstance[,] GeneratePvEIntroWave()
+        {
+            var board = new UnitInstance[GameConstants.Grid.WIDTH, GameConstants.Grid.HEIGHT];
+
+            // Load PvE critter units
+            var pveUnits = LoadPvECritters();
+
+            if (pveUnits.Count < 2)
+            {
+                Debug.LogWarning("Not enough PvE critters! Run Crestforge > Generate PvE Critters first.");
+                // Fallback to very weak placeholder units
+                return GenerateFallbackIntroWave(board);
+            }
+
+            // Create first enemy (Stingray drops Crest Token)
+            var stingray = pveUnits.Find(u => u.unitName == "Stingray") ?? pveUnits[0];
+            var unit1 = UnitInstance.Create(stingray, 1);
+            unit1.lootType = LootType.CrestToken;
+            board[1, 1] = unit1;
+
+            // Create second enemy (Cactus drops Item Anvil)
+            var cactus = pveUnits.Find(u => u.unitName == "Cactus") ?? pveUnits[pveUnits.Count > 1 ? 1 : 0];
+            var unit2 = UnitInstance.Create(cactus, 1);
+            unit2.lootType = LootType.ItemAnvil;
+            board[3, 1] = unit2;
+
+            Debug.Log($"Generated PvE Intro wave: {stingray.unitName} (Crest Token) and {cactus.unitName} (Item Anvil)");
+            return board;
+        }
+
+        private List<UnitData> LoadPvECritters()
+        {
+            var critters = new List<UnitData>();
+            var loaded = Resources.LoadAll<UnitData>("ScriptableObjects/PvEUnits");
+            if (loaded != null)
+            {
+                critters.AddRange(loaded);
+            }
+            return critters;
+        }
+
+        private UnitInstance[,] GenerateFallbackIntroWave(UnitInstance[,] board)
+        {
+            // If no PvE critters exist, use 1-cost units but make them weaker
+            var oneCostUnits = GetValidUnits(1);
+            if (oneCostUnits.Count == 0) return board;
+
+            var unit1Data = oneCostUnits[Random.Range(0, oneCostUnits.Count)];
+            var unit1 = UnitInstance.Create(unit1Data, 1);
+            // Reduce stats for fallback
+            unit1.currentStats.health = 80;
+            unit1.currentStats.attack = 15;
+            unit1.currentHealth = 80;
+            unit1.lootType = LootType.CrestToken;
+            board[1, 1] = unit1;
+
+            var unit2Data = oneCostUnits[Random.Range(0, oneCostUnits.Count)];
+            var unit2 = UnitInstance.Create(unit2Data, 1);
+            unit2.currentStats.health = 80;
+            unit2.currentStats.attack = 15;
+            unit2.currentHealth = 80;
+            unit2.lootType = LootType.ItemAnvil;
+            board[3, 1] = unit2;
+
+            Debug.Log("Using fallback intro wave with weakened units");
+            return board;
+        }
+
+        /// <summary>
+        /// Generate PvE Loot wave: PvE critters with item drops
+        /// </summary>
+        private UnitInstance[,] GeneratePvELootWave(int round)
+        {
+            var board = new UnitInstance[GameConstants.Grid.WIDTH, GameConstants.Grid.HEIGHT];
+
+            // Load PvE critter units
+            var pveUnits = LoadPvECritters();
+
+            if (pveUnits.Count == 0)
+            {
+                Debug.LogWarning("No PvE critters found for loot wave!");
+                return board;
+            }
+
+            // Place 3-4 critters with scaling stats
+            int critterCount = 3 + (round / 4);
+            bool lootAssigned = false;
+
+            for (int i = 0; i < critterCount && i < 6; i++)
+            {
+                var critterData = pveUnits[Random.Range(0, pveUnits.Count)];
+                int starLevel = 1 + (round / 5); // Scale star level with round
+                starLevel = Mathf.Min(starLevel, 2);
+
+                var unit = UnitInstance.Create(critterData, starLevel);
+
+                // First unit gets the item loot
+                if (!lootAssigned)
+                {
+                    unit.lootType = LootType.ItemAnvil;
+                    lootAssigned = true;
+                }
+
+                // Position critters
+                int col = i % GameConstants.Grid.WIDTH;
+                int row = i / GameConstants.Grid.WIDTH;
+                if (board[col, row] == null)
+                {
+                    board[col, row] = unit;
+                }
+            }
+
+            Debug.Log($"Generated PvE Loot wave {round}: {critterCount} critters with item drop");
+            return board;
+        }
+
+        /// <summary>
+        /// Generate PvE Boss wave: Strong PvE critter boss with item drop
+        /// </summary>
+        private UnitInstance[,] GeneratePvEBossWave(int round)
+        {
+            var board = new UnitInstance[GameConstants.Grid.WIDTH, GameConstants.Grid.HEIGHT];
+
+            // Load PvE critter units
+            var pveUnits = LoadPvECritters();
+
+            if (pveUnits.Count == 0)
+            {
+                Debug.LogWarning("No PvE critters found for boss wave!");
+                return board;
+            }
+
+            // Create boss critter (3-star for difficulty)
+            var bossData = pveUnits[Random.Range(0, pveUnits.Count)];
+            var boss = UnitInstance.Create(bossData, 3);
+            boss.lootType = LootType.ItemAnvil;
+            board[2, 2] = boss;
+
+            // Add critter minions (2-star)
+            var minion1Data = pveUnits[Random.Range(0, pveUnits.Count)];
+            var minion1 = UnitInstance.Create(minion1Data, 2);
+            board[1, 1] = minion1;
+
+            var minion2Data = pveUnits[Random.Range(0, pveUnits.Count)];
+            var minion2 = UnitInstance.Create(minion2Data, 2);
+            board[3, 1] = minion2;
+
+            // Add extra minions for difficulty
+            var minion3Data = pveUnits[Random.Range(0, pveUnits.Count)];
+            var minion3 = UnitInstance.Create(minion3Data, 2);
+            board[0, 0] = minion3;
+
+            var minion4Data = pveUnits[Random.Range(0, pveUnits.Count)];
+            var minion4 = UnitInstance.Create(minion4Data, 2);
+            board[4, 0] = minion4;
+
+            Debug.Log($"Generated PvE Boss wave: {bossData.unitName} (3-star boss with Item Anvil) + 4 minions");
             return board;
         }
 

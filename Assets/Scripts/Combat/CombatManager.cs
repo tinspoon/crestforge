@@ -81,8 +81,6 @@ namespace Crestforge.Combat
                     }
                 }
             }
-
-            Debug.Log($"Combat started: {GetTeamUnits(Team.Player).Count} vs {GetTeamUnits(Team.Enemy).Count}");
         }
 
         // Startup delay to let visuals sync before combat begins
@@ -302,15 +300,12 @@ namespace Crestforge.Combat
         /// </summary>
         private void DealDamage(CombatUnit source, CombatUnit target, int amount, DamageType type)
         {
-            // Apply magic resist for magic damage
-            if (type == DamageType.Magic)
+            // Apply magic resist for non-Physical damage (Elemental, Dark, Holy)
+            if (type != DamageType.Physical)
             {
                 float mrReduction = target.stats.magicResist / (float)(target.stats.magicResist + 100);
                 amount = Mathf.RoundToInt(amount * (1 - mrReduction));
             }
-
-            // True damage bypasses all resistance
-            // Poison and Fire could have special handling
 
             // Absorb with shield
             if (target.currentShield > 0)
@@ -370,8 +365,6 @@ namespace Crestforge.Combat
                     CastBuffAbility(caster, ability);
                     break;
             }
-
-            Debug.Log($"{caster.source.template.unitName} casts {ability.abilityName}!");
         }
 
         private void CastDamageAbility(CombatUnit caster, AbilityData ability)
@@ -539,7 +532,7 @@ namespace Crestforge.Combat
                             duration = item.effectValue2,
                             remainingDuration = item.effectValue2,
                             damagePerTick = Mathf.RoundToInt(item.effectValue1 / (item.effectValue2 / tickRate)),
-                            damageType = DamageType.Fire
+                            damageType = DamageType.Elemental
                         };
                         target.statusEffects.Add(burn);
                         break;
@@ -609,12 +602,9 @@ namespace Crestforge.Combat
                     unit.isDead = false;
                     unit.currentHealth = Mathf.RoundToInt(item.effectValue1);
                     unit.hasUsedRevive = true;
-                    Debug.Log($"{unit.source.template.unitName} revived!");
                     return;
                 }
             }
-
-            Debug.Log($"{unit.source.template.unitName} died!");
         }
 
         /// <summary>
@@ -695,8 +685,6 @@ namespace Crestforge.Combat
                 result.damageToPlayer = 2 + GetAliveUnits(Team.Enemy).Count;
             }
 
-            Debug.Log($"Combat ended: {(playerWon ? "Victory" : "Defeat")} in {combatTime:F1}s");
-            
             OnCombatEnd?.Invoke(result);
         }
     }

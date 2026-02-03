@@ -1,0 +1,480 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbc0b1c7938c54da88baab99d7d2835e, type: 3}
+  m_Name: UnitModelDatabase
+  m_EditorClassIdentifier: 
+  unitModels:
+  - unitName: Blue Slime
+    modelPrefab: {fileID: 7255419177770050467, guid: 1fe00e1e2f828b14d91a67c71cfcfcff, type: 3}
+    scale: 0.8
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: BlueSlime_IdleBattle
+    walkClip: BlueSlime_MoveFWD
+    attackClip: BlueSlime_Attack01
+    hitClip: BlueSlime_GetHit
+    deathClip: BlueSlime_Die
+    attackAnimSpeed: 1
+  - unitName: Red Slime
+    modelPrefab: {fileID: 1931298151966786, guid: c59069ed00c84181998b411995cf7941, type: 3}
+    scale: 0.8
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Slime_IdleBattle
+    walkClip: Slime_MoveFWD
+    attackClip: Slime_Attack01
+    hitClip: Slime_GetHit
+    deathClip: Slime_Die
+    attackAnimSpeed: 1
+  - unitName: Bat
+    modelPrefab: {fileID: 5122791751604650877, guid: d34ea5c7a264441f89039c4bc34ef4c3, type: 3}
+    scale: 0.7
+    yOffset: 0.3
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Bat_IdleBattle
+    walkClip: Bat_MoveFWD
+    attackClip: Bat_Attack01
+    hitClip: Bat_GetHit
+    deathClip: Bat_Die
+    attackAnimSpeed: 1
+  - unitName: Mushroom
+    modelPrefab: {fileID: 875073071404757921, guid: 10e614a6041a3c2419df018b2319e5d3, type: 3}
+    scale: 0.8
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Mushroom_IdleBattleAngry
+    walkClip: Mushroom_walkFWDAngry
+    attackClip: Mushroom_Attack01Angry
+    hitClip: Mushroom_GetHitAngry
+    deathClip: Mushroom_DieAngry
+    attackAnimSpeed: 1
+  - unitName: Crawler
+    modelPrefab: {fileID: 775711792221409180, guid: 4c2f0fd88783dc1448ce0a96ef50c11e, type: 3}
+    scale: 0.8
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Crawler_IdleBattle
+    walkClip: Crawler_MoveFWD
+    attackClip: Crawler_Attack01
+    hitClip: Crawler_GetHit
+    deathClip: Crawler_Die
+    attackAnimSpeed: 1
+  - unitName: Little Demon
+    modelPrefab: {fileID: 9163337285505019949, guid: ce0a375fa73ef234e8c6caab9d7e52b7, type: 3}
+    scale: 0.8
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: LittleDemon_IdleBattle
+    walkClip: LittleDemon_MoveFWD
+    attackClip: LittleDemon_Attack01
+    hitClip: LittleDemon_GetHit
+    deathClip: LittleDemon_Die
+    attackAnimSpeed: 1
+  - unitName: Green Spider
+    modelPrefab: {fileID: 1557585983417840, guid: 4a7d79c32a2d4de88831b8812bc8bc4e, type: 3}
+    scale: 0.8
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Spider_IdleBattle
+    walkClip: Spider_MoveFWD
+    attackClip: Spider_Attack01
+    hitClip: Spider_GetHit
+    deathClip: Spider_Die
+    attackAnimSpeed: 1
+  - unitName: Starfish
+    modelPrefab: {fileID: 6722140235509897806, guid: 5012254f5f834484f97de003ff832fd7, type: 3}
+    scale: 0.7
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: StarFish_IdleBattle
+    walkClip: StarFish_MoveFWD
+    attackClip: StarFish_Attack01
+    hitClip: StarFish_GetHit
+    deathClip: StarFish_Die
+    attackAnimSpeed: 1
+  - unitName: Rat Assassin
+    modelPrefab: {fileID: 7237178871622730094, guid: 0601fc21483e470ba4cdca7c5d998140, type: 3}
+    scale: 0.85
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: IdleBattle
+    walkClip: Walk
+    attackClip: Attack01
+    hitClip: GetHit
+    deathClip: Die
+    attackAnimSpeed: 1
+  - unitName: Archer
+    modelPrefab: {fileID: 5689700144625623747, guid: ff9d1c6a188ff3644bc59bacb9537ff4, type: 3}
+    scale: 0.9
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: 
+    walkClip: 
+    attackClip: 
+    hitClip: 
+    deathClip: 
+    attackAnimSpeed: 1
+  - unitName: Fishman
+    modelPrefab: {fileID: 4401516545361303541, guid: 136c828b3d8169b45b473ff05b9a43a2, type: 3}
+    scale: 0.9
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Fishman_IdleBattle
+    walkClip: Fishman_MoveFWD
+    attackClip: Fishman_Attack01
+    hitClip: Fishman_GetHit
+    deathClip: Fishman_Die
+    attackAnimSpeed: 1
+  - unitName: Crab Monster
+    modelPrefab: {fileID: 6928589415477418788, guid: c1f65bc2f90a43c4959826b943b130cf, type: 3}
+    scale: 0.85
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: CrabMonster_IdleBattle
+    walkClip: CrabMonster_MoveFWD
+    attackClip: CrabMonster_Attack01
+    hitClip: CrabMonster_GetHit
+    deathClip: CrabMonster_Die
+    attackAnimSpeed: 1
+  - unitName: Salamander
+    modelPrefab: {fileID: 2398039129503895482, guid: d5ace0a48b5b31b4c9210d67753cb677, type: 3}
+    scale: 0.9
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Salamander_IdleBattle
+    walkClip: Salamander_MoveFWD
+    attackClip: Salamander_Attack01
+    hitClip: Salamander_GetHit
+    deathClip: Salamander_Die
+    attackAnimSpeed: 1
+  - unitName: Flower Monster
+    modelPrefab: {fileID: 4008526826831330592, guid: 49ff1f53ef1e9544bbc713fe827c8d49, type: 3}
+    scale: 0.9
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: FlowerMonster_IdleBattle
+    walkClip: FlowerMonster_MoveFWD
+    attackClip: FlowerMonster_Attack01
+    hitClip: FlowerMonster_GetHit
+    deathClip: FlowerMonster_Die
+    attackAnimSpeed: 1
+  - unitName: Evil Plant
+    modelPrefab: {fileID: 1748489546896114, guid: 433a831b00ce40d38355ed87cd4effd8, type: 3}
+    scale: 0.9
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: MonsterPlant_IdleBattle
+    walkClip: MonsterPlant_MoveFWD
+    attackClip: MonsterPlant_Attack01
+    hitClip: MonsterPlant_GetHit
+    deathClip: MonsterPlant_Die
+    attackAnimSpeed: 1
+  - unitName: Worm Monster
+    modelPrefab: {fileID: 7581544333513177157, guid: aa97a63a1af145a48aeee624d9921e15, type: 3}
+    scale: 0.85
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: WormMonster_IdleBattle
+    walkClip: WormMonster_MoveFWD
+    attackClip: WormMonster_Attack01
+    hitClip: WormMonster_GetHit
+    deathClip: WormMonster_Die
+    attackAnimSpeed: 1
+  - unitName: Battle Bee
+    modelPrefab: {fileID: 6888400107449561580, guid: 99566dc93d0f5974885ccdd0bf5e507b, type: 3}
+    scale: 0.85
+    yOffset: 0.2
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: BattleBee_IdleBattle
+    walkClip: BattleBee_MoveFWD
+    attackClip: BattleBee_Attack01
+    hitClip: BattleBee_GetHit
+    deathClip: BattleBee_Die
+    attackAnimSpeed: 1
+  - unitName: Golem
+    modelPrefab: {fileID: 1706760125350986, guid: e882d275bf7f4e53a524afc446755b99, type: 3}
+    scale: 1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Golem_IdleBattle
+    walkClip: Golem_MoveFWD
+    attackClip: Golem_Attack01
+    hitClip: Golem_GetHit
+    deathClip: Golem_Die
+    attackAnimSpeed: 1
+  - unitName: Chest Monster
+    modelPrefab: {fileID: 2219292830553907877, guid: 8f9d5ec998b74f23852a84c7eebbc419, type: 3}
+    scale: 0.9
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: ChestMonster_IdleBattle
+    walkClip: ChestMonster_MoveFWD
+    attackClip: ChestMonster_Attack01
+    hitClip: ChestMonster_GetHit
+    deathClip: ChestMonster_Die
+    attackAnimSpeed: 1
+  - unitName: Blacksmith
+    modelPrefab: {fileID: 3521448453293620946, guid: e9e6dc64c04529e43a402135e8a51faa, type: 3}
+    scale: 0.95
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: 
+    walkClip: 
+    attackClip: 
+    hitClip: 
+    deathClip: 
+    attackAnimSpeed: 1
+  - unitName: Lizard Warrior
+    modelPrefab: {fileID: 5863903103509005198, guid: cc57bb6b9ac54749a237f4feb5d33159, type: 3}
+    scale: 1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: LizardWarrior_IdleBattle
+    walkClip: LizardWarrior_MoveFWD
+    attackClip: LizardWarrior_Attack01
+    hitClip: LizardWarrior_GetHit
+    deathClip: LizardWarrior_Die
+    attackAnimSpeed: 1
+  - unitName: Werewolf
+    modelPrefab: {fileID: 5785497811905594081, guid: 4490a140cb3d426dba068c385035e421, type: 3}
+    scale: 1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Werewolf_IdleBattle
+    walkClip: Werewolf_MoveFWD
+    attackClip: Werewolf_Attack01
+    hitClip: Werewolf_GetHit
+    deathClip: Werewolf_Die
+    attackAnimSpeed: 1
+  - unitName: Ice Golem
+    modelPrefab: {fileID: 7803949843960398684, guid: 3011ddef2a75f8e40a45531d02a0679d, type: 3}
+    scale: 1.1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: IceGolem_IdleBattle
+    walkClip: IceGolem_MoveFWD
+    attackClip: IceGolem_Attack01
+    hitClip: IceGolem_GetHit
+    deathClip: IceGolem_Die
+    attackAnimSpeed: 1
+  - unitName: Cyclops
+    modelPrefab: {fileID: 1190697391759604679, guid: dfa785457891c274baed805cdde18a5f, type: 3}
+    scale: 1.1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Cyclops_IdleBattle
+    walkClip: Cyclops_MoveFWD
+    attackClip: Cyclops_Attack01
+    hitClip: Cyclops_GetHit
+    deathClip: Cyclops_Die
+    attackAnimSpeed: 1
+  - unitName: Specter
+    modelPrefab: {fileID: 2958174608505672778, guid: 4d357a5b7d764683bfa4b2a37b5316f2, type: 3}
+    scale: 1
+    yOffset: 0.2
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Specter_IdleBattle
+    walkClip: Specter_MoveFWD
+    attackClip: Specter_Attack01
+    hitClip: Specter_GetHit
+    deathClip: Specter_Die
+    attackAnimSpeed: 1
+  - unitName: Naga Wizard
+    modelPrefab: {fileID: 8493481916742154775, guid: c5493298511c720499d52f2251fb2cb1, type: 3}
+    scale: 1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: NagaWizard_IdleBattle
+    walkClip: NagaWizard_MoveFWD
+    attackClip: NagaWizard_Attack01
+    hitClip: NagaWizard_GetHit
+    deathClip: NagaWizard_Die
+    attackAnimSpeed: 1
+  - unitName: Beholder
+    modelPrefab: {fileID: 4530003306004163418, guid: 0420df01fa8747d1b50aa785504988b5, type: 3}
+    scale: 1
+    yOffset: 0.3
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Beholder_IdleBattle
+    walkClip: Beholder_MoveFWD
+    attackClip: Beholder_Attack01
+    hitClip: Beholder_GetHit
+    deathClip: Beholder_Die
+    attackAnimSpeed: 1
+  - unitName: Cleric
+    modelPrefab: {fileID: 3247294876424170745, guid: aba1b6f0e51f89843957d3c7d572224a, type: 3}
+    scale: 1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: 
+    walkClip: 
+    attackClip: 
+    hitClip: 
+    deathClip: 
+    attackAnimSpeed: 1
+  - unitName: Black Knight
+    modelPrefab: {fileID: 1802286859466036053, guid: 081006b40189456788e7910500338317, type: 3}
+    scale: 1.1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: BlackKnight_IdleBattle
+    walkClip: BlackKnight_MoveFWD
+    attackClip: BlackKnight_Attack01
+    hitClip: BlackKnight_GetHit
+    deathClip: BlackKnight_Die
+    attackAnimSpeed: 1
+  - unitName: Bishop Knight
+    modelPrefab: {fileID: 3320979724154213149, guid: 33de3715a5a538e4599df708c45f7ce7, type: 3}
+    scale: 1.1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: BishopKnight_IdleBattle
+    walkClip: BishopKnight_MoveFWD
+    attackClip: BishopKnight_Attack01
+    hitClip: BishopKnight_GetHit
+    deathClip: BishopKnight_Die
+    attackAnimSpeed: 1
+  - unitName: Bone Dragon
+    modelPrefab: {fileID: 1778968367550941586, guid: 60fcfd6ed8785c44ab5c26922bd41080, type: 3}
+    scale: 1.2
+    yOffset: 0.1
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: BoneDragon_IdleBattle
+    walkClip: BoneDragon_MoveFWD
+    attackClip: BoneDragon_Attack01
+    hitClip: BoneDragon_GetHit
+    deathClip: BoneDragon_Die
+    attackAnimSpeed: 1
+  - unitName: Flying Demon
+    modelPrefab: {fileID: 3891923349452443982, guid: f9178c72301949a28382ec32811051cc, type: 3}
+    scale: 1.1
+    yOffset: 0.3
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: FylingDemon_IdleBattle
+    walkClip: FylingDemon_MoveFWD
+    attackClip: FylingDemon_Attack01
+    hitClip: FylingDemon_GetHit
+    deathClip: FylingDemon_Die
+    attackAnimSpeed: 1
+  - unitName: Fat Dragon
+    modelPrefab: {fileID: 5611543388551634691, guid: fd98776f40a64187a54c07952cde7f71, type: 3}
+    scale: 1.15
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Dragon_IdleBattle
+    walkClip: Dragon_MoveFWD
+    attackClip: Dragon_Attack01
+    hitClip: Dragon_GetHit
+    deathClip: Dragon_Die
+    attackAnimSpeed: 1
+  - unitName: Evil Old Mage
+    modelPrefab: {fileID: 3972964382682025698, guid: 879cb115a64c41d79323026ad3c3c0da, type: 3}
+    scale: 1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: EvilMage_IdleBattle
+    walkClip: EvilMage_MoveFWD
+    attackClip: EvilMage_Attack01
+    hitClip: EvilMage_GetHit
+    deathClip: EvilMage_Die
+    attackAnimSpeed: 1
+  - unitName: Orc with Mace
+    modelPrefab: {fileID: 8511647367374691266, guid: 196cb74b233e488796423925cf1a7d66, type: 3}
+    scale: 1.1
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Orc_IdleBattle
+    walkClip: Orc_MoveFWD
+    attackClip: Orc_Attack01
+    hitClip: Orc_GetHit
+    deathClip: Orc_Die
+    attackAnimSpeed: 1
+  - unitName: Demon King
+    modelPrefab: {fileID: 3347061273194974142, guid: 9a079515161f904488f72bf1cfc58f64, type: 3}
+    scale: 1.3
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: DemonKing_IdleBattle
+    walkClip: DemonKing_MoveFWD
+    attackClip: DemonKing_Attack01
+    hitClip: DemonKing_GetHit
+    deathClip: DemonKing_Die
+    attackAnimSpeed: 1
+  - unitName: Castle Monster
+    modelPrefab: {fileID: 6852852605445420796, guid: b188f4e7758009c4cba0dc5a69003f7e, type: 3}
+    scale: 1.4
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: CastleMonster_IdleBattle
+    walkClip: CastleMonster_MoveFWD
+    attackClip: CastleMonster_Attack01
+    hitClip: CastleMonster_GetHit
+    deathClip: CastleMonster_Die
+    attackAnimSpeed: 1
+  - unitName: Spiky Shell Turtle
+    modelPrefab: {fileID: 1524411113276028, guid: f3d4e5e80355479b9e6a756a94c77fae, type: 3}
+    scale: 1.2
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: TurtleShell_IdleBattle
+    walkClip: TurtleShell_MoveFWD
+    attackClip: TurtleShell_Attack01
+    hitClip: TurtleShell_GetHit
+    deathClip: TurtleShell_Die
+    attackAnimSpeed: 1
+  - unitName: Flame Knight
+    modelPrefab: {fileID: 5223471892760376560, guid: 902ce9330c0b9024fa50d456432bba51, type: 3}
+    scale: 1.2
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: FlameKnight_IdleBattle
+    walkClip: FlameKnight_MoveFWD
+    attackClip: FlameKnight_Attack01
+    hitClip: FlameKnight_GetHit
+    deathClip: FlameKnight_Die
+    attackAnimSpeed: 1
+  - unitName: Skeleton Mage
+    modelPrefab: {fileID: 3011537898124945525, guid: 8fd473fbdb48a6048a944d2a40ebad41, type: 3}
+    scale: 1.15
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: SkeletonMage_IdleBattle
+    walkClip: SkeletonMage_MoveFWD
+    attackClip: SkeletonMage_Attack01
+    hitClip: SkeletonMage_GetHit
+    deathClip: SkeletonMage_Die
+    attackAnimSpeed: 1
+  - unitName: Cactus
+    modelPrefab: {fileID: 662468794185850985, guid: 5b7fe24cb9d3ec147b12e09ab27219d8, type: 3}
+    scale: 0.675
+    yOffset: 0
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: Cactus_IdleBattle
+    walkClip: Cactus_WalkFWD
+    attackClip: Cactus_Attack01
+    hitClip: Cactus_GetHit
+    deathClip: Cactus_Die
+    attackAnimSpeed: 1
+  - unitName: Stingray
+    modelPrefab: {fileID: 4238835250591795873, guid: 95f37fae12c134b4483639a3fa063256, type: 3}
+    scale: 0.315
+    yOffset: 0.11
+    rotationOffset: {x: 0, y: 0, z: 0}
+    idleClip: StingRay_IdleBattle
+    walkClip: StingRay_FlyFWD
+    attackClip: StingRay_Attack01
+    hitClip: StingRay_GetHit
+    deathClip: StingRay_Die
+    attackAnimSpeed: 1
+  defaultPlayerModel: {fileID: 0}
+  defaultEnemyModel: {fileID: 0}
+  animatorController: {fileID: 9100000, guid: 9b498664a2a0447fd9d2162a54f09919, type: 2}

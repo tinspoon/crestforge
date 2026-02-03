@@ -36,7 +36,7 @@ namespace Crestforge.UI
         private void Start()
         {
             combatManager = CombatManager.Instance;
-            hexGrid = FindObjectOfType<HexGridRenderer>();
+            hexGrid = FindAnyObjectByType<HexGridRenderer>();
 
             if (combatManager != null)
             {

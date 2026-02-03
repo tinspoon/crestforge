@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
   m_Name: Succubus
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.UnitData
   unitId: succubus
   unitName: Succubus
   description: 
@@ -33,7 +33,7 @@ MonoBehaviour:
     abilityName: Soul Kiss
     description: 
     type: 6
-    damageType: 1
+    damageType: 2
     baseDamage: 300
     baseHealing: 0
     baseShieldAmount: 0

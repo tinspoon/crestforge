@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
   m_Name: Shadow
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.UnitData
   unitId: shadow
   unitName: Shadow
   description: 
@@ -33,7 +33,7 @@ MonoBehaviour:
     abilityName: Shadow Strike
     description: 
     type: 0
-    damageType: 1
+    damageType: 2
     baseDamage: 250
     baseHealing: 0
     baseShieldAmount: 0

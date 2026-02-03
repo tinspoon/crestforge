@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 81119349c56d049c28af0f4461a9ee48, type: 3}
   m_Name: EmberTouch
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.CrestData
   crestId: embertouch
   crestName: Ember Touch
   description: Attacks deal +10 fire damage

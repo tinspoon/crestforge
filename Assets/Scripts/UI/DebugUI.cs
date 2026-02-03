@@ -197,13 +197,13 @@ namespace Crestforge.UI
             GUILayout.Space(5);
 
             // Bench
-            int benchCount = state.bench != null ? state.bench.Count : 0;
+            int benchCount = state.GetBenchUnitCount();
             GUILayout.Box($"BENCH ({benchCount}/{GameConstants.Player.BENCH_SIZE})", GUILayout.ExpandWidth(true));
-            
-            if (state.bench != null && state.bench.Count > 0)
+
+            if (benchCount > 0)
             {
-                var benchCopy = new List<UnitInstance>(state.bench);
-                foreach (var unit in benchCopy)
+                var benchUnits = state.GetBenchUnits();
+                foreach (var unit in benchUnits)
                 {
                     if (unit == null || unit.template == null) continue;
                     GUI.backgroundColor = GetCostColor(unit.template.cost);

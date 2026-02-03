@@ -8,8 +8,9 @@ namespace Crestforge.Systems
     public enum GameMode
     {
         PvEWave,    // 3 lives
-        PvP,        // 100 health (future)
-        CoOp        // 100 health shared (future)
+        PvP,        // 20 health vs AI opponents
+        CoOp,       // 100 health shared (future)
+        Multiplayer // 20 health vs real player online
     }
 
     [System.Serializable]
@@ -28,7 +29,8 @@ namespace Crestforge.Systems
             int startingHealth = mode switch
             {
                 GameMode.PvEWave => 3,  // 3 lives for wave mode
-                GameMode.PvP => 100,
+                GameMode.PvP => 20,     // 20 health for PvP mode
+                GameMode.Multiplayer => 20, // 20 health for online multiplayer
                 GameMode.CoOp => 100,
                 _ => 3
             };
@@ -37,7 +39,7 @@ namespace Crestforge.Systems
             {
                 health = startingHealth,
                 maxHealth = startingHealth,
-                gold = GameConstants.Player.STARTING_GOLD,
+                gold = GameConstants.Economy.STARTING_GOLD,
                 level = GameConstants.Player.STARTING_LEVEL,
                 xp = 0,
                 winStreak = 0,
@@ -209,7 +211,7 @@ namespace Crestforge.Systems
 
         [Header("Board")]
         public UnitInstance[,] playerBoard;
-        public List<UnitInstance> bench = new List<UnitInstance>();
+        public UnitInstance[] bench = new UnitInstance[GameConstants.Player.BENCH_SIZE];
 
         [Header("Enemy")]
         public UnitInstance[,] enemyBoard;
@@ -236,7 +238,8 @@ namespace Crestforge.Systems
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
-                InitializeGame();
+                // Don't auto-initialize - wait for RoundManager.StartGame() to be called
+                // This allows proper lobby flow where game doesn't start until players are ready
             }
             else
             {
@@ -254,31 +257,71 @@ namespace Crestforge.Systems
 
             playerBoard = new UnitInstance[GameConstants.Grid.WIDTH, GameConstants.Grid.HEIGHT];
             enemyBoard = new UnitInstance[GameConstants.Grid.WIDTH, GameConstants.Grid.HEIGHT];
-            bench.Clear();
+            bench = new UnitInstance[GameConstants.Player.BENCH_SIZE]; // Recreate to ensure correct size
 
             minorCrests.Clear();
             majorCrests.Clear();
             itemInventory.Clear();
+            pendingCrestSelection.Clear();
+            pendingItemSelection.Clear();
 
             if (allUnits != null && allUnits.Length > 0)
             {
                 unitPool.Initialize(allUnits);
+
+                // Give player a random 1-cost starting unit on the board
+                GiveStartingUnit();
             }
             else
             {
                 Debug.LogWarning("GameState: allUnits is empty! Run Crestforge > Complete Setup");
             }
+        }
 
-            if (allCrests != null && allCrests.Length > 0)
+        private void GiveStartingUnit()
+        {
+            // Get all 1-cost units
+            var oneCostUnits = new List<UnitData>();
+            foreach (var unit in allUnits)
             {
-                GenerateCrestSelection(CrestType.Minor, 3);
-            }
-            else
-            {
-                Debug.LogWarning("GameState: allCrests is empty! Run Crestforge > Complete Setup");
+                if (unit != null && unit.cost == 1)
+                {
+                    oneCostUnits.Add(unit);
+                }
             }
 
-            Debug.Log("Game initialized!");
+            if (oneCostUnits.Count == 0)
+            {
+                Debug.LogWarning("No 1-cost units available for starting unit!");
+                return;
+            }
+
+            // Pick a random 1-cost unit
+            var randomUnit = oneCostUnits[Random.Range(0, oneCostUnits.Count)];
+            var startingUnit = UnitInstance.Create(randomUnit, 1);
+
+            // Place in front-center of the board
+            int centerX = GameConstants.Grid.WIDTH / 2;
+            int frontY = 0;
+
+            playerBoard[centerX, frontY] = startingUnit;
+            startingUnit.boardPosition = new Vector2Int(centerX, frontY);
+            startingUnit.isOnBoard = true;
+        }
+
+        public bool HasPendingLoot()
+        {
+            return pendingCrestSelection.Count > 0 || pendingItemSelection.Count > 0;
+        }
+
+        public void QueueCrestLoot(CrestType type, int count)
+        {
+            GenerateCrestSelection(type, count);
+        }
+
+        public void QueueItemLoot(int count)
+        {
+            GenerateItemSelection(count);
         }
 
         public int CalculateIncome()
@@ -297,10 +340,16 @@ namespace Crestforge.Systems
             var unit = shop.availableUnits[shopIndex];
             if (unit == null || unit.template == null) return false;
             if (player.gold < unit.template.cost) return false;
-            if (bench.Count >= GameConstants.Player.BENCH_SIZE) return false;
+            if (GetBenchUnitCount() >= GameConstants.Player.BENCH_SIZE) return false;
 
             player.gold -= unit.template.cost;
-            bench.Add(unit);
+            bool added = AddToBench(unit);
+            if (!added)
+            {
+                Debug.LogError($"[GameState] Failed to add {unit.template.unitName} to bench!");
+                player.gold += unit.template.cost; // Refund
+                return false;
+            }
             shop.availableUnits[shopIndex] = null;
 
             CheckAndPerformMerge(unit);
@@ -347,7 +396,6 @@ namespace Crestforge.Systems
             while (player.CanLevelUp())
             {
                 player.level++;
-                Debug.Log($"Level up! Now level {player.level}");
             }
 
             return true;
@@ -366,13 +414,14 @@ namespace Crestforge.Systems
                 return false;
             }
 
-            bench.Remove(unit);
+            int benchSlot = FindBenchIndex(unit);
+            RemoveFromBench(unit);
 
             if (playerBoard[col, row] != null)
             {
                 var swappedUnit = playerBoard[col, row];
                 swappedUnit.isOnBoard = false;
-                bench.Add(swappedUnit);
+                AddToBench(swappedUnit, benchSlot); // Try to put swapped unit in same slot
             }
 
             playerBoard[col, row] = unit;
@@ -384,15 +433,15 @@ namespace Crestforge.Systems
             return true;
         }
 
-        public bool ReturnToBench(UnitInstance unit)
+        public bool ReturnToBench(UnitInstance unit, int preferredSlot = -1)
         {
             if (unit == null) return false;
             if (!unit.isOnBoard) return false;
-            if (bench.Count >= GameConstants.Player.BENCH_SIZE) return false;
+            if (GetBenchUnitCount() >= GameConstants.Player.BENCH_SIZE) return false;
 
             playerBoard[unit.boardPosition.x, unit.boardPosition.y] = null;
             unit.isOnBoard = false;
-            bench.Add(unit);
+            AddToBench(unit, preferredSlot);
 
             RecalculateTraits();
 
@@ -440,8 +489,6 @@ namespace Crestforge.Systems
                 mergeTarget.RecalculateStats();
                 mergeTarget.currentHealth = mergeTarget.currentStats.health;
 
-                Debug.Log($"Merged into {mergeTarget.GetDisplayName()}!");
-
                 if (mergeTarget.starLevel < GameConstants.Units.MAX_STAR_LEVEL)
                 {
                     CheckAndPerformMerge(mergeTarget);
@@ -452,14 +499,14 @@ namespace Crestforge.Systems
         private void RemoveUnit(UnitInstance unit)
         {
             if (unit == null) return;
-            
+
             if (unit.isOnBoard)
             {
                 playerBoard[unit.boardPosition.x, unit.boardPosition.y] = null;
             }
             else
             {
-                bench.Remove(unit);
+                RemoveFromBench(unit);
             }
         }
 
@@ -482,7 +529,7 @@ namespace Crestforge.Systems
         {
             var units = new List<UnitInstance>();
             if (playerBoard == null) return units;
-            
+
             for (int x = 0; x < GameConstants.Grid.WIDTH; x++)
             {
                 for (int y = 0; y < GameConstants.Grid.HEIGHT; y++)
@@ -492,6 +539,83 @@ namespace Crestforge.Systems
                         units.Add(playerBoard[x, y]);
                     }
                 }
+            }
+            return units;
+        }
+
+        // Bench helper methods for fixed-slot array
+        private void EnsureBenchInitialized()
+        {
+            if (bench == null || bench.Length != GameConstants.Player.BENCH_SIZE)
+            {
+                bench = new UnitInstance[GameConstants.Player.BENCH_SIZE];
+            }
+        }
+
+        public int GetBenchUnitCount()
+        {
+            EnsureBenchInitialized();
+            int count = 0;
+            for (int i = 0; i < bench.Length; i++)
+            {
+                if (bench[i] != null) count++;
+            }
+            return count;
+        }
+
+        public int FindFirstEmptyBenchSlot()
+        {
+            EnsureBenchInitialized();
+            for (int i = 0; i < bench.Length; i++)
+            {
+                if (bench[i] == null) return i;
+            }
+            return -1; // Bench is full
+        }
+
+        public int FindBenchIndex(UnitInstance unit)
+        {
+            EnsureBenchInitialized();
+            for (int i = 0; i < bench.Length; i++)
+            {
+                if (bench[i] == unit) return i;
+            }
+            return -1;
+        }
+
+        public bool AddToBench(UnitInstance unit, int preferredSlot = -1)
+        {
+            if (unit == null) return false;
+            EnsureBenchInitialized();
+
+            int slot = preferredSlot;
+            if (slot < 0 || slot >= bench.Length || bench[slot] != null)
+            {
+                slot = FindFirstEmptyBenchSlot();
+            }
+
+            if (slot < 0) return false; // Bench is full
+
+            bench[slot] = unit;
+            return true;
+        }
+
+        public bool RemoveFromBench(UnitInstance unit)
+        {
+            EnsureBenchInitialized();
+            int index = FindBenchIndex(unit);
+            if (index < 0) return false;
+            bench[index] = null;
+            return true;
+        }
+
+        public List<UnitInstance> GetBenchUnits()
+        {
+            EnsureBenchInitialized();
+            var units = new List<UnitInstance>();
+            for (int i = 0; i < bench.Length; i++)
+            {
+                if (bench[i] != null) units.Add(bench[i]);
             }
             return units;
         }
@@ -604,20 +728,24 @@ namespace Crestforge.Systems
         public void SelectCrest(CrestData crest)
         {
             if (crest == null) return;
-            
+
             if (crest.type == CrestType.Minor)
             {
-                if (minorCrests.Count < GameConstants.Crests.MINOR_SLOTS)
+                // Replace existing minor crest if at max slots
+                if (minorCrests.Count >= GameConstants.Crests.MINOR_SLOTS)
                 {
-                    minorCrests.Add(crest);
+                    minorCrests.Clear();
                 }
+                minorCrests.Add(crest);
             }
             else
             {
-                if (majorCrests.Count < GameConstants.Crests.MAJOR_SLOTS)
+                // Replace existing major crest if at max slots
+                if (majorCrests.Count >= GameConstants.Crests.MAJOR_SLOTS)
                 {
-                    majorCrests.Add(crest);
+                    majorCrests.Clear();
                 }
+                majorCrests.Add(crest);
             }
 
             pendingCrestSelection.Clear();

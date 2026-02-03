@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: BishopKnight
+  m_EditorClassIdentifier: 
+  unitId: bishopknight
+  unitName: Bishop Knight
+  description: 
+  cost: 4
+  traits:
+  - {fileID: 11400000, guid: 3fc19abad78dd4791a003bdfe51e0142, type: 2}
+  - {fileID: 11400000, guid: 5df92838b66794417917e48201eac1bf, type: 2}
+  baseStats:
+    health: 1100
+    armor: 60
+    magicResist: 50
+    attack: 70
+    attackSpeed: 0.5
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 90
+  ability:
+    abilityName: Sacred Shield
+    description: Grants lowest health ally 500 shield and 30 armor for 4s
+    type: 2
+    damageType: 0
+    baseDamage: 0
+    baseHealing: 0
+    baseShieldAmount: 500
+    duration: 4
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 3
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

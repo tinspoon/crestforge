@@ -5,6 +5,16 @@ using Crestforge.Core;
 namespace Crestforge.Data
 {
     /// <summary>
+    /// Type of loot dropped by PvE units
+    /// </summary>
+    public enum LootType
+    {
+        None,
+        CrestToken,     // Drops minor crest selection
+        ItemAnvil       // Drops item selection
+    }
+
+    /// <summary>
     /// Runtime instance of a unit. Created from UnitData template.
     /// Tracks current state, items, star level, etc.
     /// </summary>
@@ -18,7 +28,7 @@ namespace Crestforge.Data
 
         // Current Stats (modified by items, traits, crests)
         public UnitStats currentStats;
-        
+
         // Equipment
         public List<ItemData> equippedItems = new List<ItemData>();
 
@@ -39,6 +49,9 @@ namespace Crestforge.Data
         // Flags
         public bool hasActedThisTick;
         public bool hasUsedRevive;
+
+        // PvE Loot (for enemy units)
+        public LootType lootType = LootType.None;
 
         /// <summary>
         /// Create a new unit instance from a template

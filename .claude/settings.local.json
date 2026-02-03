@@ -5,7 +5,24 @@
       "WebFetch(domain:clashroyale.fandom.com)",
       "WebFetch(domain:www.reddit.com)",
       "WebFetch(domain:i.redd.it)",
-      "Bash(git remote add:*)"
+      "Bash(git remote add:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(npm install)",
+      "Bash(timeout 3 node:*)",
+      "Bash(lsof:*)",
+      "Bash(pkill:*)",
+      "Bash(curl:*)",
+      "Bash(for f in *.asset)",
+      "Bash(do echo \"=== $f ===\" grep -A 10 \"unitId:\" \"$f\")",
+      "Bash(do echo \"=== $f ===\" grep -A 5 \"traitId:\" \"$f\")",
+      "Bash(do echo \"=== $f ===\" grep -A 8 \"unitId:\" \"$f\")",
+      "Bash(node -c:*)",
+      "Bash(xargs -I {} sh -c 'echo \"\"\"\"$\\(grep -c \"\"\"\"Debug\\\\.Log\\(\"\"\"\" {} | grep -v LogWarning | grep -v LogError\\) {}\"\"\"\"')",
+      "Bash(xargs -I {} sh -c 'echo \"\"\"\"$\\(grep -c \"\"\"\"Debug\\\\.Log\\(\"\"\"\" {}\\) {}\"\"\"\"')",
+      "Bash(git status:*)",
+      "Bash(git add:*)"
     ]
   }
 }

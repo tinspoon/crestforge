@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
   m_Name: Imp
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.UnitData
   unitId: imp
   unitName: Imp
   description: 
@@ -33,7 +33,7 @@ MonoBehaviour:
     abilityName: Firebolt
     description: 
     type: 0
-    damageType: 4
+    damageType: 1
     baseDamage: 180
     baseHealing: 0
     baseShieldAmount: 0

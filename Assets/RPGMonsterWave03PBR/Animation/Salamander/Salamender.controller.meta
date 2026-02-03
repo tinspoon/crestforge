@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 826d5a728a1ea674fb81cbfffb77ddf2
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 253591
+  packageName: RPG Monster Wave 3 PBR
+  packageVersion: 1.1
+  assetPath: Assets/RPGMonsterWave03PBR/Animation/Salamander/Salamender.controller
+  uploadId: 581226

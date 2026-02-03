@@ -43,15 +43,29 @@ namespace Crestforge.Visuals
         private Material headMaterial;
         private Material baseMaterial;
 
+        // Original colors for reset after combat effects
+        private Color originalBodyColor;
+        private Color originalHeadColor;
+        private bool hasStoredOriginalColors = false;
+        private Coroutine flashCoroutine = null;
+
         // Health/Mana bar components
         private Transform healthFill;
         private Transform manaFill;
 
+        // Item icons
+        private GameObject itemIconContainer;
+        private System.Collections.Generic.List<GameObject> itemIcons = new System.Collections.Generic.List<GameObject>();
+        private int lastItemCount = -1;
+
         // Animation
         private Vector3 targetPosition;
+        private Vector3 moveStartPosition;
         private float moveSpeed = 2.5f;
         private bool isMoving;
+        public bool IsMoving => isMoving;
         private float moveStartTime;
+        private float moveDuration = 0f; // If > 0, use lerping; otherwise use MoveTowards
         private const float MIN_WALK_ANIM_TIME = 0.3f; // Minimum time walk animation plays
         private float bobOffset;
         private float bobSpeed = 2f;
@@ -62,6 +76,20 @@ namespace Crestforge.Visuals
         private Vector3 attackTarget;
         private float attackTimer;
         private float attackDuration = 0.3f;
+
+        // Multiplayer instance ID (set when syncing from server state)
+        public string ServerInstanceId { get; set; }
+
+        // Server item data for multiplayer
+        private System.Collections.Generic.List<Crestforge.Networking.ServerItemData> serverItems;
+
+        private void Awake()
+        {
+            // Initialize targetPosition to current position to prevent walking from origin
+            // This is important because the GameObject should be positioned correctly before this component is added
+            targetPosition = transform.position;
+            isMoving = false;
+        }
 
         /// <summary>
         /// Initialize the unit visual with data
@@ -82,13 +110,48 @@ namespace Crestforge.Visuals
             CreateVisuals(primaryColor, secondaryColor, isEnemy, unitInstance.template);
             UpdateStars(unitInstance.starLevel);
 
+            // Set initial facing - face towards the camera uniformly
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                Vector3 towardsCamera = -cam.transform.forward;
+                towardsCamera.y = 0;
+
+                // Fallback if camera is looking straight down
+                if (towardsCamera.sqrMagnitude < 0.01f)
+                {
+                    towardsCamera = cam.transform.position - transform.position;
+                    towardsCamera.y = 0;
+                }
+
+                if (towardsCamera.sqrMagnitude > 0.01f)
+                {
+                    transform.rotation = Quaternion.LookRotation(towardsCamera);
+                }
+            }
+            else if (isEnemy)
+            {
+                // Fallback for enemies if no camera
+                transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            }
+
             bobOffset = Random.Range(0f, Mathf.PI * 2f);
         }
 
         // Store archetype and enemy flag
         private UnitArchetype archetype = UnitArchetype.Default;
-        private bool isEnemy;
+        public bool isEnemy { get; private set; }
         private GameObject shadowObj;
+
+        /// <summary>
+        /// When true, prevents automatic camera-facing rotation in Update
+        /// </summary>
+        public bool LockRotation { get; set; } = false;
+
+        /// <summary>
+        /// When true, freezes the unit at its current position (no movement)
+        /// </summary>
+        public bool FreezePosition { get; set; } = false;
 
         private void CreateVisuals(Color primaryColor, Color secondaryColor, bool isEnemy, UnitData template = null)
         {
@@ -183,6 +246,48 @@ namespace Crestforge.Visuals
 
             // === STAR CONTAINER ===
             CreateStarContainer();
+
+            // === ITEM ICONS ===
+            CreateItemIconContainer();
+
+            // Store original colors for reset after combat effects
+            StoreOriginalColors();
+        }
+
+        /// <summary>
+        /// Store original material colors for later reset
+        /// </summary>
+        private void StoreOriginalColors()
+        {
+            if (bodyMaterial != null)
+            {
+                originalBodyColor = GetMaterialColor(bodyMaterial);
+            }
+            if (headMaterial != null)
+            {
+                originalHeadColor = GetMaterialColor(headMaterial);
+            }
+            hasStoredOriginalColors = true;
+        }
+
+        /// <summary>
+        /// Reset materials to original colors (call when combat ends)
+        /// </summary>
+        private void ResetToOriginalColors()
+        {
+            if (!hasStoredOriginalColors) return;
+
+            // Stop any running flash coroutines
+            StopAllCoroutines();
+
+            if (bodyMaterial != null)
+            {
+                SetMaterialColor(bodyMaterial, originalBodyColor);
+            }
+            if (headMaterial != null)
+            {
+                SetMaterialColor(headMaterial, originalHeadColor);
+            }
         }
 
         /// <summary>
@@ -294,6 +399,8 @@ namespace Crestforge.Visuals
                 anim.hitClip = entry.hitClip;
             if (!string.IsNullOrEmpty(entry.deathClip))
                 anim.deathClip = entry.deathClip;
+            if (!string.IsNullOrEmpty(entry.victoryClip))
+                anim.victoryClip = entry.victoryClip;
 
             // Apply animation speed
             if (entry.attackAnimSpeed > 0)
@@ -405,6 +512,126 @@ namespace Crestforge.Visuals
             starContainer.AddComponent<BillboardUI>();
         }
 
+        private void CreateItemIconContainer()
+        {
+            itemIconContainer = new GameObject("ItemIcons");
+            itemIconContainer.transform.SetParent(transform);
+            // Position above health bar
+            itemIconContainer.transform.localPosition = new Vector3(0, baseHeight + headSize + 0.28f, 0);
+            itemIconContainer.AddComponent<BillboardUI>();
+        }
+
+        private void UpdateItemIcons()
+        {
+            if (itemIconContainer == null) return;
+
+            // Determine current item count - check server items first (multiplayer), then unit items (single-player)
+            int currentItemCount = 0;
+            if (serverItems != null && serverItems.Count > 0)
+            {
+                currentItemCount = serverItems.Count;
+            }
+            else if (unit != null && unit.equippedItems != null)
+            {
+                currentItemCount = unit.equippedItems.Count;
+            }
+
+            // Only rebuild if item count changed
+            if (currentItemCount == lastItemCount) return;
+            lastItemCount = currentItemCount;
+
+            // Clear existing icons
+            foreach (var icon in itemIcons)
+            {
+                if (icon != null) Destroy(icon);
+            }
+            itemIcons.Clear();
+
+            if (currentItemCount == 0) return;
+
+            // Create item icons
+            float iconSize = 0.12f;
+            float spacing = 0.14f;
+            float startX = -(currentItemCount - 1) * spacing * 0.5f;
+
+            for (int i = 0; i < currentItemCount && i < Core.GameConstants.Items.MAX_PER_UNIT; i++)
+            {
+                Color itemColor;
+                string itemName;
+
+                // Get item data from server items or unit items
+                if (serverItems != null && i < serverItems.Count)
+                {
+                    var serverItem = serverItems[i];
+                    if (serverItem == null) continue;
+                    itemName = serverItem.name ?? serverItem.itemId;
+                    itemColor = new Color(1f, 0.8f, 0.4f);  // Gold for all items
+                }
+                else if (unit != null && unit.equippedItems != null && i < unit.equippedItems.Count)
+                {
+                    var item = unit.equippedItems[i];
+                    if (item == null) continue;
+                    itemName = item.itemName;
+                    itemColor = GetItemRarityColor(item.rarity);
+                }
+                else
+                {
+                    continue;
+                }
+
+                GameObject iconObj = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                iconObj.name = $"Item_{itemName}";
+                iconObj.transform.SetParent(itemIconContainer.transform);
+                iconObj.transform.localPosition = new Vector3(startX + i * spacing, 0, -0.01f);
+                iconObj.transform.localScale = new Vector3(iconSize, iconSize, 1f);
+                iconObj.transform.localRotation = Quaternion.identity;
+                Destroy(iconObj.GetComponent<Collider>());
+
+                // Create material with item color
+                var mat = new Material(Shader.Find("Unlit/Color"));
+                mat.color = itemColor;
+                iconObj.GetComponent<Renderer>().material = mat;
+
+                // Add a small border/outline effect by creating a slightly larger background quad
+                GameObject borderObj = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                borderObj.name = $"ItemBorder_{itemName}";
+                borderObj.transform.SetParent(itemIconContainer.transform);
+                borderObj.transform.localPosition = new Vector3(startX + i * spacing, 0, 0.01f);
+                borderObj.transform.localScale = new Vector3(iconSize + 0.03f, iconSize + 0.03f, 1f);
+                borderObj.transform.localRotation = Quaternion.identity;
+                Destroy(borderObj.GetComponent<Collider>());
+
+                var borderMat = new Material(Shader.Find("Unlit/Color"));
+                borderMat.color = new Color(0.1f, 0.1f, 0.1f);
+                borderObj.GetComponent<Renderer>().material = borderMat;
+
+                itemIcons.Add(iconObj);
+                itemIcons.Add(borderObj);
+            }
+        }
+
+        /// <summary>
+        /// Set server items for multiplayer mode
+        /// </summary>
+        public void SetServerItems(System.Collections.Generic.List<Crestforge.Networking.ServerItemData> items)
+        {
+            serverItems = items;
+            // Force refresh by resetting last count
+            lastItemCount = -1;
+            UpdateItemIcons();
+        }
+
+        private Color GetItemRarityColor(ItemRarity rarity)
+        {
+            return rarity switch
+            {
+                ItemRarity.Common => new Color(0.7f, 0.7f, 0.7f),      // Gray
+                ItemRarity.Uncommon => new Color(0.4f, 0.85f, 0.4f),   // Green
+                ItemRarity.Rare => new Color(0.4f, 0.6f, 1f),          // Blue
+                _ => Color.white
+            };
+        }
+
         /// <summary>
         /// Update star display based on unit level
         /// </summary>
@@ -442,7 +669,7 @@ namespace Crestforge.Visuals
         public void UpdateHealthBar(float currentHealth, float maxHealth)
         {
             if (healthFill == null) return;
-            
+
             float percent = Mathf.Clamp01(currentHealth / maxHealth);
             Vector3 scale = healthFill.localScale;
             scale.x = 0.48f * percent;
@@ -460,6 +687,33 @@ namespace Crestforge.Visuals
             else
                 healthColor = Color.Lerp(Color.red, Color.yellow, percent * 2f);
             
+            healthFill.GetComponent<Renderer>().material.color = healthColor;
+        }
+
+        /// <summary>
+        /// Update health bar using percentage (0-1)
+        /// </summary>
+        public void UpdateHealthBar(float percent)
+        {
+            if (healthFill == null) return;
+
+            percent = Mathf.Clamp01(percent);
+            Vector3 scale = healthFill.localScale;
+            scale.x = 0.48f * percent;
+            healthFill.localScale = scale;
+
+            // Shift position to fill from left
+            Vector3 pos = healthFill.localPosition;
+            pos.x = -0.24f * (1f - percent);
+            healthFill.localPosition = pos;
+
+            // Color based on health
+            Color healthColor;
+            if (percent > 0.5f)
+                healthColor = Color.Lerp(Color.yellow, Color.green, (percent - 0.5f) * 2f);
+            else
+                healthColor = Color.Lerp(Color.red, Color.yellow, percent * 2f);
+
             healthFill.GetComponent<Renderer>().material.color = healthColor;
         }
 
@@ -485,13 +739,23 @@ namespace Crestforge.Visuals
         /// </summary>
         public void MoveTo(Vector3 worldPosition)
         {
+            MoveTo(worldPosition, 0f); // Use speed-based movement by default
+        }
+
+        /// <summary>
+        /// Move unit to a new position over a specific duration (for smooth server combat)
+        /// </summary>
+        public void MoveTo(Vector3 worldPosition, float duration)
+        {
+            moveStartPosition = transform.position;
             targetPosition = worldPosition;
+            moveDuration = duration;
+            moveStartTime = Time.time;
 
             // Only start walk animation if not already moving
             if (!isMoving)
             {
                 isMoving = true;
-                moveStartTime = Time.time;
 
                 // Trigger walk animation
                 if (unitAnimator != null)
@@ -512,9 +776,56 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
+        /// Teleport unit immediately and face camera (used for swapping)
+        /// </summary>
+        public void SetPositionAndFaceCamera(Vector3 worldPosition)
+        {
+            transform.position = worldPosition;
+            targetPosition = worldPosition;
+            isMoving = false;
+
+            // Immediately face camera - use camera's forward direction so all units face uniformly
+            // Skip if rotation is locked
+            if (!LockRotation)
+            {
+                Camera cam = Camera.main;
+                if (cam != null)
+                {
+                    // Use the opposite of camera's forward direction (horizontal only)
+                    // This makes all units face the same direction rather than converging to a point
+                    Vector3 towardsCamera = -cam.transform.forward;
+                    towardsCamera.y = 0;
+
+                    // If camera is looking straight down, fall back to using camera position
+                    if (towardsCamera.sqrMagnitude < 0.01f)
+                    {
+                        towardsCamera = cam.transform.position - worldPosition;
+                        towardsCamera.y = 0;
+                    }
+
+                    if (towardsCamera.sqrMagnitude > 0.01f)
+                    {
+                        transform.rotation = Quaternion.LookRotation(towardsCamera);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Play attack animation toward target
         /// </summary>
         public void PlayAttackAnimation(Vector3 targetPos)
+        {
+            // Use default attack speed from unit data
+            PlayAttackAnimation(targetPos, 0f);
+        }
+
+        /// <summary>
+        /// Play attack animation toward target with explicit attack speed
+        /// </summary>
+        /// <param name="targetPos">Position of the attack target</param>
+        /// <param name="overrideAttackSpeed">Attack speed to use for animation timing (0 = auto-detect)</param>
+        public void PlayAttackAnimation(Vector3 targetPos, float overrideAttackSpeed)
         {
             if (isAttacking) return;
 
@@ -523,18 +834,20 @@ namespace Crestforge.Visuals
             isAttacking = true;
             attackTimer = 0f;
 
-            // Face the target
+            // Face the target immediately
             Vector3 lookDir = (targetPos - transform.position);
             lookDir.y = 0;
             if (lookDir.magnitude > 0.1f)
             {
                 targetRotation = Quaternion.LookRotation(lookDir);
+                transform.rotation = targetRotation; // Apply immediately for snappy attacks
             }
 
-            // Trigger attack animation with dynamic speed based on unit's attack speed
+            // Trigger attack animation with dynamic speed
             if (unitAnimator != null)
             {
-                float attackSpeed = GetCurrentAttackSpeed();
+                // Use override speed if provided, otherwise auto-detect
+                float attackSpeed = overrideAttackSpeed > 0 ? overrideAttackSpeed : GetCurrentAttackSpeed();
                 unitAnimator.PlayAttack(attackSpeed);
             }
         }
@@ -544,8 +857,26 @@ namespace Crestforge.Visuals
         /// </summary>
         public void PlayHitEffect()
         {
-            StartCoroutine(FlashColor(Color.red, 0.15f));
+            // Cancel any running flash to prevent color drift
+            if (flashCoroutine != null)
+            {
+                StopCoroutine(flashCoroutine);
+                // Reset to original color before starting new flash
+                if (hasStoredOriginalColors)
+                {
+                    if (bodyMaterial != null) SetMaterialColor(bodyMaterial, originalBodyColor);
+                    if (headMaterial != null) SetMaterialColor(headMaterial, originalHeadColor);
+                }
+            }
+            flashCoroutine = StartCoroutine(FlashColor(Color.red, 0.25f));
             StartCoroutine(ShakeEffect(0.1f, 0.05f));
+
+            // Skip hit animation if unit is already walking or attacking
+            // This prevents jarring animation interruptions
+            if (isMoving || isAttacking)
+            {
+                return;
+            }
 
             // Trigger hit animation
             if (unitAnimator != null)
@@ -559,7 +890,17 @@ namespace Crestforge.Visuals
         /// </summary>
         public void PlayAbilityEffect()
         {
-            StartCoroutine(FlashColor(new Color(0.5f, 0.7f, 1f), 0.3f));
+            // Cancel any running flash
+            if (flashCoroutine != null)
+            {
+                StopCoroutine(flashCoroutine);
+                if (hasStoredOriginalColors)
+                {
+                    if (bodyMaterial != null) SetMaterialColor(bodyMaterial, originalBodyColor);
+                    if (headMaterial != null) SetMaterialColor(headMaterial, originalHeadColor);
+                }
+            }
+            flashCoroutine = StartCoroutine(FlashColor(new Color(0.5f, 0.7f, 1f), 0.3f));
             StartCoroutine(ScalePop(1.2f, 0.3f));
         }
 
@@ -581,17 +922,37 @@ namespace Crestforge.Visuals
         {
             if (bodyMaterial == null) yield break;
 
-            // Support both standard shader (color) and toon shader (_MainColor)
-            Color origBody = GetMaterialColor(bodyMaterial);
-            Color origHead = headMaterial != null ? GetMaterialColor(headMaterial) : Color.white;
+            // Use stored original colors to prevent color drift from rapid hits
+            Color origBody = hasStoredOriginalColors ? originalBodyColor : GetMaterialColor(bodyMaterial);
+            Color origHead = hasStoredOriginalColors ? originalHeadColor : (headMaterial != null ? GetMaterialColor(headMaterial) : Color.white);
 
+            // Instant flash to color
             SetMaterialColor(bodyMaterial, flashColor);
             if (headMaterial != null) SetMaterialColor(headMaterial, flashColor);
 
-            yield return new WaitForSeconds(duration);
+            // Quick fade back to original
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
 
+                // Use ease-out curve for snappy start, smooth end
+                float easedT = 1f - (1f - t) * (1f - t);
+
+                if (bodyMaterial != null)
+                    SetMaterialColor(bodyMaterial, Color.Lerp(flashColor, origBody, easedT));
+                if (headMaterial != null)
+                    SetMaterialColor(headMaterial, Color.Lerp(flashColor, origHead, easedT));
+
+                yield return null;
+            }
+
+            // Ensure we end at original color
             if (bodyMaterial != null) SetMaterialColor(bodyMaterial, origBody);
             if (headMaterial != null) SetMaterialColor(headMaterial, origHead);
+
+            flashCoroutine = null;
         }
 
         private Color GetMaterialColor(Material mat)
@@ -695,11 +1056,31 @@ namespace Crestforge.Visuals
 
         private void Update()
         {
+            // Skip all movement if position is frozen (e.g., during victory pose)
+            if (FreezePosition)
+            {
+                isMoving = false;
+            }
+
             // Smooth movement
             if (isMoving)
             {
-                transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
-                
+                // Use duration-based lerping for smooth server combat, or speed-based for planning phase
+                if (moveDuration > 0)
+                {
+                    // Smooth lerp over duration
+                    float elapsed = Time.time - moveStartTime;
+                    float t = Mathf.Clamp01(elapsed / moveDuration);
+                    // Use smooth step for even smoother interpolation
+                    t = t * t * (3f - 2f * t);
+                    transform.position = Vector3.Lerp(moveStartPosition, targetPosition, t);
+                }
+                else
+                {
+                    // Speed-based movement for planning phase
+                    transform.position = Vector3.MoveTowards(transform.position, targetPosition, moveSpeed * Time.deltaTime);
+                }
+
                 // Face movement direction
                 Vector3 moveDir = targetPosition - transform.position;
                 moveDir.y = 0;
@@ -708,7 +1089,7 @@ namespace Crestforge.Visuals
                     Quaternion targetRot = Quaternion.LookRotation(moveDir);
                     transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 10f);
                 }
-                
+
                 // Only stop moving after reaching destination AND minimum walk animation time has passed
                 bool reachedDestination = Vector3.Distance(transform.position, targetPosition) < 0.01f;
                 bool minWalkTimeElapsed = Time.time - moveStartTime >= MIN_WALK_ANIM_TIME;
@@ -717,6 +1098,7 @@ namespace Crestforge.Visuals
                 {
                     transform.position = targetPosition;
                     isMoving = false;
+                    moveDuration = 0f; // Reset for next movement
 
                     // Stop walk animation
                     if (unitAnimator != null)
@@ -731,9 +1113,21 @@ namespace Crestforge.Visuals
                 }
             }
 
-            // Check if combat just ended - reset to idle animation
-            bool inCombat = CombatManager.Instance != null && CombatManager.Instance.isInCombat;
-            if (wasInCombat && !inCombat)
+            // Check if in combat (local or server or scout)
+            bool inLocalCombat = CombatManager.Instance != null && CombatManager.Instance.isInCombat;
+            bool inServerCombat = (Crestforge.Systems.ServerCombatVisualizer.Instance != null &&
+                                   Crestforge.Systems.ServerCombatVisualizer.Instance.isPlaying) ||
+                                  (Crestforge.UI.ScoutingUI.Instance != null &&
+                                   Crestforge.UI.ScoutingUI.Instance.IsScoutCombatPlaying);
+            bool inVictoryPose = (Crestforge.Systems.ServerCombatVisualizer.Instance != null &&
+                                  Crestforge.Systems.ServerCombatVisualizer.Instance.isInVictoryPose) ||
+                                 (Crestforge.UI.ScoutingUI.Instance != null &&
+                                  Crestforge.UI.ScoutingUI.Instance.IsScoutCombatInVictoryPose);
+            bool inCombat = inLocalCombat || inServerCombat;
+
+            // Check if combat just ended - reset to idle animation and colors
+            // But NOT if we're in victory pose (victory animation should keep playing)
+            if (wasInCombat && !inCombat && !inVictoryPose)
             {
                 // Combat just ended - reset all combat states and return to idle
                 isAttacking = false;
@@ -742,19 +1136,31 @@ namespace Crestforge.Visuals
                 {
                     unitAnimator.ResetToIdle();
                 }
+
+                // Reset colors to remove any lingering damage tint
+                ResetToOriginalColors();
             }
             wasInCombat = inCombat;
 
             // During planning phase, face towards the camera (so you can see their faces)
-            if (!inCombat && !isMoving && !isAttacking)
+            // Skip if rotation is locked (e.g., bench units during away combat)
+            if (!inCombat && !isMoving && !isAttacking && !LockRotation)
             {
                 Camera cam = Camera.main;
                 if (cam != null)
                 {
-                    // Face towards the camera (opposite of camera's forward direction)
+                    // Use camera's forward direction so all units face uniformly
                     Vector3 towardsCamera = -cam.transform.forward;
                     towardsCamera.y = 0;
-                    if (towardsCamera.magnitude > 0.1f)
+
+                    // Fallback if camera is looking straight down
+                    if (towardsCamera.sqrMagnitude < 0.01f)
+                    {
+                        towardsCamera = cam.transform.position - transform.position;
+                        towardsCamera.y = 0;
+                    }
+
+                    if (towardsCamera.sqrMagnitude > 0.01f)
                     {
                         Quaternion targetRot = Quaternion.LookRotation(towardsCamera);
                         transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * 5f);
@@ -831,6 +1237,9 @@ namespace Crestforge.Visuals
 
             // Update unit stats display
             UpdateHealthDisplay();
+
+            // Update item icons when items change
+            UpdateItemIcons();
         }
 
         /// <summary>
@@ -839,11 +1248,17 @@ namespace Crestforge.Visuals
         private void UpdateHealthDisplay()
         {
             if (unit == null) return;
-            
+
+            // During server combat, health is updated directly via UpdateHealthBar() calls from ServerCombatVisualizer
+            // Skip automatic polling to prevent overwriting server-provided health values
+            bool inServerCombat = Crestforge.Systems.ServerCombatVisualizer.Instance != null &&
+                                  Crestforge.Systems.ServerCombatVisualizer.Instance.isPlaying;
+            if (inServerCombat) return;
+
             float currentHealth = 0;
             float maxHealth = unit.template.baseStats.health * Mathf.Pow(1.8f, unit.starLevel - 1);
-            
-            // During combat, get health from CombatUnit
+
+            // During local combat, get health from CombatUnit
             if (CombatManager.Instance != null && CombatManager.Instance.isInCombat)
             {
                 foreach (var combatUnit in CombatManager.Instance.allUnits)
@@ -861,7 +1276,7 @@ namespace Crestforge.Visuals
                 // Planning phase - use UnitInstance stats
                 currentHealth = unit.currentStats.health;
             }
-            
+
             UpdateHealthBar(currentHealth, maxHealth);
         }
 
@@ -895,24 +1310,4 @@ namespace Crestforge.Visuals
         }
     }
 
-    /// <summary>
-    /// Makes a UI element always face the camera
-    /// </summary>
-    public class BillboardUI : MonoBehaviour
-    {
-        private Camera cam;
-
-        private void Start()
-        {
-            cam = Camera.main;
-        }
-
-        private void LateUpdate()
-        {
-            if (cam != null)
-            {
-                transform.rotation = cam.transform.rotation;
-            }
-        }
-    }
 }

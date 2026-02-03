@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrestForge Server Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #4ecdc4; }
+        .section {
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #4ecdc4;
+        }
+        button {
+            background: #4ecdc4;
+            color: #1a1a2e;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-weight: bold;
+        }
+        button:hover { background: #3dbdb5; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #4ecdc4;
+            background: #0f0f23;
+            color: #eee;
+            margin: 5px;
+        }
+        #log {
+            background: #0f0f23;
+            padding: 15px;
+            border-radius: 8px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-in { color: #4ecdc4; }
+        .log-out { color: #f39c12; }
+        .log-error { color: #e74c3c; }
+        .log-info { color: #9b59b6; }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .status.connected { background: #27ae60; }
+        .status.disconnected { background: #e74c3c; }
+        #roomInfo { display: none; }
+        #players { margin-top: 10px; }
+        .player {
+            background: #0f0f23;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .player.ready { border-left: 3px solid #27ae60; }
+    </style>
+</head>
+<body>
+    <h1>CrestForge Server Test Client</h1>
+
+    <div class="section">
+        <h3>Connection</h3>
+        <span id="status" class="status disconnected">Disconnected</span>
+        <span id="clientId" style="margin-left: 15px;"></span>
+        <br><br>
+        <input type="text" id="serverUrl" value="ws://localhost:8080" style="width: 200px;">
+        <button id="connectBtn" onclick="connect()">Connect</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+    </div>
+
+    <div class="section">
+        <h3>Player</h3>
+        <input type="text" id="playerName" placeholder="Your name">
+        <button onclick="setName()">Set Name</button>
+    </div>
+
+    <div class="section">
+        <h3>Lobby</h3>
+        <button onclick="createRoom()">Create Room</button>
+        <button onclick="listRooms()">List Rooms</button>
+        <br><br>
+        <input type="text" id="roomCode" placeholder="Room Code" style="width: 100px; text-transform: uppercase;">
+        <button onclick="joinRoom()">Join Room</button>
+    </div>
+
+    <div class="section" id="roomInfo">
+        <h3>Room: <span id="currentRoom"></span></h3>
+        <button onclick="leaveRoom()">Leave Room</button>
+        <button onclick="toggleReady()">Toggle Ready</button>
+        <button onclick="sendBoardUpdate()">Send Board Update</button>
+        <button onclick="endPlanning()">End Planning</button>
+        <div id="players"></div>
+    </div>
+
+    <div class="section">
+        <h3>Message Log</h3>
+        <div id="log"></div>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <script>
+        let ws = null;
+        let myClientId = null;
+        let currentRoomId = null;
+        let isReady = false;
+
+        function connect() {
+            const url = document.getElementById('serverUrl').value;
+            log('Connecting to ' + url + '...', 'info');
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                log('Connected!', 'info');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').className = 'status connected';
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('disconnectBtn').disabled = false;
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                log('← ' + JSON.stringify(data, null, 2), 'in');
+                handleMessage(data);
+            };
+
+            ws.onclose = () => {
+                log('Disconnected', 'info');
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').className = 'status disconnected';
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('disconnectBtn').disabled = true;
+                document.getElementById('roomInfo').style.display = 'none';
+                currentRoomId = null;
+            };
+
+            ws.onerror = (err) => {
+                log('Error: ' + err, 'error');
+            };
+        }
+
+        function disconnect() {
+            if (ws) ws.close();
+        }
+
+        function send(data) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('→ ' + JSON.stringify(data), 'out');
+                ws.send(JSON.stringify(data));
+            } else {
+                log('Not connected!', 'error');
+            }
+        }
+
+        function handleMessage(data) {
+            switch (data.type) {
+                case 'welcome':
+                    myClientId = data.clientId;
+                    document.getElementById('clientId').textContent = 'ID: ' + myClientId.substring(0, 8);
+                    break;
+                case 'roomCreated':
+                case 'roomJoined':
+                    currentRoomId = data.roomId;
+                    document.getElementById('currentRoom').textContent = data.roomId;
+                    document.getElementById('roomInfo').style.display = 'block';
+                    if (data.players) updatePlayers(data.players);
+                    break;
+                case 'leftRoom':
+                    currentRoomId = null;
+                    document.getElementById('roomInfo').style.display = 'none';
+                    break;
+                case 'playerJoined':
+                case 'playerLeft':
+                case 'playerReady':
+                    if (data.players) updatePlayers(data.players);
+                    break;
+                case 'gameStart':
+                case 'roundStart':
+                    log('🎮 Round ' + data.round + ' - ' + data.phase, 'info');
+                    if (data.players) updatePlayers(data.players);
+                    isReady = false;
+                    break;
+                case 'combatStart':
+                    log('⚔️ Combat starting!', 'info');
+                    break;
+                case 'gameEnd':
+                    log('🏆 Game Over! Winner: ' + data.winnerName, 'info');
+                    break;
+                case 'roomList':
+                    log('Available rooms: ' + JSON.stringify(data.rooms), 'info');
+                    break;
+            }
+        }
+
+        function updatePlayers(players) {
+            const container = document.getElementById('players');
+            container.innerHTML = '<strong>Players:</strong>';
+            players.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'player' + (p.isReady ? ' ready' : '');
+                div.innerHTML = `
+                    <span>${p.name} ${p.id === myClientId ? '(you)' : ''}</span>
+                    <span>HP: ${p.health} | Lv: ${p.level} | ${p.isReady ? '✓ Ready' : 'Not ready'}</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function setName() {
+            const name = document.getElementById('playerName').value;
+            send({ type: 'setName', name: name });
+        }
+
+        function createRoom() {
+            send({ type: 'createRoom' });
+        }
+
+        function joinRoom() {
+            const code = document.getElementById('roomCode').value.toUpperCase();
+            send({ type: 'joinRoom', roomId: code });
+        }
+
+        function leaveRoom() {
+            send({ type: 'leaveRoom' });
+        }
+
+        function listRooms() {
+            send({ type: 'listRooms' });
+        }
+
+        function toggleReady() {
+            isReady = !isReady;
+            send({ type: 'ready', ready: isReady });
+        }
+
+        function sendBoardUpdate() {
+            // Send a mock board update
+            send({
+                type: 'boardUpdate',
+                board: {
+                    units: [
+                        { x: 0, y: 0, unitId: 'warrior', stars: 1 },
+                        { x: 1, y: 0, unitId: 'archer', stars: 1 }
+                    ]
+                },
+                health: 20,
+                gold: 10,
+                level: 2
+            });
+        }
+
+        function endPlanning() {
+            send({ type: 'endPlanning' });
+        }
+
+        function log(message, type = '') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-' + type;
+            entry.textContent = new Date().toLocaleTimeString() + ' ' + message;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+    </script>
+</body>
+</html>

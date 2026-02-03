@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: IceGolem
+  m_EditorClassIdentifier: 
+  unitId: icegolem
+  unitName: Ice Golem
+  description: 
+  cost: 3
+  traits:
+  - {fileID: 11400000, guid: 7ec944bdb553c4bd79ce46cf56b0f17f, type: 2}
+  - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  baseStats:
+    health: 950
+    armor: 45
+    magicResist: 40
+    attack: 55
+    attackSpeed: 0.5
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 80
+  ability:
+    abilityName: Frozen Aura
+    description: Reduces nearby enemies' attack speed by 35% for 5 seconds
+    type: 4
+    damageType: 1
+    baseDamage: 0
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 5
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 6
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

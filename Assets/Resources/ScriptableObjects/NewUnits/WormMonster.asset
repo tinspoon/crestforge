@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: WormMonster
+  m_EditorClassIdentifier: 
+  unitId: wormmonster
+  unitName: Worm Monster
+  description: 
+  cost: 2
+  traits:
+  - {fileID: 11400000, guid: 7ec944bdb553c4bd79ce46cf56b0f17f, type: 2}
+  - {fileID: 11400000, guid: 3fc19abad78dd4791a003bdfe51e0142, type: 2}
+  baseStats:
+    health: 750
+    armor: 35
+    magicResist: 30
+    attack: 45
+    attackSpeed: 0.5
+    range: 1
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 70
+  ability:
+    abilityName: Burrow Strike
+    description: Burrows underground for 1s, emerges at target dealing 200 damage
+    type: 8
+    damageType: 2
+    baseDamage: 200
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 1
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 0
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

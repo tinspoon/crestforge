@@ -1,0 +1,49 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: FlameKnight
+  m_EditorClassIdentifier: 
+  unitId: flameknight
+  unitName: Flame Knight
+  description: 
+  cost: 5
+  traits:
+  - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
+  - {fileID: 11400000, guid: 8f86335b26ba944a6a82cb0853072138, type: 2}
+  baseStats:
+    health: 950
+    armor: 40
+    magicResist: 45
+    attack: 105
+    attackSpeed: 0.65
+    range: 1
+    moveSpeed: 2
+    startingMana: 25
+    maxMana: 85
+  ability:
+    abilityName: Inferno Blade
+    description: Ignites blade dealing 600 damage to adjacent enemies, leaving fire
+    type: 7
+    damageType: 1
+    baseDamage: 600
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 3
+    radius: 1
+    projectileCount: 0
+    attackSpeedBonus: 0
+    targeting: 6
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

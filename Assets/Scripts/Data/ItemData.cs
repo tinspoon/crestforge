@@ -64,8 +64,24 @@ namespace Crestforge.Data
         // On-Death Effects
         Revive,             // Resurrect with HP (value1 = health amount)
         
-        // Ability Effects  
+        // Ability Effects
         AbilityPower,       // Increase ability damage (value1 = percent)
         ManaOnHit,          // Gain extra mana on hit (value1 = amount)
+
+        // Consumables (use from inventory to trigger selection)
+        ConsumableCrestToken,   // Opens crest selection when used
+        ConsumableItemAnvil,    // Opens item selection when used
+    }
+
+    /// <summary>
+    /// Check if an item is a consumable
+    /// </summary>
+    public static class ItemEffectExtensions
+    {
+        public static bool IsConsumable(this ItemEffect effect)
+        {
+            return effect == ItemEffect.ConsumableCrestToken ||
+                   effect == ItemEffect.ConsumableItemAnvil;
+        }
     }
 }

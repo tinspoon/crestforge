@@ -26,6 +26,9 @@ namespace Crestforge.UI
 
         public static Sprite GetSprite(string unitId)
         {
+            if (string.IsNullOrEmpty(unitId))
+                return null;
+
             string key = unitId.ToLower().Replace(" ", "_").Replace("_", "");
             if (spriteCache.ContainsKey(key))
                 return spriteCache[key];

@@ -18,7 +18,7 @@ namespace Crestforge.Data
         public Sprite icon;
 
         [Header("Trait Type")]
-        public TraitCategory category;
+        public bool isUnique;  // If true, only one unit has this trait (always active)
 
         [Header("Tier Thresholds")]
         [Tooltip("Number of units needed to activate each tier (e.g., 2, 4, 6)")]
@@ -56,28 +56,19 @@ namespace Crestforge.Data
         }
 
         /// <summary>
-        /// Get a color representing this trait's category (for UI display)
+        /// Get a color representing this trait type (for UI display)
         /// </summary>
         public Color GetTraitColor()
         {
-            return category switch
-            {
-                TraitCategory.Origin => new Color(0.4f, 0.6f, 0.9f),  // Blue for origins
-                TraitCategory.Class => new Color(0.9f, 0.6f, 0.3f),   // Orange for classes
-                _ => Color.white
-            };
+            return isUnique
+                ? new Color(0.9f, 0.7f, 0.2f)  // Gold for unique traits
+                : new Color(0.4f, 0.7f, 0.9f); // Blue for shared traits
         }
 
         /// <summary>
         /// Legacy property for compatibility - returns tierThresholds
         /// </summary>
         public int[] thresholds => tierThresholds;
-    }
-
-    public enum TraitCategory
-    {
-        Origin,
-        Class
     }
 
     /// <summary>

@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 81119349c56d049c28af0f4461a9ee48, type: 3}
   m_Name: MightyCrest
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.CrestData
   crestId: mightycrest
   crestName: Mighty Crest
   description: All units +10 Attack

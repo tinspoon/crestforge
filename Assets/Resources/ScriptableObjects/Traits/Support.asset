@@ -11,12 +11,12 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 97a84588212144e908e2529be8d7ba76, type: 3}
   m_Name: Support
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Data.TraitData
   traitId: support
   traitName: Support
   description: Together we stand
   icon: {fileID: 0}
-  category: 1
+  isUnique: 0
   tierThresholds: 0200000004000000
   tierBonuses:
   - bonusHealth: 0

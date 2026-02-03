@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: aeb25c0a6c8d404a8805072958bbe8f3
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 173835
+  packageName: RPG Monster Wave 2 PBR
+  packageVersion: 1.6
+  assetPath: Assets/RPGMonsterWave02PBR/Shaders/PBRMaskTint.shader
+  uploadId: 634947

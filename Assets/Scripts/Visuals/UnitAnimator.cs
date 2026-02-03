@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 namespace Crestforge.Visuals
 {
@@ -28,19 +29,26 @@ namespace Crestforge.Visuals
         [Tooltip("Name of the hit/hurt animation clip (optional)")]
         public string hitClip = "CharacterArmature|Hit";
 
+        [Tooltip("Name of the victory/celebration animation clip (optional)")]
+        public string victoryClip = "CharacterArmature|Victory";
+
         [Header("Animation Speed")]
         [Tooltip("Speed multiplier for attack animation")]
         public float attackAnimSpeed = 1f;
+        [Tooltip("Speed multiplier for hit animation (2.0 = twice as fast)")]
+        public float hitAnimSpeed = 2f;
 
         // Animation parameter names
         private static readonly int IsMoving = Animator.StringToHash("IsMoving");
         private static readonly int Attack = Animator.StringToHash("Attack");
         private static readonly int Hit = Animator.StringToHash("Hit");
         private static readonly int Death = Animator.StringToHash("Death");
+        private static readonly int Victory = Animator.StringToHash("Victory");
 
         // State tracking
         private bool isInitialized = false;
         private bool useLegacy = false;
+        private Coroutine returnToIdleCoroutine = null;
 
         private void Awake()
         {
@@ -62,6 +70,7 @@ namespace Crestforge.Visuals
             {
                 useLegacy = true;
                 isInitialized = true;
+                AutoDetectLegacyClips();
                 return;
             }
 
@@ -78,7 +87,138 @@ namespace Crestforge.Visuals
             if (animator != null)
             {
                 isInitialized = true;
+                AutoDetectAnimatorClips();
             }
+        }
+
+        /// <summary>
+        /// Auto-detect animation clip names from the Animator controller
+        /// </summary>
+        private void AutoDetectAnimatorClips()
+        {
+            if (animator == null || animator.runtimeAnimatorController == null) return;
+
+            // Only auto-detect if using default clip names
+            bool usingDefaults = idleClip.Contains("CharacterArmature");
+            if (!usingDefaults) return;
+
+            AnimationClip[] clips = animator.runtimeAnimatorController.animationClips;
+
+            string foundIdle = null;
+            string foundWalk = null;
+            string foundAttack = null;
+            string foundHit = null;
+            string foundDeath = null;
+            string foundVictory = null;
+
+            foreach (var clip in clips)
+            {
+                string name = clip.name.ToLower();
+
+                // Find idle (prefer IdleBattle over IdleNormal)
+                if (name.Contains("idlebattle") || name.Contains("idle_battle"))
+                {
+                    foundIdle = clip.name;
+                }
+                else if (foundIdle == null && name.Contains("idle"))
+                {
+                    foundIdle = clip.name;
+                }
+
+                // Find walk/move
+                if (name.Contains("walk") || name.Contains("movefwd") || name.Contains("move_fwd") || name.Contains("run"))
+                {
+                    foundWalk = clip.name;
+                }
+
+                // Find attack (prefer Attack01)
+                if (name.Contains("attack01") || name.Contains("attack_01"))
+                {
+                    foundAttack = clip.name;
+                }
+                else if (foundAttack == null && name.Contains("attack"))
+                {
+                    foundAttack = clip.name;
+                }
+
+                // Find hit
+                if (name.Contains("gethit") || name.Contains("get_hit") || name.Contains("hit") || name.Contains("hurt"))
+                {
+                    foundHit = clip.name;
+                }
+
+                // Find death
+                if (name.Contains("death") || name.Contains("die"))
+                {
+                    foundDeath = clip.name;
+                }
+
+                // Find victory/celebration
+                if (name.Contains("victory") || name.Contains("celebrate") || name.Contains("win"))
+                {
+                    foundVictory = clip.name;
+                }
+            }
+
+            // Apply found clips
+            if (!string.IsNullOrEmpty(foundIdle)) idleClip = foundIdle;
+            if (!string.IsNullOrEmpty(foundWalk)) walkClip = foundWalk;
+            if (!string.IsNullOrEmpty(foundAttack)) attackClip = foundAttack;
+            if (!string.IsNullOrEmpty(foundHit)) hitClip = foundHit;
+            if (!string.IsNullOrEmpty(foundDeath)) deathClip = foundDeath;
+            if (!string.IsNullOrEmpty(foundVictory)) victoryClip = foundVictory;
+        }
+
+        /// <summary>
+        /// Auto-detect animation clip names from Legacy Animation
+        /// </summary>
+        private void AutoDetectLegacyClips()
+        {
+            if (legacyAnimation == null) return;
+
+            bool usingDefaults = idleClip.Contains("CharacterArmature");
+            if (!usingDefaults) return;
+
+            string foundIdle = null;
+            string foundWalk = null;
+            string foundAttack = null;
+            string foundHit = null;
+            string foundDeath = null;
+            string foundVictory = null;
+
+            foreach (AnimationState state in legacyAnimation)
+            {
+                string name = state.name.ToLower();
+
+                if (name.Contains("idlebattle") || name.Contains("idle_battle"))
+                    foundIdle = state.name;
+                else if (foundIdle == null && name.Contains("idle"))
+                    foundIdle = state.name;
+
+                if (name.Contains("walk") || name.Contains("movefwd") || name.Contains("run"))
+                    foundWalk = state.name;
+
+                if (name.Contains("attack01") || name.Contains("attack_01"))
+                    foundAttack = state.name;
+                else if (foundAttack == null && name.Contains("attack"))
+                    foundAttack = state.name;
+
+                if (name.Contains("gethit") || name.Contains("hit") || name.Contains("hurt"))
+                    foundHit = state.name;
+
+                if (name.Contains("death") || name.Contains("die"))
+                    foundDeath = state.name;
+
+                if (name.Contains("victory") || name.Contains("celebrate") || name.Contains("win"))
+                    foundVictory = state.name;
+            }
+
+            if (!string.IsNullOrEmpty(foundIdle)) idleClip = foundIdle;
+            if (!string.IsNullOrEmpty(foundWalk)) walkClip = foundWalk;
+            if (!string.IsNullOrEmpty(foundAttack)) attackClip = foundAttack;
+            if (!string.IsNullOrEmpty(foundHit)) hitClip = foundHit;
+            if (!string.IsNullOrEmpty(foundDeath)) deathClip = foundDeath;
+            if (!string.IsNullOrEmpty(foundVictory)) victoryClip = foundVictory;
         }
 
         /// <summary>
@@ -157,6 +297,13 @@ namespace Crestforge.Visuals
         {
             if (!isInitialized) return;
 
+            // Cancel any pending return-to-idle
+            if (returnToIdleCoroutine != null)
+            {
+                StopCoroutine(returnToIdleCoroutine);
+                returnToIdleCoroutine = null;
+            }
+
             // Calculate dynamic speed if unit attack speed is provided
             float speed = attackAnimSpeed;
             if (unitAttackSpeed > 0)
@@ -232,33 +379,157 @@ namespace Crestforge.Visuals
             else if (animator != null)
             {
                 animator.speed = speed;
-                animator.Play(clipName, 0, 0f);
+
+                // Try to play the state - state names may differ from clip names
+                // First try the full clip name
+                if (TryPlayState(clipName)) return;
+
+                // Try extracting state name (e.g., "Attack01" from "Attack01_BowAndArrow")
+                string stateName = ExtractStateName(clipName);
+                if (!string.IsNullOrEmpty(stateName) && stateName != clipName)
+                {
+                    if (TryPlayState(stateName)) return;
+                }
+
+                // Try common variations
+                if (clipName.ToLower().Contains("attack"))
+                {
+                    if (TryPlayState("Attack01")) return;
+                    if (TryPlayState("Attack")) return;
+                }
+                else if (clipName.ToLower().Contains("idle"))
+                {
+                    if (TryPlayState("IdleBattle")) return;
+                    if (TryPlayState("Idle")) return;
+                }
+                else if (clipName.ToLower().Contains("walk") || clipName.ToLower().Contains("move"))
+                {
+                    if (TryPlayState("MoveFWD")) return;
+                    if (TryPlayState("Walk")) return;
+                }
+
+                Debug.LogWarning($"[UnitAnimator] Could not find state for clip: {clipName}");
             }
         }
 
         /// <summary>
-        /// Play hit/hurt animation
+        /// Try to play an animator state, returns true if successful
+        /// </summary>
+        private bool TryPlayState(string stateName)
+        {
+            if (animator == null || string.IsNullOrEmpty(stateName)) return false;
+
+            // Check if state exists by trying to get its hash
+            int stateHash = Animator.StringToHash(stateName);
+            if (animator.HasState(0, stateHash))
+            {
+                animator.Play(stateHash, 0, 0f);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Extract state name from clip name.
+        /// Handles multiple patterns:
+        /// - "Attack01_BowAndArrow" -> "Attack01" (action_weapon)
+        /// - "RatAssassin_MoveFWD" -> "MoveFWD" (model_action)
+        /// </summary>
+        private string ExtractStateName(string clipName)
+        {
+            if (string.IsNullOrEmpty(clipName)) return null;
+
+            int underscoreIndex = clipName.IndexOf('_');
+            if (underscoreIndex > 0)
+            {
+                string beforeUnderscore = clipName.Substring(0, underscoreIndex);
+                string afterUnderscore = clipName.Substring(underscoreIndex + 1);
+
+                // Check if the part after underscore looks like an action name
+                string afterLower = afterUnderscore.ToLower();
+                if (afterLower.Contains("idle") || afterLower.Contains("move") ||
+                    afterLower.Contains("walk") || afterLower.Contains("run") ||
+                    afterLower.Contains("attack") || afterLower.Contains("hit") ||
+                    afterLower.Contains("die") || afterLower.Contains("death") ||
+                    afterLower.Contains("fly"))
+                {
+                    // Pattern: ModelName_Action (e.g., RatAssassin_MoveFWD -> MoveFWD)
+                    return afterUnderscore;
+                }
+                else
+                {
+                    // Pattern: Action_Weapon (e.g., Attack01_BowAndArrow -> Attack01)
+                    return beforeUnderscore;
+                }
+            }
+            return clipName;
+        }
+
+        /// <summary>
+        /// Play hit/hurt animation, then return to idle
         /// </summary>
         public void PlayHit()
         {
             if (!isInitialized) return;
 
+            // Cancel any pending return-to-idle from a previous hit
+            if (returnToIdleCoroutine != null)
+            {
+                StopCoroutine(returnToIdleCoroutine);
+                returnToIdleCoroutine = null;
+            }
+
+            float speed = hitAnimSpeed;
+
             if (useLegacy)
             {
                 if (!string.IsNullOrEmpty(hitClip))
-                    PlayClip(hitClip);
+                {
+                    PlayClipWithSpeed(hitClip, speed);
+                    float duration = GetClipDuration(hitClip) / speed;
+                    returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterDelay(duration));
+                }
             }
             else if (animator != null)
             {
                 if (HasParameter(Hit))
                 {
+                    animator.speed = speed;
                     animator.SetTrigger(Hit);
+                    // Reset speed after a short delay
+                    returnToIdleCoroutine = StartCoroutine(ResetSpeedAfterDelay(0.5f / speed));
                 }
                 else if (!string.IsNullOrEmpty(hitClip))
                 {
-                    PlayClip(hitClip);
+                    PlayClipWithSpeed(hitClip, speed);
+                    float duration = GetClipDuration(hitClip) / speed;
+                    returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterDelay(duration));
                 }
             }
+        }
+
+        /// <summary>
+        /// Reset animator speed after a delay
+        /// </summary>
+        private System.Collections.IEnumerator ResetSpeedAfterDelay(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (animator != null)
+            {
+                animator.speed = 1f;
+            }
+            returnToIdleCoroutine = null;
+        }
+
+        /// <summary>
+        /// Coroutine to return to idle after a delay
+        /// </summary>
+        private System.Collections.IEnumerator ReturnToIdleAfterDelay(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            // Play idle directly without resetting speed
+            PlayClip(idleClip);
+            returnToIdleCoroutine = null;
         }
 
         /// <summary>
@@ -287,6 +558,105 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
+        /// Play victory/celebration animation (looping)
+        /// </summary>
+        public void PlayVictory()
+        {
+            if (!isInitialized) return;
+
+            // Cancel any pending return-to-idle
+            if (returnToIdleCoroutine != null)
+            {
+                StopCoroutine(returnToIdleCoroutine);
+                returnToIdleCoroutine = null;
+            }
+
+            // Reset animation speed to normal (combat may have sped it up)
+            ResetSpeed();
+
+            if (useLegacy)
+            {
+                if (!string.IsNullOrEmpty(victoryClip) && legacyAnimation.GetClip(victoryClip) != null)
+                {
+                    legacyAnimation.CrossFade(victoryClip, 0.2f);
+                }
+                else
+                {
+                    PlayClip(idleClip);
+                }
+            }
+            else if (animator != null)
+            {
+                // Try multiple approaches to play victory animation
+                string stateName = ExtractStateName(victoryClip);
+
+                // First try: Victory trigger parameter
+                if (HasParameter(Victory))
+                {
+                    animator.SetTrigger(Victory);
+                    return;
+                }
+
+                // Build list of state names to try - include variations with unit name prefix
+                List<string> stateNamesToTry = new List<string>
+                {
+                    "Victory",                      // Common name added by our tool
+                    victoryClip,                    // Full clip name: "Cactus_Victory"
+                    stateName,                      // Extracted: "Victory"
+                };
+
+                // Add variations based on the detected victory clip name
+                if (!string.IsNullOrEmpty(victoryClip))
+                {
+                    // Try without any prefix extraction
+                    stateNamesToTry.Add(victoryClip.Replace("_", ""));
+
+                    // If clip has underscore, try both parts
+                    if (victoryClip.Contains("_"))
+                    {
+                        string[] parts = victoryClip.Split('_');
+                        foreach (string part in parts)
+                        {
+                            if (part.ToLower().Contains("victory"))
+                            {
+                                stateNamesToTry.Add(part);
+                            }
+                        }
+                    }
+                }
+
+                foreach (string tryName in stateNamesToTry)
+                {
+                    if (string.IsNullOrEmpty(tryName)) continue;
+
+                    if (TryPlayState(tryName))
+                    {
+                        return;
+                    }
+                }
+
+                // Try CrossFade with each name (might work even if HasState returns false)
+                foreach (string tryName in stateNamesToTry)
+                {
+                    if (string.IsNullOrEmpty(tryName)) continue;
+
+                    try
+                    {
+                        animator.CrossFade(tryName, 0.2f, 0);
+                        return;
+                    }
+                    catch (System.Exception)
+                    {
+                        // Silently continue to next
+                    }
+                }
+
+                // Fallback to idle
+                PlayClip(idleClip);
+            }
+        }
+
+        /// <summary>
         /// Play a specific clip by name
         /// </summary>
         public void PlayClip(string clipName)
@@ -307,8 +677,16 @@ namespace Crestforge.Visuals
             }
             else if (animator != null)
             {
-                // Mecanim playback - play state by name
-                animator.Play(clipName, 0, 0f);
+                // Mecanim playback - check if state exists before playing
+                if (!TryPlayState(clipName))
+                {
+                    // Try extracting state name from clip name (e.g., "Idle_BattleIdle" -> "Idle")
+                    string stateName = ExtractStateName(clipName);
+                    if (!string.IsNullOrEmpty(stateName))
+                    {
+                        TryPlayState(stateName);
+                    }
+                }
             }
         }
 
@@ -358,8 +736,14 @@ namespace Crestforge.Visuals
             }
             else if (animator != null)
             {
-                // Force immediate transition to idle
-                animator.Play(idleClip, 0, 0f);
+                // Force immediate transition to idle - try multiple fallbacks
+                if (!TryPlayState(idleClip))
+                {
+                    if (!TryPlayState("IdleBattle"))
+                    {
+                        TryPlayState("Idle");
+                    }
+                }
             }
         }
     }

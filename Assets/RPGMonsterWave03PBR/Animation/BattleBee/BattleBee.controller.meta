@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 0809dba8e402017479f06e88e1ce5d15
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 9100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 253591
+  packageName: RPG Monster Wave 3 PBR
+  packageVersion: 1.1
+  assetPath: Assets/RPGMonsterWave03PBR/Animation/BattleBee/BattleBee.controller
+  uploadId: 581226

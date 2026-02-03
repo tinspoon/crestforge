@@ -5,6 +5,7 @@ using Crestforge.Core;
 using Crestforge.Systems;
 using Crestforge.Data;
 using Crestforge.Combat;
+using Crestforge.Networking;
 
 namespace Crestforge.UI
 {
@@ -23,7 +24,7 @@ namespace Crestforge.UI
         public RectTransform topBar;
         public RectTransform bottomPanel;
         public RectTransform shopPanel;
-        public RectTransform benchPanel;
+        [System.NonSerialized] public RectTransform benchPanel; // Bench UI disabled - using 3D bench
         public RectTransform infoPanel;
         public RectTransform selectionPanel;
 
@@ -34,6 +35,10 @@ namespace Crestforge.UI
         public Text roundText;
         public Text timerText;
         public Button fightButton;
+        public Button scoutButton;
+        public Button progressButton;
+        public Button myBoardButton;
+        public Text opponentInfoText;
 
         [Header("Shop Elements")]
         public RectTransform shopSlotContainer;
@@ -44,8 +49,16 @@ namespace Crestforge.UI
         public Text xpCostText;
         public Text xpProgressText;
 
-        [Header("Bench Elements")]
-        public RectTransform benchSlotContainer;
+        [Header("Bench Elements (Disabled - using 3D bench)")]
+        [System.NonSerialized] public RectTransform benchSlotContainer;
+
+        [Header("Item Inventory")]
+        public RectTransform itemInventoryPanel;
+        public RectTransform itemSlotContainer;
+
+        [Header("Crest Display")]
+        public RectTransform crestPanel;
+        public CrestSlotUI minorCrestSlot;
 
         [Header("Trait Panel")]
         public RectTransform traitPanel;
@@ -57,6 +70,13 @@ namespace Crestforge.UI
         public Text traitTooltipDescription;
         public RectTransform traitTooltipTierContainer;
         public Text traitTooltipUnits;
+
+        [Header("Crest Tooltip")]
+        public RectTransform crestTooltipPanel;
+        public Text crestTooltipTitle;
+        public Text crestTooltipType;
+        public Text crestTooltipDescription;
+        public Text crestTooltipBonus;
 
         [Header("Prefabs")]
         public GameObject unitCardPrefab;
@@ -71,11 +91,14 @@ namespace Crestforge.UI
         public Text tooltipTraits;
         public Text tooltipAbility;
         public Image tooltipSprite;
+        public RectTransform tooltipItemContainer;
+        public Text tooltipItemsLabel;
 
         // Runtime
         private GameState state;
         private List<UnitCardUI> shopCards = new List<UnitCardUI>();
         private List<UnitCardUI> benchCards = new List<UnitCardUI>();
+        private List<ItemSlotUI> itemSlots = new List<ItemSlotUI>();
         private List<GameObject> traitEntries = new List<GameObject>();
         private List<TraitEntryUI> traitEntryComponents = new List<TraitEntryUI>();
         private System.Action pendingAction;
@@ -84,8 +107,22 @@ namespace Crestforge.UI
         private bool selectionShown = false;
         private bool isInitialized = false;
         private bool isTooltipPinned = false;
+        private bool isCrestTooltipPinned = false;
         private TraitData hoveredTrait = null;
         private List<GameObject> traitTooltipTierEntries = new List<GameObject>();
+        private UnitInstance tooltipUnit = null;
+        private List<TooltipItemSlot> tooltipItemSlots = new List<TooltipItemSlot>();
+        private bool showingTemporaryItemInfo = false;
+
+        // Sell overlay
+        private GameObject sellOverlay;
+        private Text sellText;
+        private UnitInstance unitBeingDragged;
+        private bool isSellModeActive = false;
+
+        // Multiplayer helper
+        private bool IsMultiplayer => ServerGameState.Instance != null && ServerGameState.Instance.IsInGame;
+        private ServerGameState serverState => ServerGameState.Instance;
 
         private void Awake()
         {
@@ -111,10 +148,82 @@ namespace Crestforge.UI
             {
                 Initialize();
             }
-            
+
             // Reset selection state when re-enabled
             selectionShown = false;
             lastShownPhase = GamePhase.Planning;
+
+            // Subscribe to server action results for multiplayer feedback
+            if (ServerGameState.Instance != null)
+            {
+                ServerGameState.Instance.OnActionResult += HandleActionResult;
+            }
+        }
+
+        private void OnDisable()
+        {
+            // Unsubscribe from server events
+            if (ServerGameState.Instance != null)
+            {
+                ServerGameState.Instance.OnActionResult -= HandleActionResult;
+            }
+        }
+
+        private void HandleActionResult(string action, bool success)
+        {
+            if (!success)
+            {
+                // Show feedback for failed actions
+                ShowActionFeedback($"Cannot {action}");
+            }
+        }
+
+        private Coroutine feedbackCoroutine;
+        private Text feedbackText;
+
+        private void ShowActionFeedback(string message)
+        {
+            if (feedbackCoroutine != null)
+            {
+                StopCoroutine(feedbackCoroutine);
+            }
+
+            // Create feedback text if needed
+            if (feedbackText == null && mainCanvas != null)
+            {
+                GameObject feedbackObj = new GameObject("ActionFeedback");
+                feedbackObj.transform.SetParent(mainCanvas.transform, false);
+                RectTransform rt = feedbackObj.AddComponent<RectTransform>();
+                rt.anchorMin = new Vector2(0.5f, 0.7f);
+                rt.anchorMax = new Vector2(0.5f, 0.7f);
+                rt.sizeDelta = new Vector2(300, 40);
+
+                feedbackText = feedbackObj.AddComponent<Text>();
+                feedbackText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                feedbackText.fontSize = 18;
+                feedbackText.alignment = TextAnchor.MiddleCenter;
+                feedbackText.color = new Color(1f, 0.4f, 0.4f);
+
+                Outline outline = feedbackObj.AddComponent<Outline>();
+                outline.effectColor = Color.black;
+                outline.effectDistance = new Vector2(1, 1);
+            }
+
+            if (feedbackText != null)
+            {
+                feedbackText.text = message;
+                feedbackText.gameObject.SetActive(true);
+                feedbackCoroutine = StartCoroutine(HideFeedbackAfterDelay(2f));
+            }
+        }
+
+        private System.Collections.IEnumerator HideFeedbackAfterDelay(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (feedbackText != null)
+            {
+                feedbackText.gameObject.SetActive(false);
+            }
         }
 
         private void Initialize()
@@ -135,10 +244,14 @@ namespace Crestforge.UI
 
         private void Update()
         {
-            if (state == null)
+            // In multiplayer mode, we can run without local GameState
+            if (!IsMultiplayer)
             {
-                state = GameState.Instance;
-                if (state == null) return;
+                if (state == null)
+                {
+                    state = GameState.Instance;
+                    if (state == null) return;
+                }
             }
 
             // Execute pending actions
@@ -150,7 +263,9 @@ namespace Crestforge.UI
             }
 
             // Hide tooltip when clicking anywhere (except on unit cards, which handle their own clicks)
-            if (Input.GetMouseButtonDown(0) && tooltipPanel != null && tooltipPanel.gameObject.activeSelf)
+            bool itemTooltipActive = tooltipPanel != null && tooltipPanel.gameObject.activeSelf;
+            bool crestTooltipActive = crestTooltipPanel != null && crestTooltipPanel.gameObject.activeSelf;
+            if (Input.GetMouseButtonDown(0) && (itemTooltipActive || crestTooltipActive))
             {
                 // Check if clicking on a UI element
                 var eventSystem = UnityEngine.EventSystems.EventSystem.current;
@@ -163,21 +278,29 @@ namespace Crestforge.UI
                     var results = new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
                     eventSystem.RaycastAll(pointerData, results);
 
-                    // Check if any hit object is a UnitCardUI
-                    bool clickedOnUnitCard = false;
+                    // Check if any hit object is a UnitCardUI, ItemSlotUI, CrestSlotUI, TooltipItemSlot, or the tooltip itself
+                    bool clickedOnTooltipSource = false;
                     foreach (var result in results)
                     {
-                        if (result.gameObject.GetComponentInParent<UnitCardUI>() != null)
+                        if (result.gameObject.GetComponentInParent<UnitCardUI>() != null ||
+                            result.gameObject.GetComponentInParent<ItemSlotUI>() != null ||
+                            result.gameObject.GetComponentInParent<CrestSlotUI>() != null ||
+                            result.gameObject.GetComponentInParent<TooltipItemSlot>() != null ||
+                            (tooltipPanel != null && result.gameObject.transform.IsChildOf(tooltipPanel.transform)))
                         {
-                            clickedOnUnitCard = true;
+                            clickedOnTooltipSource = true;
                             break;
                         }
                     }
 
-                    if (!clickedOnUnitCard)
+                    if (!clickedOnTooltipSource)
                     {
                         isTooltipPinned = false;
+                        isCrestTooltipPinned = false;
+                        showingTemporaryItemInfo = false;
+                        tooltipUnit = null;
                         HideTooltip();
+                        HideCrestTooltip();
                     }
                 }
             }
@@ -196,6 +319,7 @@ namespace Crestforge.UI
             UpdateTooltip();
             UpdateTraitPanel();
             UpdateTraitTooltip();
+            UpdateCrestDisplay();
         }
 
         private void CreateUI()
@@ -224,6 +348,7 @@ namespace Crestforge.UI
             CreateTooltip();
             CreateTraitPanel();
             CreateTraitTooltip();
+            CreateCrestPanel();
         }
 
         private void CreateTopBar()
@@ -273,16 +398,40 @@ namespace Crestforge.UI
             timerText = CreateText("30s", topBar, 60);
             timerText.alignment = TextAnchor.MiddleRight;
 
+            // Scout button (PvP mode only)
+            scoutButton = CreateButton("👁 SCOUT", topBar, 100, OnScoutClicked);
+            scoutButton.GetComponent<Image>().color = new Color(0.4f, 0.5f, 0.6f);
+            scoutButton.gameObject.SetActive(false); // Hidden by default
+
+            // Progress button (PvP mode only)
+            progressButton = CreateButton("📊", topBar, 50, OnProgressClicked);
+            progressButton.GetComponent<Image>().color = new Color(0.5f, 0.4f, 0.6f);
+            progressButton.gameObject.SetActive(false); // Hidden by default
+
             // Fight button
             fightButton = CreateButton("⚔ FIGHT", topBar, 120, OnFightClicked);
             fightButton.GetComponent<Image>().color = new Color(0.3f, 0.7f, 0.3f);
+
+            // My Board button (shown during combat when viewing opponent's board)
+            myBoardButton = CreateButton("MY BOARD", topBar, 100, OnMyBoardClicked);
+            myBoardButton.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.7f);
+            myBoardButton.gameObject.SetActive(false);
+
+            // Opponent info text (shown during PvP combat)
+            opponentInfoText = CreateText("", topBar, 150);
+            opponentInfoText.alignment = TextAnchor.MiddleRight;
+            opponentInfoText.color = new Color(0.9f, 0.7f, 0.7f);
+            opponentInfoText.gameObject.SetActive(false);
         }
 
         private void CreateBottomPanel()
         {
-            // Bench section - positioned just below battlefield (separate from shop)
-            CreateBenchSection(mainCanvas.transform);
-            
+            // Bench section - now handled by 3D visuals in BoardManager3D
+            // CreateBenchSection(mainCanvas.transform);
+
+            // Item inventory - to the right of bench
+            CreateItemInventory(mainCanvas.transform);
+
             // Shop section - at the bottom of screen
             CreateShopSection(mainCanvas.transform);
         }
@@ -357,6 +506,57 @@ namespace Crestforge.UI
                 var card = CreateUnitCard(shopSlotContainer, i, true);
                 shopCards.Add(card);
             }
+
+            // Create sell overlay as sibling (not child) so it's visible even when shop is hidden
+            CreateSellOverlay(mainCanvas.transform);
+        }
+
+        private void CreateSellOverlay(Transform canvasParent)
+        {
+            // Sell overlay is a separate panel at the bottom (same position as shop)
+            sellOverlay = new GameObject("SellOverlay");
+            sellOverlay.transform.SetParent(canvasParent, false);
+
+            RectTransform rt = sellOverlay.AddComponent<RectTransform>();
+            // Same anchoring as shop panel - bottom of screen
+            rt.anchorMin = new Vector2(0, 0);
+            rt.anchorMax = new Vector2(1, 0);
+            rt.pivot = new Vector2(0.5f, 0);
+            rt.sizeDelta = new Vector2(0, 180);
+            rt.anchoredPosition = new Vector2(0, 30);
+
+            // Semi-transparent red/gold background
+            Image bg = sellOverlay.AddComponent<Image>();
+            bg.color = new Color(0.6f, 0.2f, 0.1f, 0.95f);
+            bg.raycastTarget = true;
+
+            // Add drop handler for selling
+            SellDropZone dropZone = sellOverlay.AddComponent<SellDropZone>();
+
+            // Sell text in center
+            GameObject textObj = new GameObject("SellText");
+            textObj.transform.SetParent(sellOverlay.transform, false);
+
+            RectTransform textRT = textObj.AddComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.offsetMin = Vector2.zero;
+            textRT.offsetMax = Vector2.zero;
+
+            sellText = textObj.AddComponent<Text>();
+            sellText.text = "Sell Unit for $0";
+            sellText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            sellText.fontSize = 28;
+            sellText.fontStyle = FontStyle.Bold;
+            sellText.alignment = TextAnchor.MiddleCenter;
+            sellText.color = new Color(1f, 0.9f, 0.4f);
+
+            // Add outline for visibility
+            Outline outline = textObj.AddComponent<Outline>();
+            outline.effectColor = new Color(0, 0, 0, 0.8f);
+            outline.effectDistance = new Vector2(2, -2);
+
+            sellOverlay.SetActive(false);
         }
 
         private void CreateBenchSection(Transform parent)
@@ -423,7 +623,7 @@ namespace Crestforge.UI
             costRT.sizeDelta = new Vector2(0, 16);
             costRT.anchoredPosition = new Vector2(0, 2);
             Text costText = costObj.AddComponent<Text>();
-            costText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            costText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             costText.fontSize = 12;
             costText.alignment = TextAnchor.MiddleCenter;
             costText.color = new Color(1f, 0.9f, 0.4f);
@@ -434,7 +634,7 @@ namespace Crestforge.UI
             RectTransform nameRT = nameObj.AddComponent<RectTransform>();
             nameRT.sizeDelta = Vector2.zero;
             Text nameText = nameObj.AddComponent<Text>();
-            nameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             nameText.fontSize = 1;
             nameText.text = "";
 
@@ -454,6 +654,61 @@ namespace Crestforge.UI
             card.isBenchSlot = true;
 
             return card;
+        }
+
+        private void CreateItemInventory(Transform parent)
+        {
+            // Item inventory panel - positioned to the right of bench
+            GameObject itemObj = CreatePanel("ItemInventoryPanel", parent);
+            itemInventoryPanel = itemObj.GetComponent<RectTransform>();
+            itemInventoryPanel.anchorMin = new Vector2(1, 0);
+            itemInventoryPanel.anchorMax = new Vector2(1, 0);
+            itemInventoryPanel.pivot = new Vector2(1, 0);
+            itemInventoryPanel.sizeDelta = new Vector2(200, 90);
+            itemInventoryPanel.anchoredPosition = new Vector2(-10, 320); // Above the bench
+            itemObj.GetComponent<Image>().color = new Color(0.15f, 0.12f, 0.18f, 0.85f);
+
+            // Title
+            GameObject titleObj = new GameObject("Title");
+            titleObj.transform.SetParent(itemObj.transform, false);
+            RectTransform titleRT = titleObj.AddComponent<RectTransform>();
+            titleRT.anchorMin = new Vector2(0, 1);
+            titleRT.anchorMax = new Vector2(1, 1);
+            titleRT.pivot = new Vector2(0.5f, 1);
+            titleRT.sizeDelta = new Vector2(0, 18);
+            titleRT.anchoredPosition = Vector2.zero;
+            Text titleText = titleObj.AddComponent<Text>();
+            titleText.text = "Items";
+            titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            titleText.fontSize = 12;
+            titleText.fontStyle = FontStyle.Bold;
+            titleText.alignment = TextAnchor.MiddleCenter;
+            titleText.color = new Color(0.8f, 0.7f, 0.9f);
+
+            // Item slot container
+            GameObject containerObj = new GameObject("ItemSlotContainer");
+            containerObj.transform.SetParent(itemObj.transform, false);
+            itemSlotContainer = containerObj.AddComponent<RectTransform>();
+            itemSlotContainer.anchorMin = new Vector2(0, 0);
+            itemSlotContainer.anchorMax = new Vector2(1, 1);
+            itemSlotContainer.offsetMin = new Vector2(5, 5);
+            itemSlotContainer.offsetMax = new Vector2(-5, -20);
+
+            HorizontalLayoutGroup hlg = containerObj.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = 4;
+            hlg.padding = new RectOffset(2, 2, 2, 2);
+            hlg.childAlignment = TextAnchor.MiddleLeft;
+            hlg.childControlWidth = false;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = false;
+
+            // Create item slots (max 10 items)
+            for (int i = 0; i < 10; i++)
+            {
+                var slot = ItemSlotUI.Create(itemSlotContainer, new Vector2(60, 60));
+                slot.gameObject.AddComponent<LayoutElement>().preferredWidth = 60;
+                itemSlots.Add(slot);
+            }
         }
 
         private void CreateSelectionPanel()
@@ -590,6 +845,28 @@ namespace Crestforge.UI
             // Ability text
             tooltipAbility = CreateTooltipText("Ability Name", tooltipObj.transform, 12, FontStyle.Normal, new Color(0.7f, 0.7f, 0.95f), 40);
 
+            // Items section (hidden when no items)
+            CreateTooltipDivider(tooltipObj.transform);
+
+            // Items label
+            tooltipItemsLabel = CreateTooltipText("ITEMS", tooltipObj.transform, 10, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 14);
+
+            // Items container - horizontal layout for item slots
+            GameObject itemContainer = new GameObject("ItemContainer");
+            itemContainer.transform.SetParent(tooltipObj.transform, false);
+            tooltipItemContainer = itemContainer.AddComponent<RectTransform>();
+            HorizontalLayoutGroup itemHLG = itemContainer.AddComponent<HorizontalLayoutGroup>();
+            itemHLG.spacing = 6;
+            itemHLG.childAlignment = TextAnchor.MiddleLeft;
+            itemHLG.childControlWidth = false;
+            itemHLG.childControlHeight = false;
+            itemHLG.childForceExpandWidth = false;
+            itemHLG.childForceExpandHeight = false;
+            LayoutElement itemContainerLE = itemContainer.AddComponent<LayoutElement>();
+            itemContainerLE.minHeight = 40;
+            itemContainerLE.preferredHeight = 40;
+            itemContainerLE.preferredWidth = 250;
+
             tooltipPanel.gameObject.SetActive(false);
         }
 
@@ -608,7 +885,7 @@ namespace Crestforge.UI
             obj.transform.SetParent(parent, false);
             
             Text text = obj.AddComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.text = content;
             text.fontSize = fontSize;
             text.fontStyle = style;
@@ -665,7 +942,7 @@ namespace Crestforge.UI
             headerTextRT.offsetMin = new Vector2(8, 0);
             headerTextRT.offsetMax = new Vector2(-8, 0);
             Text headerText = headerTextObj.AddComponent<Text>();
-            headerText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            headerText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             headerText.text = "TRAITS";
             headerText.fontSize = 12;
             headerText.fontStyle = FontStyle.Bold;
@@ -765,35 +1042,174 @@ namespace Crestforge.UI
             traitTooltipPanel.gameObject.SetActive(false);
         }
 
+        private void CreateCrestPanel()
+        {
+            // Crest panel - positioned on the left side, below traits panel
+            GameObject crestObj = CreatePanel("CrestPanel", mainCanvas.transform);
+            crestPanel = crestObj.GetComponent<RectTransform>();
+
+            // Position on left side, below trait panel
+            crestPanel.anchorMin = new Vector2(0, 1);
+            crestPanel.anchorMax = new Vector2(0, 1);
+            crestPanel.pivot = new Vector2(0, 1);
+            crestPanel.anchoredPosition = new Vector2(10, -400);
+            crestPanel.sizeDelta = new Vector2(105, 100);
+
+            Image panelBg = crestObj.GetComponent<Image>();
+            panelBg.color = new Color(0.12f, 0.12f, 0.18f, 0.9f);
+
+            // Add vertical layout
+            VerticalLayoutGroup vlg = crestObj.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(5, 5, 5, 5);
+            vlg.spacing = 4;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+            vlg.childForceExpandWidth = true;
+
+            // Header
+            Text header = CreateTooltipText("CREST", crestObj.transform, 10, FontStyle.Bold, new Color(0.7f, 0.6f, 0.9f), 14);
+            header.alignment = TextAnchor.MiddleCenter;
+
+            // Minor crest slot
+            minorCrestSlot = CrestSlotUI.Create(crestObj.transform, new Vector2(90, 50), "Minor");
+
+            // Initialize with no crest
+            minorCrestSlot.SetCrest(null);
+
+            // Create crest tooltip
+            CreateCrestTooltip();
+        }
+
+        private void CreateCrestTooltip()
+        {
+            // Crest tooltip panel - appears when hovering crest slot
+            GameObject tooltipObj = CreatePanel("CrestTooltip", mainCanvas.transform);
+            crestTooltipPanel = tooltipObj.GetComponent<RectTransform>();
+
+            // Position to the right of crest panel
+            crestTooltipPanel.anchorMin = new Vector2(0, 1);
+            crestTooltipPanel.anchorMax = new Vector2(0, 1);
+            crestTooltipPanel.pivot = new Vector2(0, 1);
+            crestTooltipPanel.anchoredPosition = new Vector2(120, -400);
+
+            Image tooltipBg = tooltipObj.GetComponent<Image>();
+            tooltipBg.color = new Color(0.1f, 0.1f, 0.15f, 0.95f);
+
+            // Outline
+            Outline outline = tooltipObj.AddComponent<Outline>();
+            outline.effectColor = new Color(0.6f, 0.5f, 0.8f);
+            outline.effectDistance = new Vector2(1, 1);
+
+            // Content size fitter
+            ContentSizeFitter csf = tooltipObj.AddComponent<ContentSizeFitter>();
+            csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            // Vertical layout
+            VerticalLayoutGroup vlg = tooltipObj.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(12, 12, 10, 10);
+            vlg.spacing = 6;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            // Title
+            crestTooltipTitle = CreateTooltipText("Crest Name", tooltipObj.transform, 18, FontStyle.Bold, new Color(0.8f, 0.6f, 1f), 26);
+            crestTooltipTitle.GetComponent<LayoutElement>().preferredWidth = 220;
+
+            // Type
+            crestTooltipType = CreateTooltipText("Minor Crest", tooltipObj.transform, 12, FontStyle.Italic, new Color(0.6f, 0.6f, 0.7f), 18);
+
+            // Divider
+            CreateTooltipDivider(tooltipObj.transform);
+
+            // Description
+            crestTooltipDescription = CreateTooltipText("Description", tooltipObj.transform, 14, FontStyle.Normal, new Color(0.85f, 0.85f, 0.9f), 24);
+
+            // Divider
+            CreateTooltipDivider(tooltipObj.transform);
+
+            // Bonus label
+            CreateTooltipText("BONUS", tooltipObj.transform, 11, FontStyle.Bold, new Color(0.6f, 0.6f, 0.7f), 16);
+
+            // Bonus text
+            crestTooltipBonus = CreateTooltipText("Bonus effect", tooltipObj.transform, 13, FontStyle.Normal, new Color(0.7f, 0.9f, 0.7f), 20);
+
+            crestTooltipPanel.gameObject.SetActive(false);
+        }
+
         private int lastTraitHash = 0;
 
         private void UpdateTraitPanel()
         {
-            if (state == null || traitPanel == null || traitContent == null) return;
-            if (state.activeTraits == null) 
-            {
-                traitPanel.gameObject.SetActive(false);
-                return;
-            }
+            if (traitPanel == null || traitContent == null) return;
 
-            // Check if there are any units on the board
-            bool hasUnitsOnBoard = false;
-            if (state.playerBoard != null)
+            // Build trait list based on mode
+            var traitsToDisplay = new List<KeyValuePair<TraitData, int>>();
+
+            if (IsMultiplayer)
             {
-                for (int x = 0; x < GameConstants.Grid.WIDTH && !hasUnitsOnBoard; x++)
+                // Multiplayer: use server's active traits
+                if (serverState == null || serverState.activeTraits == null || serverState.activeTraits.Count == 0)
                 {
-                    for (int y = 0; y < GameConstants.Grid.HEIGHT && !hasUnitsOnBoard; y++)
+                    traitPanel.gameObject.SetActive(false);
+                    lastTraitHash = 0;
+                    return;
+                }
+
+                // Convert server trait entries to TraitData + count
+                foreach (var serverTrait in serverState.activeTraits)
+                {
+                    if (string.IsNullOrEmpty(serverTrait.traitId)) continue;
+
+                    // Look up TraitData by traitId
+                    TraitData traitData = FindTraitDataById(serverTrait.traitId);
+                    if (traitData != null)
                     {
-                        if (state.playerBoard[x, y] != null)
-                        {
-                            hasUnitsOnBoard = true;
-                        }
+                        traitsToDisplay.Add(new KeyValuePair<TraitData, int>(traitData, serverTrait.count));
                     }
                 }
             }
+            else
+            {
+                // Single player: use local state
+                if (state == null || state.activeTraits == null)
+                {
+                    traitPanel.gameObject.SetActive(false);
+                    return;
+                }
 
-            // Hide panel if no units on board
-            if (!hasUnitsOnBoard || state.activeTraits.Count == 0)
+                // Check if there are any units on the board
+                bool hasUnitsOnBoard = false;
+                if (state.playerBoard != null)
+                {
+                    for (int x = 0; x < GameConstants.Grid.WIDTH && !hasUnitsOnBoard; x++)
+                    {
+                        for (int y = 0; y < GameConstants.Grid.HEIGHT && !hasUnitsOnBoard; y++)
+                        {
+                            if (state.playerBoard[x, y] != null)
+                            {
+                                hasUnitsOnBoard = true;
+                            }
+                        }
+                    }
+                }
+
+                // Hide panel if no units on board
+                if (!hasUnitsOnBoard || state.activeTraits.Count == 0)
+                {
+                    traitPanel.gameObject.SetActive(false);
+                    lastTraitHash = 0;
+                    return;
+                }
+
+                // Copy from local state
+                traitsToDisplay = new List<KeyValuePair<TraitData, int>>(state.activeTraits);
+            }
+
+            // Hide if no traits
+            if (traitsToDisplay.Count == 0)
             {
                 traitPanel.gameObject.SetActive(false);
                 lastTraitHash = 0;
@@ -805,7 +1221,7 @@ namespace Crestforge.UI
 
             // Calculate hash of current traits to detect changes
             int currentHash = 0;
-            foreach (var kvp in state.activeTraits)
+            foreach (var kvp in traitsToDisplay)
             {
                 if (kvp.Key != null)
                 {
@@ -826,19 +1242,94 @@ namespace Crestforge.UI
             traitEntryComponents.Clear();
 
             // Sort traits: active traits first (by tier, descending), then inactive by count
-            var sortedTraits = new List<KeyValuePair<TraitData, int>>(state.activeTraits);
-            sortedTraits.Sort((a, b) => {
+            traitsToDisplay.Sort((a, b) => {
                 int tierA = a.Key != null ? a.Key.GetActiveTier(a.Value) : -1;
                 int tierB = b.Key != null ? b.Key.GetActiveTier(b.Value) : -1;
                 if (tierA != tierB) return tierB.CompareTo(tierA); // Higher tier first
                 return b.Value.CompareTo(a.Value); // Then by count
             });
 
-            foreach (var kvp in sortedTraits)
+            foreach (var kvp in traitsToDisplay)
             {
                 if (kvp.Key == null) continue;
                 CreateTraitEntry(kvp.Key, kvp.Value);
             }
+        }
+
+        // Cache for dynamically loaded traits
+        private static Dictionary<string, TraitData> traitCache = new Dictionary<string, TraitData>();
+        private static bool traitsLoaded = false;
+
+        /// <summary>
+        /// Find a TraitData ScriptableObject by its traitId
+        /// </summary>
+        private TraitData FindTraitDataById(string traitId)
+        {
+            // Check cache first
+            if (traitCache.TryGetValue(traitId, out TraitData cached))
+            {
+                return cached;
+            }
+
+            // Load all traits from Resources if not done yet
+            if (!traitsLoaded)
+            {
+                LoadAllTraits();
+            }
+
+            // Try cache again after loading
+            if (traitCache.TryGetValue(traitId, out cached))
+            {
+                return cached;
+            }
+
+            // Fallback to state.allTraits
+            if (state != null && state.allTraits != null)
+            {
+                foreach (var trait in state.allTraits)
+                {
+                    if (trait != null && trait.traitId == traitId)
+                    {
+                        traitCache[traitId] = trait;
+                        return trait;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Load all TraitData from Resources folders
+        /// </summary>
+        private void LoadAllTraits()
+        {
+            traitsLoaded = true;
+
+            // Load from NewTraits folder (priority)
+            var newTraits = Resources.LoadAll<TraitData>("ScriptableObjects/NewTraits");
+            foreach (var trait in newTraits)
+            {
+                if (trait != null && !string.IsNullOrEmpty(trait.traitId))
+                {
+                    traitCache[trait.traitId] = trait;
+                }
+            }
+
+            // Also load from old Traits folder as fallback
+            var oldTraits = Resources.LoadAll<TraitData>("ScriptableObjects/Traits");
+            foreach (var trait in oldTraits)
+            {
+                if (trait != null && !string.IsNullOrEmpty(trait.traitId))
+                {
+                    // Don't overwrite if already loaded from NewTraits
+                    if (!traitCache.ContainsKey(trait.traitId))
+                    {
+                        traitCache[trait.traitId] = trait;
+                    }
+                }
+            }
+
         }
 
         private void CreateTraitEntry(TraitData trait, int count)
@@ -922,7 +1413,7 @@ namespace Crestforge.UI
             tierRT.offsetMax = Vector2.zero;
             
             Text tierText = tierObj.AddComponent<Text>();
-            tierText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            tierText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             tierText.text = isActive ? (activeTier + 1).ToString() : "-";
             tierText.fontSize = 14;
             tierText.fontStyle = FontStyle.Bold;
@@ -940,7 +1431,7 @@ namespace Crestforge.UI
             nameRT.offsetMax = new Vector2(-4, -2);
             
             Text nameText = nameObj.AddComponent<Text>();
-            nameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             nameText.text = trait.traitName;
             nameText.fontSize = 11;
             nameText.fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal;
@@ -973,7 +1464,7 @@ namespace Crestforge.UI
             progressRT.offsetMax = new Vector2(-4, 0);
             
             Text progressText = progressObj.AddComponent<Text>();
-            progressText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            progressText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             progressText.text = progressStr;
             progressText.fontSize = 10;
             progressText.alignment = TextAnchor.MiddleLeft;
@@ -1024,14 +1515,14 @@ namespace Crestforge.UI
 
             int activeTier = trait.GetActiveTier(count);
 
-            // Title with category
-            string categoryLabel = trait.category == TraitCategory.Origin ? "Origin" : "Class";
+            // Title with type
+            string typeLabel = trait.isUnique ? "Unique" : "Shared";
             traitTooltipTitle.text = $"{trait.traitName}";
             traitTooltipTitle.color = trait.GetTraitColor();
 
             // Description
-            traitTooltipDescription.text = !string.IsNullOrEmpty(trait.description) ? 
-                $"\"{trait.description}\"" : $"({categoryLabel})";
+            traitTooltipDescription.text = !string.IsNullOrEmpty(trait.description) ?
+                $"\"{trait.description}\"" : $"({typeLabel})";
 
             // Clear old tier entries
             foreach (var entry in traitTooltipTierEntries)
@@ -1067,7 +1558,7 @@ namespace Crestforge.UI
                     // Threshold indicator
                     Text thresholdText = new GameObject("Threshold").AddComponent<Text>();
                     thresholdText.transform.SetParent(tierEntry.transform, false);
-                    thresholdText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    thresholdText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                     thresholdText.text = $"({threshold})";
                     thresholdText.fontSize = 16;
                     thresholdText.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
@@ -1087,7 +1578,7 @@ namespace Crestforge.UI
                     // Bonus description
                     Text bonusText = new GameObject("Bonus").AddComponent<Text>();
                     bonusText.transform.SetParent(tierEntry.transform, false);
-                    bonusText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    bonusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                     bonusText.text = bonus?.bonusDescription ?? "Bonus";
                     bonusText.fontSize = 14;
                     bonusText.alignment = TextAnchor.MiddleLeft;
@@ -1108,14 +1599,42 @@ namespace Crestforge.UI
             }
 
             // Units with this trait on board
-            var boardUnits = state.GetBoardUnits();
             List<string> unitNames = new List<string>();
-            foreach (var unit in boardUnits)
+
+            // Try local GameState first
+            if (state != null)
             {
-                if (unit != null && unit.HasTrait(trait))
+                var boardUnits = state.GetBoardUnits();
+                foreach (var unit in boardUnits)
                 {
-                    string stars = new string('★', unit.starLevel);
-                    unitNames.Add($"{unit.template.unitName} {stars}");
+                    if (unit != null && unit.HasTrait(trait))
+                    {
+                        string stars = new string('★', unit.starLevel);
+                        unitNames.Add($"{unit.template.unitName} {stars}");
+                    }
+                }
+            }
+            // Fall back to ServerGameState for multiplayer
+            else if (serverState != null && serverState.board != null)
+            {
+                for (int x = 0; x < 7; x++)
+                {
+                    for (int y = 0; y < 4; y++)
+                    {
+                        var serverUnit = serverState.board[x, y];
+                        if (serverUnit != null && serverUnit.traits != null)
+                        {
+                            foreach (var t in serverUnit.traits)
+                            {
+                                if (t == trait.traitId)
+                                {
+                                    string stars = new string('★', serverUnit.starLevel);
+                                    unitNames.Add($"{serverUnit.name} {stars}");
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1164,39 +1683,47 @@ namespace Crestforge.UI
 
             // Unit sprite
             GameObject spriteObj = new GameObject("Sprite");
-            spriteObj.transform.SetParent(cardObj.transform);
+            spriteObj.transform.SetParent(cardObj.transform, false);
             RectTransform spriteRT = spriteObj.AddComponent<RectTransform>();
+            spriteRT.localScale = Vector3.one;
             spriteRT.anchorMin = new Vector2(0.5f, 0.5f);
             spriteRT.anchorMax = new Vector2(0.5f, 0.5f);
+            spriteRT.pivot = new Vector2(0.5f, 0.5f);
             spriteRT.sizeDelta = new Vector2(48, 48);
             spriteRT.anchoredPosition = new Vector2(0, 5);
             Image spriteImg = spriteObj.AddComponent<Image>();
             spriteImg.preserveAspect = true;
+            spriteImg.enabled = false; // Start disabled until a unit is set
+            spriteImg.raycastTarget = false; // Don't block clicks
 
             // Cost/Stars text
             GameObject costObj = new GameObject("Cost");
-            costObj.transform.SetParent(cardObj.transform);
+            costObj.transform.SetParent(cardObj.transform, false);
             RectTransform costRT = costObj.AddComponent<RectTransform>();
+            costRT.localScale = Vector3.one;
             costRT.anchorMin = new Vector2(0, 0);
             costRT.anchorMax = new Vector2(1, 0);
+            costRT.pivot = new Vector2(0.5f, 0);
             costRT.sizeDelta = new Vector2(0, 18);
             costRT.anchoredPosition = new Vector2(0, 3);
             Text costText = costObj.AddComponent<Text>();
-            costText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            costText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             costText.fontSize = 12;
             costText.alignment = TextAnchor.MiddleCenter;
             costText.color = Color.white;
 
             // Name text
             GameObject nameObj = new GameObject("Name");
-            nameObj.transform.SetParent(cardObj.transform);
+            nameObj.transform.SetParent(cardObj.transform, false);
             RectTransform nameRT = nameObj.AddComponent<RectTransform>();
+            nameRT.localScale = Vector3.one;
             nameRT.anchorMin = new Vector2(0, 1);
             nameRT.anchorMax = new Vector2(1, 1);
+            nameRT.pivot = new Vector2(0.5f, 1);
             nameRT.sizeDelta = new Vector2(0, 18);
             nameRT.anchoredPosition = new Vector2(0, -2);
             Text nameText = nameObj.AddComponent<Text>();
-            nameText.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             nameText.fontSize = 11;
             nameText.alignment = TextAnchor.MiddleCenter;
             nameText.color = Color.white;
@@ -1220,6 +1747,7 @@ namespace Crestforge.UI
             card.nameText = nameText;
             card.button = btn;
             card.index = index;
+            // isBenchSlot defaults to false, which is correct for shop cards
 
             return card;
         }
@@ -1228,10 +1756,17 @@ namespace Crestforge.UI
 
         private void UpdateTopBar()
         {
+            // Multiplayer mode - read from ServerGameState
+            if (IsMultiplayer)
+            {
+                UpdateTopBarMultiplayer();
+                return;
+            }
+
             if (state.player == null) return;
 
             roundText.text = $"R{state.round.currentRound}";
-            
+
             // Show lives as hearts for PvE Wave mode, or health number for other modes
             if (state.currentGameMode == GameMode.PvEWave)
             {
@@ -1243,11 +1778,15 @@ namespace Crestforge.UI
             {
                 healthText.text = $"❤ {state.player.health}";
             }
-            
+
             goldText.text = $"💰 {state.player.gold}";
             levelText.text = $"Lv{state.player.level}";
 
-            if (state.round.phase == GamePhase.Planning)
+            bool isPvPMode = state.currentGameMode == GameMode.PvP;
+            bool isPlanning = state.round.phase == GamePhase.Planning;
+            bool isCombat = state.round.phase == GamePhase.Combat;
+
+            if (isPlanning)
             {
                 timerText.text = $"{state.round.phaseTimer:F0}s";
                 fightButton.gameObject.SetActive(true);
@@ -1257,15 +1796,120 @@ namespace Crestforge.UI
                 timerText.text = state.round.phase.ToString();
                 fightButton.gameObject.SetActive(false);
             }
+
+            // PvP mode specific UI
+            if (scoutButton != null)
+            {
+                scoutButton.gameObject.SetActive(isPvPMode && isPlanning);
+            }
+            if (progressButton != null)
+            {
+                progressButton.gameObject.SetActive(isPvPMode);
+            }
+
+            // Show opponent info during PvP combat
+            if (opponentInfoText != null)
+            {
+                bool showOpponentInfo = isPvPMode && (isCombat || state.round.phase == GamePhase.Results);
+                opponentInfoText.gameObject.SetActive(showOpponentInfo);
+
+                if (showOpponentInfo && OpponentManager.Instance != null)
+                {
+                    var opponent = OpponentManager.Instance.currentOpponent;
+                    if (opponent != null)
+                    {
+                        opponentInfoText.text = $"vs {opponent.name} (HP: {opponent.health})";
+                    }
+                }
+            }
+        }
+
+        private void UpdateTopBarMultiplayer()
+        {
+            var ss = serverState;
+
+            roundText.text = $"R{ss.round}";
+            healthText.text = $"❤ {ss.health}";
+            goldText.text = $"💰 {ss.gold}";
+            levelText.text = $"Lv{ss.level}";
+
+            bool isPlanning = ss.phase == "planning";
+            bool isCombat = ss.phase == "combat";
+
+            if (isPlanning)
+            {
+                timerText.text = $"{ss.phaseTimer:F0}s";
+                fightButton.gameObject.SetActive(true);
+
+                // In multiplayer, change button text based on ready state
+                var btnText = fightButton.GetComponentInChildren<Text>();
+                if (btnText != null)
+                {
+                    btnText.text = ss.isReady ? "✓ READY" : "⚔ READY";
+                }
+            }
+            else
+            {
+                timerText.text = ss.phase;
+                fightButton.gameObject.SetActive(false);
+            }
+
+            // Multiplayer always shows scout/progress buttons
+            if (scoutButton != null)
+            {
+                scoutButton.gameObject.SetActive(isPlanning);
+            }
+            if (progressButton != null)
+            {
+                progressButton.gameObject.SetActive(true);
+            }
+
+            // Show opponent info during combat from matchups
+            if (opponentInfoText != null)
+            {
+                bool showOpponentInfo = isCombat || ss.phase == "results";
+                opponentInfoText.gameObject.SetActive(showOpponentInfo);
+
+                if (showOpponentInfo && ss.matchups != null && ss.matchups.Count > 0)
+                {
+                    // Find the matchup involving local player
+                    foreach (var matchup in ss.matchups)
+                    {
+                        if (matchup.player1 == ss.localPlayerId || matchup.player2 == ss.localPlayerId)
+                        {
+                            string opponentId = matchup.player1 == ss.localPlayerId ? matchup.player2 : matchup.player1;
+                            var opponent = ss.GetOpponentData(opponentId);
+                            if (opponent != null)
+                            {
+                                opponentInfoText.text = $"vs {opponent.name} (HP: {opponent.health})";
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Show "My Board" button during combat to allow returning to your board
+            if (myBoardButton != null)
+            {
+                myBoardButton.gameObject.SetActive(isCombat);
+            }
         }
 
         private void UpdatePhaseUI()
         {
+            // Multiplayer mode - use server phase
+            if (IsMultiplayer)
+            {
+                UpdatePhaseUIMultiplayer();
+                return;
+            }
+
             GamePhase currentPhase = state.round.phase;
-            
+
             // Only rebuild selection UI when phase changes
             bool phaseChanged = currentPhase != lastShownPhase;
-            
+
             switch (currentPhase)
             {
                 case GamePhase.CrestSelect:
@@ -1275,7 +1919,7 @@ namespace Crestforge.UI
                         selectionShown = true;
                     }
                     shopPanel.gameObject.SetActive(false);
-                    benchPanel.gameObject.SetActive(false);
+                    benchPanel?.gameObject.SetActive(false);
                     break;
 
                 case GamePhase.ItemSelect:
@@ -1285,25 +1929,36 @@ namespace Crestforge.UI
                         selectionShown = true;
                     }
                     shopPanel.gameObject.SetActive(false);
-                    benchPanel.gameObject.SetActive(false);
+                    benchPanel?.gameObject.SetActive(false);
                     break;
 
                 case GamePhase.Planning:
                     selectionPanel.gameObject.SetActive(false);
                     selectionShown = false;
-                    shopPanel.gameObject.SetActive(true);
-                    benchPanel.gameObject.SetActive(true);
-                    UpdateShop();
+                    // Hide shop during PvE intro round (round 1) - player just uses their starter unit
+                    bool isPvEIntro = RoundManager.Instance != null && RoundManager.Instance.IsPvEIntroRound();
+                    shopPanel.gameObject.SetActive(!isPvEIntro);
+                    benchPanel?.gameObject.SetActive(false); // Bench UI disabled - using 3D bench
+                    itemInventoryPanel?.gameObject.SetActive(true);
+                    if (!isPvEIntro)
+                    {
+                        UpdateShop();
+                        UpdateShopButtons();
+                    }
                     UpdateBench();
-                    UpdateShopButtons();
+                    UpdateItemInventory();
                     break;
 
                 case GamePhase.Combat:
                 case GamePhase.Results:
                     selectionPanel.gameObject.SetActive(false);
                     selectionShown = false;
-                    shopPanel.gameObject.SetActive(true);
-                    benchPanel.gameObject.SetActive(true);
+                    // Hide shop during PvE intro round
+                    bool isPvEIntroCombat = RoundManager.Instance != null && RoundManager.Instance.IsPvEIntroRound();
+                    shopPanel.gameObject.SetActive(!isPvEIntroCombat);
+                    benchPanel?.gameObject.SetActive(false); // Bench UI disabled - using 3D bench
+                    itemInventoryPanel?.gameObject.SetActive(true);
+                    // Scouting UI now handles its own visibility during combat
                     break;
 
                 case GamePhase.GameOver:
@@ -1314,12 +1969,163 @@ namespace Crestforge.UI
                     }
                     break;
             }
-            
+
             lastShownPhase = currentPhase;
+        }
+
+        private string lastMultiplayerPhase = "";
+
+        private bool multiplayerCrestSelectionShown = false;
+        private bool multiplayerItemSelectionShown = false;
+
+        private void UpdatePhaseUIMultiplayer()
+        {
+            var ss = serverState;
+            string currentPhase = ss.phase;
+
+            bool phaseChanged = currentPhase != lastMultiplayerPhase;
+
+            // Check for pending selections (from consumables like crest_token or item_anvil)
+            bool hasPendingCrestSelection = ss.pendingCrestSelection != null && ss.pendingCrestSelection.Count > 0;
+            bool hasPendingItemSelection = ss.pendingItemSelection != null && ss.pendingItemSelection.Count > 0;
+
+            switch (currentPhase)
+            {
+                case "waiting":
+                    // Waiting for game to start - hide shop
+                    shopPanel.gameObject.SetActive(false);
+                    benchPanel?.gameObject.SetActive(false);
+                    selectionPanel.gameObject.SetActive(false);
+                    multiplayerCrestSelectionShown = false;
+                    multiplayerItemSelectionShown = false;
+                    break;
+
+                case "planning":
+                    // Check if we have pending selections to show
+                    if (hasPendingCrestSelection)
+                    {
+                        if (!multiplayerCrestSelectionShown)
+                        {
+                            ShowCrestSelectionMultiplayer();
+                            multiplayerCrestSelectionShown = true;
+                        }
+                        shopPanel.gameObject.SetActive(false);
+                    }
+                    else if (hasPendingItemSelection)
+                    {
+                        if (!multiplayerItemSelectionShown)
+                        {
+                            ShowItemSelectionMultiplayer();
+                            multiplayerItemSelectionShown = true;
+                        }
+                        shopPanel.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        // No pending selections - show normal planning UI
+                        selectionPanel.gameObject.SetActive(false);
+                        selectionShown = false;
+                        multiplayerCrestSelectionShown = false;
+                        multiplayerItemSelectionShown = false;
+                        shopPanel.gameObject.SetActive(true);
+                        UpdateShop();
+                        UpdateShopButtons();
+                    }
+                    benchPanel?.gameObject.SetActive(false);
+                    itemInventoryPanel?.gameObject.SetActive(true);
+                    UpdateItemInventory();
+                    break;
+
+                case "combat":
+                case "results":
+                    // Check if we have pending selections to show (consumables can be used in any phase)
+                    if (hasPendingCrestSelection)
+                    {
+                        if (!multiplayerCrestSelectionShown)
+                        {
+                            ShowCrestSelectionMultiplayer();
+                            multiplayerCrestSelectionShown = true;
+                        }
+                        shopPanel.gameObject.SetActive(false);
+                    }
+                    else if (hasPendingItemSelection)
+                    {
+                        if (!multiplayerItemSelectionShown)
+                        {
+                            ShowItemSelectionMultiplayer();
+                            multiplayerItemSelectionShown = true;
+                        }
+                        shopPanel.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        selectionPanel.gameObject.SetActive(false);
+                        selectionShown = false;
+                        multiplayerCrestSelectionShown = false;
+                        multiplayerItemSelectionShown = false;
+                        shopPanel.gameObject.SetActive(true);
+                        // Refresh shop so players can buy during combat/results
+                        UpdateShop();
+                        UpdateShopButtons();
+                    }
+                    benchPanel?.gameObject.SetActive(false);
+                    itemInventoryPanel?.gameObject.SetActive(true);
+                    UpdateItemInventory();
+                    // Scouting UI now handles its own visibility during combat
+                    break;
+
+                case "gameOver":
+                    if (phaseChanged || !selectionShown)
+                    {
+                        ShowGameOverMultiplayer();
+                        selectionShown = true;
+                    }
+                    break;
+            }
+
+            lastMultiplayerPhase = currentPhase;
+        }
+
+        private void ShowGameOverMultiplayer()
+        {
+            selectionPanel.gameObject.SetActive(true);
+            ClearSelectionPanel();
+
+            var ss = serverState;
+            bool victory = ss.health > 0;
+
+            Text title = CreateText(victory ? "VICTORY!" : "DEFEAT", selectionPanel, 0);
+            title.fontSize = 36;
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+            title.color = victory ? new Color(1f, 0.85f, 0.3f) : new Color(0.8f, 0.3f, 0.3f);
+            title.GetComponent<LayoutElement>().preferredHeight = 50;
+
+            Text infoText = CreateText($"Round {ss.round}", selectionPanel, 0);
+            infoText.fontSize = 20;
+            infoText.alignment = TextAnchor.MiddleCenter;
+            infoText.GetComponent<LayoutElement>().preferredHeight = 30;
+
+            // Return to lobby button
+            CreateSelectionCard("Return to Lobby", "Leave the game", new Color(0.5f, 0.5f, 0.6f), () => {
+                NetworkManager.Instance?.LeaveRoom();
+                if (LobbyUI.Instance != null)
+                {
+                    gameObject.SetActive(false);
+                    LobbyUI.Instance.Show();
+                }
+            });
         }
 
         private void UpdateShop()
         {
+            // Multiplayer mode - use server shop data
+            if (IsMultiplayer)
+            {
+                UpdateShopMultiplayer();
+                return;
+            }
+
             if (state.shop == null || state.shop.availableUnits == null) return;
 
             for (int i = 0; i < shopCards.Count; i++)
@@ -1328,7 +2134,7 @@ namespace Crestforge.UI
                 {
                     var unit = state.shop.availableUnits[i];
                     shopCards[i].SetUnit(unit);
-                    
+
                     // Grey out if can't afford
                     if (unit != null && unit.template != null)
                     {
@@ -1343,14 +2149,40 @@ namespace Crestforge.UI
             }
         }
 
+        private void UpdateShopMultiplayer()
+        {
+            var ss = serverState;
+            if (ss.shop == null) return;
+
+            for (int i = 0; i < shopCards.Count; i++)
+            {
+                if (i < ss.shop.Length && ss.shop[i] != null)
+                {
+                    var serverUnit = ss.shop[i];
+                    shopCards[i].SetServerUnit(serverUnit);
+
+                    // Grey out if can't afford
+                    bool canAfford = ss.gold >= serverUnit.cost;
+                    shopCards[i].SetInteractable(canAfford);
+                }
+                else
+                {
+                    shopCards[i].SetServerUnit(null);
+                }
+            }
+        }
+
         private void UpdateBench()
         {
+            // Bench UI is disabled - 3D bench is handled by BoardManager3D
+            if (benchCards == null || benchCards.Count == 0) return;
+
             for (int i = 0; i < benchCards.Count; i++)
             {
-                if (state.bench != null && i < state.bench.Count)
+                if (state.bench != null && i < state.bench.Length)
                 {
-                    benchCards[i].SetUnit(state.bench[i]);
-                    benchCards[i].SetInteractable(true);
+                    benchCards[i].SetUnit(state.bench[i]); // May be null for empty slots
+                    benchCards[i].SetInteractable(state.bench[i] != null);
                 }
                 else
                 {
@@ -1359,10 +2191,464 @@ namespace Crestforge.UI
             }
         }
 
+        private void UpdateItemInventory()
+        {
+            if (itemSlots == null) return;
+
+            // Multiplayer mode - use server state
+            if (IsMultiplayer && serverState != null)
+            {
+                for (int i = 0; i < itemSlots.Count; i++)
+                {
+                    if (serverState.itemInventory != null && i < serverState.itemInventory.Count)
+                    {
+                        itemSlots[i].SetServerItem(serverState.itemInventory[i], i);
+                    }
+                    else
+                    {
+                        itemSlots[i].SetServerItem(null, -1);
+                    }
+                }
+                return;
+            }
+
+            // Single-player mode
+            if (state == null) return;
+
+            for (int i = 0; i < itemSlots.Count; i++)
+            {
+                if (state.itemInventory != null && i < state.itemInventory.Count)
+                {
+                    itemSlots[i].SetItem(state.itemInventory[i]);
+                }
+                else
+                {
+                    itemSlots[i].SetItem(null);
+                }
+            }
+        }
+
+        public void RefreshItemInventory()
+        {
+            UpdateItemInventory();
+        }
+
+        public void RefreshBench()
+        {
+            UpdateBench();
+        }
+
+        /// <summary>
+        /// Show sell mode overlay when dragging a unit
+        /// </summary>
+        public void ShowSellMode(UnitInstance unit)
+        {
+            if (unit == null || sellOverlay == null) return;
+
+            unitBeingDragged = unit;
+            isSellModeActive = true;
+
+            int sellValue = unit.GetSellValue();
+            sellText.text = $"Sell {unit.template.unitName} for ${sellValue}";
+
+            // Hide shop and show sell overlay
+            if (shopPanel != null)
+            {
+                shopPanel.gameObject.SetActive(false);
+            }
+            sellOverlay.SetActive(true);
+        }
+
+        /// <summary>
+        /// Hide sell mode overlay
+        /// </summary>
+        public void HideSellMode()
+        {
+            isSellModeActive = false;
+            unitBeingDragged = null;
+
+            if (sellOverlay != null)
+            {
+                sellOverlay.SetActive(false);
+            }
+
+            // Restore shop panel visibility (respecting PvE intro state)
+            if (shopPanel != null && state != null)
+            {
+                bool isPvEIntro = Crestforge.Systems.RoundManager.Instance?.IsPvEIntroRound() ?? false;
+                shopPanel.gameObject.SetActive(!isPvEIntro);
+            }
+        }
+
+        /// <summary>
+        /// Try to sell the currently dragged unit
+        /// </summary>
+        public bool TrySellUnit()
+        {
+            if (unitBeingDragged == null || state == null) return false;
+
+            state.SellUnit(unitBeingDragged);
+            Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
+
+            // Refresh UI
+            UpdateTopBar();
+            RefreshBench();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Check if sell mode is active
+        /// </summary>
+        public bool IsSellModeActive => isSellModeActive;
+
+        /// <summary>
+        /// Get the unit currently being dragged
+        /// </summary>
+        public UnitInstance UnitBeingDragged => unitBeingDragged;
+
+        public void ShowItemTooltip(ItemData item, Vector3 position)
+        {
+            if (item == null || tooltipPanel == null) return;
+
+            // Don't override pinned tooltip on hover
+            if (isTooltipPinned) return;
+
+            tooltipPanel.gameObject.SetActive(true);
+
+            // Reset to default anchored position (middle-right, set in CreateTooltip)
+            tooltipPanel.anchoredPosition = new Vector2(-15, 50);
+
+            PopulateItemTooltip(item);
+        }
+
+        public void HideItemTooltip()
+        {
+            if (!isTooltipPinned && tooltipPanel != null)
+            {
+                tooltipPanel.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Show item info temporarily while unit tooltip is pinned
+        /// </summary>
+        public void ShowItemInfoTemporary(ItemData item)
+        {
+            if (item == null || tooltipPanel == null) return;
+
+            showingTemporaryItemInfo = true;
+            PopulateItemTooltip(item);
+        }
+
+        /// <summary>
+        /// Restore the unit tooltip after temporarily showing item info
+        /// </summary>
+        public void RestoreUnitTooltip()
+        {
+            if (!showingTemporaryItemInfo) return;
+            showingTemporaryItemInfo = false;
+
+            // Restore the unit tooltip if we have a unit pinned
+            if (isTooltipPinned && tooltipUnit != null)
+            {
+                ShowTooltip(tooltipUnit);
+            }
+        }
+
+        public void ShowItemTooltipPinned(ItemData item)
+        {
+            if (item == null || tooltipPanel == null) return;
+
+            isTooltipPinned = true;
+            tooltipPanel.gameObject.SetActive(true);
+
+            // Reset to default anchored position (middle-right, set in CreateTooltip)
+            tooltipPanel.anchoredPosition = new Vector2(-15, 50);
+
+            PopulateItemTooltip(item);
+        }
+
+        public void ToggleItemTooltipPin(ItemData item)
+        {
+            if (item == null || tooltipPanel == null) return;
+
+            if (isTooltipPinned && tooltipPanel.gameObject.activeSelf)
+            {
+                // Already pinned, unpin and hide
+                isTooltipPinned = false;
+                tooltipPanel.gameObject.SetActive(false);
+            }
+            else
+            {
+                // Pin the tooltip
+                ShowItemTooltipPinned(item);
+            }
+        }
+
+        private void PopulateItemTooltip(ItemData item)
+        {
+            if (tooltipTitle != null) tooltipTitle.text = item.itemName;
+            if (tooltipCost != null) tooltipCost.text = item.rarity.ToString();
+            if (tooltipStats != null) tooltipStats.text = GetItemStatsText(item);
+            if (tooltipTraits != null) tooltipTraits.text = item.description;
+            if (tooltipAbility != null) tooltipAbility.text = GetItemEffectText(item);
+        }
+
+        private string GetItemStatsText(ItemData item)
+        {
+            var stats = new System.Collections.Generic.List<string>();
+            if (item.bonusHealth != 0) stats.Add($"+{item.bonusHealth} Health");
+            if (item.bonusAttack != 0) stats.Add($"+{item.bonusAttack} Attack");
+            if (item.bonusArmor != 0) stats.Add($"+{item.bonusArmor} Armor");
+            if (item.bonusMagicResist != 0) stats.Add($"+{item.bonusMagicResist} Magic Resist");
+            if (item.bonusAttackSpeed != 0) stats.Add($"+{(int)(item.bonusAttackSpeed * 100)}% Attack Speed");
+            if (item.bonusMana != 0) stats.Add($"+{item.bonusMana} Mana");
+            return string.Join("\n", stats);
+        }
+
+        private string GetItemEffectText(ItemData item)
+        {
+            if (item.effect == ItemEffect.None) return "";
+
+            return item.effect switch
+            {
+                ItemEffect.Lifesteal => $"Lifesteal: Heal for {(int)(item.effectValue1 * 100)}% of damage dealt",
+                ItemEffect.Burn => $"Burn: Deal {item.effectValue1} damage over {item.effectValue2}s",
+                ItemEffect.CriticalStrike => $"Crit: {(int)(item.effectValue1 * 100)}% chance for {item.effectValue2}x damage",
+                ItemEffect.Thorns => $"Thorns: Reflect {(int)(item.effectValue1 * 100)}% of damage taken",
+                ItemEffect.DamageReduction => $"Reduce damage taken by {(int)(item.effectValue1 * 100)}%",
+                ItemEffect.AbilityPower => $"Increase ability damage by {(int)(item.effectValue1 * 100)}%",
+                ItemEffect.ManaOnHit => $"Gain {item.effectValue1} mana on hit",
+                _ => ""
+            };
+        }
+
+        // ===== Crest Tooltip Methods =====
+
+        public void ShowCrestTooltip(CrestData crest)
+        {
+            if (crest == null || crestTooltipPanel == null) return;
+
+            // Don't override pinned tooltip on hover
+            if (isCrestTooltipPinned) return;
+
+            crestTooltipPanel.gameObject.SetActive(true);
+            PopulateCrestTooltip(crest);
+        }
+
+        public void HideCrestTooltip()
+        {
+            if (!isCrestTooltipPinned && crestTooltipPanel != null)
+            {
+                crestTooltipPanel.gameObject.SetActive(false);
+            }
+        }
+
+        public void ShowCrestTooltipPinned(CrestData crest)
+        {
+            if (crest == null || crestTooltipPanel == null) return;
+
+            isCrestTooltipPinned = true;
+            crestTooltipPanel.gameObject.SetActive(true);
+            PopulateCrestTooltip(crest);
+        }
+
+        public void UnpinCrestTooltip()
+        {
+            isCrestTooltipPinned = false;
+            if (crestTooltipPanel != null)
+            {
+                crestTooltipPanel.gameObject.SetActive(false);
+            }
+        }
+
+        private void PopulateCrestTooltip(CrestData crest)
+        {
+            if (crestTooltipTitle != null)
+            {
+                crestTooltipTitle.text = crest.crestName;
+                crestTooltipTitle.color = crest.type == CrestType.Minor ?
+                    new Color(0.8f, 0.6f, 1f) : new Color(1f, 0.8f, 0.3f);
+            }
+
+            if (crestTooltipType != null)
+            {
+                crestTooltipType.text = crest.type == CrestType.Minor ? "Minor Crest" : "Major Crest";
+            }
+
+            if (crestTooltipDescription != null)
+            {
+                crestTooltipDescription.text = crest.description;
+            }
+
+            if (crestTooltipBonus != null)
+            {
+                crestTooltipBonus.text = GetCrestBonusText(crest);
+            }
+        }
+
+        private string GetCrestBonusText(CrestData crest)
+        {
+            // Generate bonus text based on crest effect
+            string bonusText = crest.effect switch
+            {
+                CrestEffect.AllUnitsShield => $"All units gain {crest.effectValue1} shield at combat start",
+                CrestEffect.AllUnitsPoison => $"All attacks poison for {crest.effectValue1} damage over {crest.effectValue2}s",
+                CrestEffect.AllUnitsBurn => $"All attacks burn for {crest.effectValue1} damage over {crest.effectValue2}s",
+                CrestEffect.AllUnitsLifesteal => $"All units lifesteal {(int)(crest.effectValue1 * 100)}%",
+                CrestEffect.LowHealthDamageBoost => $"Units below {(int)(crest.effectValue1 * 100)}% HP deal {(int)(crest.effectValue2 * 100)}% more damage",
+                CrestEffect.LowHealthDefenseBoost => $"Units below {(int)(crest.effectValue1 * 100)}% HP take {(int)(crest.effectValue2 * 100)}% less damage",
+                CrestEffect.HighHealthDamageBoost => $"Bonus damage to targets above {(int)(crest.effectValue1 * 100)}% HP",
+                CrestEffect.AllyDeathAttackSpeed => $"When ally dies, others gain {(int)(crest.effectValue1 * 100)}% attack speed for {crest.effectValue2}s",
+                CrestEffect.AllyDeathHeal => $"When ally dies, others heal for {crest.effectValue1}",
+                CrestEffect.AllAbilityDamage => $"All abilities deal {(int)(crest.effectValue1 * 100)}% more damage",
+                CrestEffect.AllManaCostReduction => $"All abilities cost {(int)(crest.effectValue1 * 100)}% less mana",
+                CrestEffect.TraitAttackSpeed => $"Units with {crest.synergyTrait?.traitName ?? "synergy trait"} gain {(int)(crest.effectValue1 * 100)}% attack speed",
+                CrestEffect.TraitDamage => $"Units with {crest.synergyTrait?.traitName ?? "synergy trait"} deal {(int)(crest.effectValue1 * 100)}% more damage",
+                CrestEffect.TraitManaGain => $"Units with {crest.synergyTrait?.traitName ?? "synergy trait"} gain {(int)(crest.effectValue1 * 100)}% more mana",
+                _ => GetCrestStatBonusText(crest)
+            };
+            return bonusText;
+        }
+
+        private string GetCrestStatBonusText(CrestData crest)
+        {
+            // Build stat bonus text for crests with no special effect
+            var bonuses = new System.Collections.Generic.List<string>();
+            if (crest.bonusHealth != 0) bonuses.Add($"+{crest.bonusHealth} Health");
+            if (crest.bonusAttack != 0) bonuses.Add($"+{crest.bonusAttack} Attack");
+            if (crest.bonusArmor != 0) bonuses.Add($"+{crest.bonusArmor} Armor");
+            if (crest.bonusMagicResist != 0) bonuses.Add($"+{crest.bonusMagicResist} Magic Resist");
+            if (crest.bonusAttackSpeed != 0) bonuses.Add($"+{(int)(crest.bonusAttackSpeed * 100)}% Attack Speed");
+            if (crest.bonusMana != 0) bonuses.Add($"+{crest.bonusMana} Mana");
+
+            if (bonuses.Count > 0)
+                return string.Join(", ", bonuses) + " to all units";
+            return "Passive bonus active";
+        }
+
+        /// <summary>
+        /// Show crest tooltip for server crest (multiplayer mode)
+        /// </summary>
+        public void ShowServerCrestTooltip(ServerCrestData serverCrest)
+        {
+            if (serverCrest == null || crestTooltipPanel == null) return;
+
+            // Don't override pinned tooltip on hover
+            if (isCrestTooltipPinned) return;
+
+            crestTooltipPanel.gameObject.SetActive(true);
+            PopulateServerCrestTooltip(serverCrest);
+        }
+
+        /// <summary>
+        /// Show pinned crest tooltip for server crest (multiplayer mode)
+        /// </summary>
+        public void ShowServerCrestTooltipPinned(ServerCrestData serverCrest)
+        {
+            if (serverCrest == null || crestTooltipPanel == null) return;
+
+            isCrestTooltipPinned = true;
+            crestTooltipPanel.gameObject.SetActive(true);
+            PopulateServerCrestTooltip(serverCrest);
+        }
+
+        private void PopulateServerCrestTooltip(ServerCrestData serverCrest)
+        {
+            bool isMinor = serverCrest.type == "minor";
+
+            if (crestTooltipTitle != null)
+            {
+                crestTooltipTitle.text = serverCrest.name ?? serverCrest.crestId;
+                crestTooltipTitle.color = isMinor ?
+                    new Color(0.8f, 0.6f, 1f) : new Color(1f, 0.8f, 0.3f);
+            }
+
+            if (crestTooltipType != null)
+            {
+                crestTooltipType.text = isMinor ? "Minor Crest" : "Major Crest";
+            }
+
+            if (crestTooltipDescription != null)
+            {
+                crestTooltipDescription.text = serverCrest.description ?? "";
+            }
+
+            if (crestTooltipBonus != null)
+            {
+                crestTooltipBonus.text = GetServerCrestBonusText(serverCrest);
+            }
+        }
+
+        private string GetServerCrestBonusText(ServerCrestData serverCrest)
+        {
+            // For minor crests, show the granted trait
+            if (!string.IsNullOrEmpty(serverCrest.grantsTrait))
+            {
+                return $"Grants {serverCrest.grantsTrait} trait";
+            }
+
+            // For major crests, show stat bonuses
+            if (serverCrest.teamBonus != null)
+            {
+                var bonuses = new System.Collections.Generic.List<string>();
+                var b = serverCrest.teamBonus;
+                if (b.health != 0) bonuses.Add($"+{b.health} Health");
+                if (b.attack != 0) bonuses.Add($"+{b.attack} Attack");
+                if (b.armor != 0) bonuses.Add($"+{b.armor} Armor");
+                if (b.magicResist != 0) bonuses.Add($"+{b.magicResist} Magic Resist");
+                if (b.attackSpeedPercent != 0) bonuses.Add($"+{(int)(b.attackSpeedPercent * 100)}% Attack Speed");
+                if (b.abilityPower != 0) bonuses.Add($"+{b.abilityPower} Ability Power");
+                if (b.lifesteal != 0) bonuses.Add($"+{b.lifesteal}% Lifesteal");
+
+                if (bonuses.Count > 0)
+                    return string.Join(", ", bonuses) + " to all units";
+            }
+
+            return "Passive bonus active";
+        }
+
+        public void UpdateCrestDisplay()
+        {
+            // Multiplayer mode - use server crest data
+            if (IsMultiplayer && serverState != null)
+            {
+                if (minorCrestSlot != null)
+                {
+                    minorCrestSlot.SetServerCrest(serverState.minorCrest);
+                }
+                return;
+            }
+
+            if (minorCrestSlot == null || state == null) return;
+
+            // Update minor crest slot with the first minor crest (if any)
+            CrestData activeCrest = (state.minorCrests != null && state.minorCrests.Count > 0)
+                ? state.minorCrests[0]
+                : null;
+            minorCrestSlot.SetCrest(activeCrest);
+        }
+
         private void UpdateShopButtons()
         {
+            // Multiplayer mode
+            if (IsMultiplayer)
+            {
+                var ss = serverState;
+                bool mpCanReroll = ss.gold >= 2; // REROLL_COST
+                bool mpCanBuyXP = ss.gold >= 4 && ss.level < 9; // XP_COST, MAX_LEVEL
+
+                rerollButton.interactable = mpCanReroll;
+                buyXPButton.interactable = mpCanBuyXP;
+
+                string mpLockIcon = ss.shopLocked ? "🔒" : "🔓";
+                lockButton.GetComponentInChildren<Text>().text = mpLockIcon;
+                return;
+            }
+
             bool canReroll = state.player.gold >= GameConstants.Economy.REROLL_COST;
-            bool canBuyXP = state.player.gold >= GameConstants.Economy.XP_COST && 
+            bool canBuyXP = state.player.gold >= GameConstants.Economy.XP_COST &&
                            state.player.level < GameConstants.Leveling.MAX_LEVEL;
 
             rerollButton.interactable = canReroll;
@@ -1414,13 +2700,135 @@ namespace Crestforge.UI
             }
         }
 
+        /// <summary>
+        /// Show crest selection panel for multiplayer mode (uses server data)
+        /// </summary>
+        private void ShowCrestSelectionMultiplayer()
+        {
+            selectionPanel.gameObject.SetActive(true);
+            ClearSelectionPanel();
+
+            Text title = CreateText("SELECT A CREST", selectionPanel, 0);
+            title.fontSize = 28;
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+            title.GetComponent<LayoutElement>().preferredHeight = 40;
+
+            var ss = serverState;
+            if (ss.pendingCrestSelection == null || ss.pendingCrestSelection.Count == 0) return;
+
+            for (int i = 0; i < ss.pendingCrestSelection.Count; i++)
+            {
+                var crest = ss.pendingCrestSelection[i];
+                if (crest == null) continue;
+
+                int choiceIndex = i;
+                Color crestColor = crest.type == "minor"
+                    ? new Color(0.4f, 0.5f, 0.6f)  // Minor crest color
+                    : new Color(0.6f, 0.4f, 0.2f); // Major crest color
+
+                string description = crest.description ?? "";
+                if (!string.IsNullOrEmpty(crest.grantsTrait))
+                {
+                    description = $"+1 {crest.grantsTrait}\n{description}";
+                }
+
+                CreateSelectionCard(
+                    crest.name ?? crest.crestId,
+                    description,
+                    crestColor,
+                    () => OnCrestSelectedMultiplayer(choiceIndex)
+                );
+            }
+        }
+
+        /// <summary>
+        /// Show item selection panel for multiplayer mode (uses server data)
+        /// </summary>
+        private void ShowItemSelectionMultiplayer()
+        {
+            selectionPanel.gameObject.SetActive(true);
+            ClearSelectionPanel();
+
+            Text title = CreateText("SELECT AN ITEM", selectionPanel, 0);
+            title.fontSize = 28;
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+            title.GetComponent<LayoutElement>().preferredHeight = 40;
+
+            var ss = serverState;
+            if (ss.pendingItemSelection == null || ss.pendingItemSelection.Count == 0)
+            {
+                Debug.LogWarning("[GameUI] pendingItemSelection is null or empty!");
+                return;
+            }
+
+            for (int i = 0; i < ss.pendingItemSelection.Count; i++)
+            {
+                var item = ss.pendingItemSelection[i];
+                if (item == null)
+                {
+                    Debug.LogWarning($"[GameUI] Item at index {i} is null");
+                    continue;
+                }
+
+                int choiceIndex = i;
+                Color itemColor = new Color(1f, 0.8f, 0.4f);  // Gold for all items
+
+                CreateSelectionCard(
+                    item.name ?? item.itemId,
+                    item.description ?? "",
+                    itemColor,
+                    () => OnItemSelectedMultiplayer(choiceIndex)
+                );
+            }
+        }
+
+        private void OnCrestSelectedMultiplayer(int choiceIndex)
+        {
+            Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+            Crestforge.Visuals.AudioManager.Instance?.PlayLevelUp();
+
+            serverState.SelectCrestChoice(choiceIndex);
+
+            // Hide selection panel - it will be re-shown if there are more selections pending
+            selectionPanel.gameObject.SetActive(false);
+            multiplayerCrestSelectionShown = false;
+
+            // Update the crest display UI
+            UpdateCrestDisplay();
+        }
+
+        private void OnItemSelectedMultiplayer(int choiceIndex)
+        {
+            Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+            Crestforge.Visuals.AudioManager.Instance?.PlayLevelUp();
+
+            serverState.SelectItemChoice(choiceIndex);
+
+            // Hide selection panel - it will be re-shown if there are more selections pending
+            selectionPanel.gameObject.SetActive(false);
+            multiplayerItemSelectionShown = false;
+
+            // Update inventory display
+            UpdateItemInventory();
+        }
+
         private void ShowGameOver()
         {
             selectionPanel.gameObject.SetActive(true);
             ClearSelectionPanel();
 
             bool victory = state.player.health > 0;
-            
+            bool isPvPMode = state.currentGameMode == GameMode.PvP;
+
+            // Check for PvP victory condition (all opponents eliminated)
+            if (isPvPMode && victory && OpponentManager.Instance != null)
+            {
+                var activeOpponents = OpponentManager.Instance.GetActiveOpponents();
+                victory = activeOpponents.Count == 0;
+            }
+
             Text title = CreateText(victory ? "🏆 VICTORY! 🏆" : "💀 DEFEAT 💀", selectionPanel, 0);
             title.fontSize = 36;
             title.fontStyle = FontStyle.Bold;
@@ -1428,13 +2836,37 @@ namespace Crestforge.UI
             title.color = victory ? new Color(1f, 0.85f, 0.3f) : new Color(0.8f, 0.3f, 0.3f);
             title.GetComponent<LayoutElement>().preferredHeight = 50;
 
-            Text info = CreateText($"Made it to Round {state.round.currentRound}", selectionPanel, 0);
+            // PvP-specific info
+            string infoText;
+            if (isPvPMode)
+            {
+                if (victory)
+                {
+                    infoText = $"All opponents eliminated! (Round {state.round.currentRound})";
+                }
+                else
+                {
+                    int eliminatedCount = OpponentManager.Instance != null
+                        ? 3 - OpponentManager.Instance.GetActiveOpponents().Count
+                        : 0;
+                    infoText = $"Eliminated {eliminatedCount} opponents (Round {state.round.currentRound})";
+                }
+            }
+            else
+            {
+                infoText = $"Made it to Round {state.round.currentRound}";
+            }
+
+            Text info = CreateText(infoText, selectionPanel, 0);
             info.fontSize = 20;
             info.alignment = TextAnchor.MiddleCenter;
             info.GetComponent<LayoutElement>().preferredHeight = 30;
 
-            CreateSelectionCard("Play Again", "Start a new game", 
+            CreateSelectionCard("Play Again", "Start a new game with same mode",
                 new Color(0.3f, 0.6f, 0.3f), OnPlayAgainClicked);
+
+            CreateSelectionCard("Main Menu", "Choose a different game mode",
+                new Color(0.4f, 0.4f, 0.5f), OnReturnToMenuClicked);
         }
 
         private void CreateSelectionCard(string title, string desc, Color color, System.Action onClick)
@@ -1482,8 +2914,12 @@ namespace Crestforge.UI
 
         private void UpdateTooltip()
         {
-            // Hide tooltip during non-planning phases
-            if (state.round.phase != GamePhase.Planning)
+            // Skip in multiplayer or if state not ready
+            if (IsMultiplayer) return;
+            if (state == null || state.round == null) return;
+
+            // Hide tooltip during non-planning phases (unless pinned)
+            if (state.round.phase != GamePhase.Planning && !isTooltipPinned)
             {
                 tooltipPanel.gameObject.SetActive(false);
             }
@@ -1563,6 +2999,389 @@ namespace Crestforge.UI
             {
                 tooltipAbility.text = "None";
             }
+
+            // Set items
+            tooltipUnit = unit;
+            PopulateTooltipItems(unit);
+        }
+
+        /// <summary>
+        /// Show tooltip for a server unit (multiplayer mode)
+        /// </summary>
+        public void ShowTooltip(ServerUnitData serverUnit)
+        {
+            if (serverUnit == null)
+            {
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Get the unit template from ServerGameState
+            var serverState = ServerGameState.Instance;
+            var template = serverState?.GetUnitTemplate(serverUnit.unitId);
+
+            if (template == null)
+            {
+                Debug.LogWarning($"[GameUI] Could not find template for server unit: {serverUnit.unitId}");
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            tooltipPanel.gameObject.SetActive(true);
+
+            // Set sprite
+            if (tooltipSprite != null)
+            {
+                tooltipSprite.sprite = UnitSpriteGenerator.GetSprite(serverUnit.unitId);
+                tooltipSprite.enabled = true;
+            }
+
+            // Set name with cost color
+            tooltipTitle.text = serverUnit.name ?? template.unitName;
+            tooltipTitle.color = GetCostColor(serverUnit.cost);
+
+            // Set cost and stars
+            tooltipCost.text = $"${serverUnit.cost}  " + new string('★', serverUnit.starLevel);
+
+            // Set stats - use server stats if available, otherwise template base stats
+            string stats = "";
+            if (serverUnit.currentStats != null)
+            {
+                stats = $"HP: {serverUnit.currentStats.health}    ATK: {serverUnit.currentStats.attack}\n";
+                stats += $"Armor: {serverUnit.currentStats.armor}    Magic Resist: {serverUnit.currentStats.magicResist}\n";
+                stats += $"Attack Speed: {serverUnit.currentStats.attackSpeed:F2}    Range: {serverUnit.currentStats.range}";
+            }
+            else
+            {
+                stats = $"HP: {template.baseStats.health}    ATK: {template.baseStats.attack}\n";
+                stats += $"Armor: {template.baseStats.armor}    Magic Resist: {template.baseStats.magicResist}\n";
+                stats += $"Attack Speed: {template.baseStats.attackSpeed:F2}    Range: {template.baseStats.range}";
+            }
+            tooltipStats.text = stats;
+
+            // Set traits
+            string traits = "";
+            if (serverUnit.traits != null)
+            {
+                traits = string.Join(", ", serverUnit.traits);
+            }
+            else if (template.traits != null)
+            {
+                foreach (var trait in template.traits)
+                {
+                    if (trait != null)
+                    {
+                        if (traits.Length > 0) traits += ", ";
+                        traits += trait.traitName;
+                    }
+                }
+            }
+            tooltipTraits.text = traits.Length > 0 ? traits : "None";
+
+            // Set ability
+            if (template.ability != null)
+            {
+                string abilityText = template.ability.abilityName;
+                if (!string.IsNullOrEmpty(template.ability.description))
+                    abilityText += $"\n{template.ability.description}";
+                abilityText += $"\nMana: {template.baseStats.maxMana}";
+                if (template.ability.baseDamage > 0)
+                    abilityText += $"  |  Damage: {template.ability.baseDamage}";
+                if (template.ability.baseHealing > 0)
+                    abilityText += $"  |  Heal: {template.ability.baseHealing}";
+                tooltipAbility.text = abilityText;
+            }
+            else
+            {
+                tooltipAbility.text = "None";
+            }
+
+            // Set items
+            tooltipUnit = null; // Clear UnitInstance reference
+            PopulateTooltipItems(serverUnit);
+        }
+
+        /// <summary>
+        /// Show tooltip and keep it pinned for server units (multiplayer mode)
+        /// </summary>
+        public void ShowTooltipPinned(ServerUnitData serverUnit)
+        {
+            isTooltipPinned = true;
+            ShowTooltip(serverUnit);
+        }
+
+        /// <summary>
+        /// Show tooltip for combat units (during multiplayer combat)
+        /// </summary>
+        public void ShowTooltip(ServerCombatUnit combatUnit)
+        {
+            if (combatUnit == null)
+            {
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Get the unit template from ServerGameState
+            var serverState = ServerGameState.Instance;
+            var template = serverState?.GetUnitTemplate(combatUnit.unitId);
+
+            if (template == null)
+            {
+                Debug.LogWarning($"[GameUI] Could not find template for combat unit: {combatUnit.unitId}");
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            tooltipPanel.gameObject.SetActive(true);
+
+            // Set sprite
+            if (tooltipSprite != null)
+            {
+                tooltipSprite.sprite = UnitSpriteGenerator.GetSprite(combatUnit.unitId);
+                tooltipSprite.enabled = true;
+            }
+
+            // Set name with cost color
+            tooltipTitle.text = combatUnit.name ?? template.unitName;
+            tooltipTitle.color = GetCostColor(template.cost);
+
+            // Set cost (from template) and determine star level from stats
+            int starLevel = 1;
+            if (combatUnit.maxHealth > template.baseStats.health * 2.5f) starLevel = 3;
+            else if (combatUnit.maxHealth > template.baseStats.health * 1.5f) starLevel = 2;
+            tooltipCost.text = $"${template.cost}  " + new string('★', starLevel);
+
+            // Set stats from combat unit
+            string stats = "";
+            if (combatUnit.stats != null)
+            {
+                stats = $"HP: {combatUnit.health}/{combatUnit.maxHealth}    ATK: {combatUnit.stats.attack}\n";
+                stats += $"Armor: {combatUnit.stats.armor}    Magic Resist: {combatUnit.stats.magicResist}\n";
+                stats += $"Attack Speed: {combatUnit.stats.attackSpeed:F2}    Range: {combatUnit.stats.range}";
+            }
+            else
+            {
+                stats = $"HP: {combatUnit.health}/{combatUnit.maxHealth}    ATK: {template.baseStats.attack}\n";
+                stats += $"Armor: {template.baseStats.armor}    Magic Resist: {template.baseStats.magicResist}\n";
+                stats += $"Attack Speed: {template.baseStats.attackSpeed:F2}    Range: {template.baseStats.range}";
+            }
+            tooltipStats.text = stats;
+
+            // Set traits from template
+            string traits = "";
+            if (template.traits != null)
+            {
+                foreach (var trait in template.traits)
+                {
+                    if (trait != null)
+                    {
+                        if (traits.Length > 0) traits += ", ";
+                        traits += trait.traitName;
+                    }
+                }
+            }
+            tooltipTraits.text = traits.Length > 0 ? traits : "None";
+
+            // Set ability
+            if (template.ability != null)
+            {
+                string abilityText = template.ability.abilityName;
+                if (!string.IsNullOrEmpty(template.ability.description))
+                    abilityText += $"\n{template.ability.description}";
+                abilityText += $"\nMana: {template.baseStats.maxMana}";
+                if (template.ability.baseDamage > 0)
+                    abilityText += $"  |  Damage: {template.ability.baseDamage}";
+                if (template.ability.baseHealing > 0)
+                    abilityText += $"  |  Heal: {template.ability.baseHealing}";
+                tooltipAbility.text = abilityText;
+            }
+            else
+            {
+                tooltipAbility.text = "None";
+            }
+
+            // Set items
+            tooltipUnit = null;
+            PopulateTooltipItems(combatUnit);
+        }
+
+        /// <summary>
+        /// Show tooltip and keep it pinned for combat units (during multiplayer combat)
+        /// </summary>
+        public void ShowTooltipPinned(ServerCombatUnit combatUnit)
+        {
+            isTooltipPinned = true;
+            ShowTooltip(combatUnit);
+        }
+
+        /// <summary>
+        /// Populate tooltip items for combat units (multiplayer mode - display only)
+        /// </summary>
+        private void PopulateTooltipItems(ServerCombatUnit combatUnit)
+        {
+            // Clear existing item slots
+            foreach (var slot in tooltipItemSlots)
+            {
+                if (slot != null && slot.gameObject != null)
+                    Destroy(slot.gameObject);
+            }
+            tooltipItemSlots.Clear();
+
+            if (tooltipItemContainer != null)
+            {
+                foreach (Transform child in tooltipItemContainer)
+                {
+                    Destroy(child.gameObject);
+                }
+            }
+
+            bool hasItems = combatUnit.items != null && combatUnit.items.Count > 0;
+
+            if (tooltipItemsLabel != null)
+            {
+                Transform dividerBeforeItems = tooltipItemsLabel.transform.parent.GetChild(
+                    tooltipItemsLabel.transform.GetSiblingIndex() - 1);
+                if (dividerBeforeItems != null)
+                    dividerBeforeItems.gameObject.SetActive(hasItems);
+                tooltipItemsLabel.gameObject.SetActive(hasItems);
+            }
+            if (tooltipItemContainer != null)
+            {
+                tooltipItemContainer.gameObject.SetActive(hasItems);
+            }
+
+            if (!hasItems) return;
+
+            // Create display-only item slots for combat items (no unequip during combat)
+            for (int i = 0; i < combatUnit.items.Count; i++)
+            {
+                var serverItem = combatUnit.items[i];
+                if (serverItem == null) continue;
+
+                // Use combat unit's instance ID; pass -1 for index to disable unequip
+                ServerTooltipItemSlot.Create(tooltipItemContainer, new Vector2(36, 36), serverItem, combatUnit.instanceId, -1);
+            }
+        }
+
+        private void PopulateTooltipItems(UnitInstance unit)
+        {
+            // Clear existing item slots - destroy all children of container
+            foreach (var slot in tooltipItemSlots)
+            {
+                if (slot != null && slot.gameObject != null)
+                    Destroy(slot.gameObject);
+            }
+            tooltipItemSlots.Clear();
+
+            // Also destroy any orphaned children (like server item slots)
+            if (tooltipItemContainer != null)
+            {
+                foreach (Transform child in tooltipItemContainer)
+                {
+                    Destroy(child.gameObject);
+                }
+            }
+
+            bool hasItems = unit.equippedItems != null && unit.equippedItems.Count > 0;
+
+            // Show/hide items section based on whether unit has items
+            if (tooltipItemsLabel != null)
+            {
+                // Find the divider before items label and hide it too
+                Transform dividerBeforeItems = tooltipItemsLabel.transform.parent.GetChild(
+                    tooltipItemsLabel.transform.GetSiblingIndex() - 1);
+                if (dividerBeforeItems != null)
+                    dividerBeforeItems.gameObject.SetActive(hasItems);
+                tooltipItemsLabel.gameObject.SetActive(hasItems);
+            }
+            if (tooltipItemContainer != null)
+            {
+                tooltipItemContainer.gameObject.SetActive(hasItems);
+            }
+
+            if (!hasItems) return;
+
+            // Create item slots
+            for (int i = 0; i < unit.equippedItems.Count; i++)
+            {
+                var item = unit.equippedItems[i];
+                if (item == null) continue;
+
+                var slot = TooltipItemSlot.Create(tooltipItemContainer, new Vector2(36, 36), item, unit, i);
+                tooltipItemSlots.Add(slot);
+            }
+        }
+
+        /// <summary>
+        /// Populate tooltip items for server units (multiplayer mode - display only)
+        /// </summary>
+        private void PopulateTooltipItems(ServerUnitData serverUnit)
+        {
+            // Clear existing item slots - destroy all children of container
+            foreach (var slot in tooltipItemSlots)
+            {
+                if (slot != null && slot.gameObject != null)
+                    Destroy(slot.gameObject);
+            }
+            tooltipItemSlots.Clear();
+
+            // Also destroy any orphaned children (like server item slots)
+            if (tooltipItemContainer != null)
+            {
+                foreach (Transform child in tooltipItemContainer)
+                {
+                    Destroy(child.gameObject);
+                }
+            }
+
+            bool hasItems = serverUnit.items != null && serverUnit.items.Count > 0;
+
+            // Show/hide items section based on whether unit has items
+            if (tooltipItemsLabel != null)
+            {
+                // Find the divider before items label and hide it too
+                Transform dividerBeforeItems = tooltipItemsLabel.transform.parent.GetChild(
+                    tooltipItemsLabel.transform.GetSiblingIndex() - 1);
+                if (dividerBeforeItems != null)
+                    dividerBeforeItems.gameObject.SetActive(hasItems);
+                tooltipItemsLabel.gameObject.SetActive(hasItems);
+            }
+            if (tooltipItemContainer != null)
+            {
+                tooltipItemContainer.gameObject.SetActive(hasItems);
+            }
+
+            if (!hasItems) return;
+
+            // Create draggable item slots for server items
+            for (int i = 0; i < serverUnit.items.Count; i++)
+            {
+                var serverItem = serverUnit.items[i];
+                if (serverItem == null) continue;
+                ServerTooltipItemSlot.Create(tooltipItemContainer, new Vector2(36, 36), serverItem, serverUnit.instanceId, i);
+            }
+        }
+
+        /// <summary>
+        /// Called when an item is unequipped from the tooltip
+        /// </summary>
+        public void OnItemUnequipped(UnitInstance unit, ItemData item)
+        {
+            if (unit == null || item == null) return;
+
+            // Add item back to inventory
+            GameState.Instance?.itemInventory.Add(item);
+
+            // Refresh displays
+            RefreshItemInventory();
+            RefreshBench();
+
+            // Refresh tooltip if still showing this unit
+            if (tooltipUnit == unit && tooltipPanel.gameObject.activeSelf)
+            {
+                PopulateTooltipItems(unit);
+            }
+
         }
 
         /// <summary>
@@ -1580,6 +3399,8 @@ namespace Crestforge.UI
         public void HideTooltipPinned()
         {
             isTooltipPinned = false;
+            showingTemporaryItemInfo = false;
+            tooltipUnit = null;
             tooltipPanel.gameObject.SetActive(false);
         }
 
@@ -1599,8 +3420,11 @@ namespace Crestforge.UI
                 // Portrait mode - bench above shop
                 shopPanel.sizeDelta = new Vector2(0, 180);
                 shopPanel.anchoredPosition = new Vector2(0, 30); // Shop at bottom
-                benchPanel.sizeDelta = new Vector2(0, 90);
-                benchPanel.anchoredPosition = new Vector2(0, 220); // Bench above shop
+                if (benchPanel != null)
+                {
+                    benchPanel.sizeDelta = new Vector2(0, 90);
+                    benchPanel.anchoredPosition = new Vector2(0, 220); // Bench above shop
+                }
                 
                 // Trait panel - compact, doesn't overlap battlefield
                 if (traitPanel != null)
@@ -1620,8 +3444,11 @@ namespace Crestforge.UI
                 // Landscape mode
                 shopPanel.sizeDelta = new Vector2(0, 160);
                 shopPanel.anchoredPosition = new Vector2(0, 20);
-                benchPanel.sizeDelta = new Vector2(0, 85);
-                benchPanel.anchoredPosition = new Vector2(0, 190);
+                if (benchPanel != null)
+                {
+                    benchPanel.sizeDelta = new Vector2(0, 85);
+                    benchPanel.anchoredPosition = new Vector2(0, 190);
+                }
                 
                 // Trait panel - slightly larger for landscape but still compact
                 if (traitPanel != null)
@@ -1644,7 +3471,15 @@ namespace Crestforge.UI
         {
             // Play UI click sound immediately
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
-            
+
+            // Multiplayer mode - send to server
+            if (IsMultiplayer)
+            {
+                serverState.BuyUnit(index);
+                Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
+                return;
+            }
+
             pendingAction = () => {
                 bool success = state.BuyUnit(index);
                 if (success)
@@ -1656,19 +3491,23 @@ namespace Crestforge.UI
 
         private void OnBenchCardClicked(int index)
         {
+            // Only play click sound - tooltip pinning is handled by UnitCardUI.OnPointerClick
+            // Unit fielding should only happen via drag-and-drop to hexes
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
-            
-            if (state.bench != null && index < state.bench.Count)
-            {
-                var unit = state.bench[index];
-                pendingAction = () => TryPlaceUnit(unit);
-            }
         }
 
         private void OnRerollClicked()
         {
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
-            
+
+            // Multiplayer mode - send to server
+            if (IsMultiplayer)
+            {
+                serverState.Reroll();
+                Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
+                return;
+            }
+
             pendingAction = () => {
                 state.RerollShop();
                 Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
@@ -1678,7 +3517,15 @@ namespace Crestforge.UI
         private void OnBuyXPClicked()
         {
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
-            
+
+            // Multiplayer mode - send to server
+            if (IsMultiplayer)
+            {
+                serverState.BuyXP();
+                Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
+                return;
+            }
+
             pendingAction = () => {
                 state.BuyXP();
                 Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
@@ -1688,7 +3535,14 @@ namespace Crestforge.UI
         private void OnLockClicked()
         {
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
-            
+
+            // Multiplayer mode - send to server
+            if (IsMultiplayer)
+            {
+                serverState.ToggleShopLock();
+                return;
+            }
+
             if (state.shop != null)
             {
                 state.shop.isLocked = !state.shop.isLocked;
@@ -1698,16 +3552,57 @@ namespace Crestforge.UI
         private void OnFightClicked()
         {
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
-            
+
+            // Multiplayer mode - toggle ready state
+            if (IsMultiplayer)
+            {
+                serverState.SetReady(!serverState.isReady);
+                return;
+            }
+
             pendingAction = () => RoundManager.Instance.StartCombatPhase();
+        }
+
+        private void OnScoutClicked()
+        {
+            Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+
+            if (ScoutingUI.Instance != null)
+            {
+                ScoutingUI.Instance.Toggle();
+            }
+        }
+
+        private void OnProgressClicked()
+        {
+            Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+
+            if (RoundProgressionUI.Instance != null)
+            {
+                RoundProgressionUI.Instance.Toggle();
+            }
+        }
+
+        private void OnMyBoardClicked()
+        {
+            Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+
+            // Focus camera on player's own board
+            if (Crestforge.Visuals.IsometricCameraSetup.Instance != null)
+            {
+                Crestforge.Visuals.IsometricCameraSetup.Instance.FocusOnPlayerBoard();
+            }
         }
 
         private void OnCrestSelected(CrestData crest)
         {
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
             Crestforge.Visuals.AudioManager.Instance?.PlayLevelUp();
-            
+
             RoundManager.Instance.OnCrestSelected(crest);
+
+            // Update the crest display UI
+            UpdateCrestDisplay();
         }
 
         private void OnItemSelected(ItemData item)
@@ -1721,8 +3616,21 @@ namespace Crestforge.UI
         private void OnPlayAgainClicked()
         {
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
-            
-            RoundManager.Instance.StartGame();
+
+            // Restart with same game mode
+            RoundManager.Instance.StartGame(state.currentGameMode);
+        }
+
+        private void OnReturnToMenuClicked()
+        {
+            Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+
+            // Return to main menu to allow game mode selection
+            if (MainMenuUI.Instance != null)
+            {
+                gameObject.SetActive(false);
+                MainMenuUI.Instance.Show();
+            }
         }
 
         private void TryPlaceUnit(UnitInstance unit)
@@ -1764,7 +3672,7 @@ namespace Crestforge.UI
             }
             Text text = obj.AddComponent<Text>();
             text.text = content;
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.fontSize = 18;
             text.color = Color.white;
             text.alignment = TextAnchor.MiddleLeft;
@@ -1829,184 +3737,101 @@ namespace Crestforge.UI
                 _ => Color.white
             };
         }
-    }
 
-    /// <summary>
-    /// Component for unit cards in shop/bench
-    /// </summary>
-    public class UnitCardUI : MonoBehaviour, UnityEngine.EventSystems.IPointerEnterHandler, UnityEngine.EventSystems.IPointerExitHandler, UnityEngine.EventSystems.IPointerDownHandler, UnityEngine.EventSystems.IPointerUpHandler
-    {
-        public Image background;
-        public Image spriteImage;
-        public Text costText;
-        public Text nameText;
-        public Button button;
-        public int index;
-        public bool isBenchSlot = false;
-
-        private UnitInstance currentUnit;
-        private bool isClicking = false;
-        private float clickSuppressionTime = 0f;
-
-        public UnitInstance GetUnit() => currentUnit;
-
-        public void SetUnit(UnitInstance unit)
+        /// <summary>
+        /// Show item info temporarily for a server item (multiplayer mode)
+        /// </summary>
+        public void ShowServerItemInfoTemporary(ServerItemData serverItem)
         {
-            currentUnit = unit;
+            if (serverItem == null || tooltipPanel == null) return;
 
-            if (unit == null || unit.template == null)
-            {
-                background.color = new Color(0.2f, 0.25f, 0.3f, 0.5f);
-                spriteImage.enabled = false;
-                costText.text = "";
-                if (nameText != null) nameText.text = "";
-                button.interactable = false;
-                return;
-            }
-
-            var t = unit.template;
-            
-            // Set color based on cost
-            background.color = GetCostColor(t.cost);
-            
-            // Set sprite
-            spriteImage.enabled = true;
-            Sprite unitSprite = UnitSpriteGenerator.GetSprite(t.unitId);
-            spriteImage.sprite = unitSprite;
-
-            // Set text - bench shows only stars, shop shows cost + name
-            if (isBenchSlot)
-            {
-                costText.text = new string('★', unit.starLevel);
-            }
-            else
-            {
-                costText.text = $"${t.cost} " + new string('★', unit.starLevel);
-                if (nameText != null) nameText.text = t.unitName;
-            }
-            
-            button.interactable = true;
+            showingTemporaryItemInfo = true;
+            PopulateServerItemTooltip(serverItem);
         }
 
-        public void SetInteractable(bool interactable)
+        /// <summary>
+        /// Populate tooltip with server item info
+        /// </summary>
+        private void PopulateServerItemTooltip(ServerItemData serverItem)
         {
-            button.interactable = interactable;
-            
-            Color c = background.color;
-            c.a = interactable ? 1f : 0.5f;
-            background.color = c;
-        }
+            tooltipPanel.gameObject.SetActive(true);
 
-        public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData eventData)
-        {
-            // Don't show tooltip if clicking or recently clicked
-            if (isClicking || Time.time - clickSuppressionTime < 0.15f)
-                return;
+            // Title - show item name with gold color
+            tooltipTitle.text = serverItem.name ?? "Item";
+            tooltipTitle.color = new Color(1f, 0.85f, 0.4f);  // Gold for items
 
-            Crestforge.Visuals.AudioManager.Instance?.PlayUIHover();
+            // Show "Item" label in cost field
+            tooltipCost.text = "Item";
+            tooltipCost.color = new Color(0.7f, 0.7f, 0.7f);
 
-            if (currentUnit != null && GameUI.Instance != null)
+            // Description goes in traits field (cleaner look)
+            tooltipTraits.text = serverItem.description ?? "";
+            tooltipTraits.color = new Color(0.9f, 0.9f, 0.9f);
+
+            // Stats from server item stats
+            string stats = "";
+            if (serverItem.stats != null)
             {
-                GameUI.Instance.ShowTooltip(currentUnit);
+                var s = serverItem.stats;
+                if (s.health > 0) stats += $"+{s.health} Health\n";
+                if (s.attack > 0) stats += $"+{s.attack} Attack\n";
+                if (s.armor > 0) stats += $"+{s.armor} Armor\n";
+                if (s.magicResist > 0) stats += $"+{s.magicResist} Magic Resist\n";
+                if (s.attackSpeedPercent > 0) stats += $"+{s.attackSpeedPercent:F0}% Attack Speed\n";
+                if (s.mana > 0) stats += $"+{s.mana} Mana\n";
+                if (s.range > 0) stats += $"+{s.range} Range\n";
+                if (s.abilityPower > 0) stats += $"+{s.abilityPower} Ability Power\n";
+                if (s.critChance > 0) stats += $"+{s.critChance}% Crit Chance\n";
+                if (s.critDamagePercent > 0) stats += $"+{s.critDamagePercent}% Crit Damage\n";
             }
-        }
+            tooltipStats.text = stats.Length > 0 ? stats.TrimEnd() : "";
 
-        public void OnPointerExit(UnityEngine.EventSystems.PointerEventData eventData)
-        {
-            if (GameUI.Instance != null)
+            // Hide ability field for items (description already shown in traits)
+            tooltipAbility.text = "";
+
+            // Hide items section for item tooltip
+            if (tooltipItemsLabel != null)
             {
-                GameUI.Instance.HideTooltip();
+                int siblingIndex = tooltipItemsLabel.transform.GetSiblingIndex();
+                if (siblingIndex > 0)
+                {
+                    Transform dividerBeforeItems = tooltipItemsLabel.transform.parent.GetChild(siblingIndex - 1);
+                    if (dividerBeforeItems != null)
+                        dividerBeforeItems.gameObject.SetActive(false);
+                }
+                tooltipItemsLabel.gameObject.SetActive(false);
             }
-        }
-
-        public void OnPointerDown(UnityEngine.EventSystems.PointerEventData eventData)
-        {
-            isClicking = true;
-            // Hide tooltip immediately when clicking
-            if (GameUI.Instance != null)
+            if (tooltipItemContainer != null)
             {
-                GameUI.Instance.HideTooltip();
+                tooltipItemContainer.gameObject.SetActive(false);
             }
-        }
-
-        public void OnPointerUp(UnityEngine.EventSystems.PointerEventData eventData)
-        {
-            isClicking = false;
-            clickSuppressionTime = Time.time;
-        }
-
-        private Color GetCostColor(int cost)
-        {
-            return cost switch
-            {
-                1 => new Color(0.45f, 0.45f, 0.5f),
-                2 => new Color(0.25f, 0.5f, 0.25f),
-                3 => new Color(0.25f, 0.4f, 0.7f),
-                4 => new Color(0.55f, 0.25f, 0.55f),
-                _ => new Color(0.3f, 0.3f, 0.35f)
-            };
         }
     }
 
     /// <summary>
-    /// Component for trait entries in the trait panel - handles hover detection
+    /// Simple hover trigger for server item tooltips in multiplayer mode
     /// </summary>
-    public class TraitEntryUI : MonoBehaviour, UnityEngine.EventSystems.IPointerEnterHandler, UnityEngine.EventSystems.IPointerExitHandler
+    public class ServerItemTooltipTrigger : MonoBehaviour, UnityEngine.EventSystems.IPointerEnterHandler,
+        UnityEngine.EventSystems.IPointerExitHandler, UnityEngine.EventSystems.IPointerClickHandler
     {
-        public TraitData trait;
-        public int count;
-        
-        private bool isHovered = false;
-        private Image backgroundImage;
-        private Color originalColor;
-
-        private void Awake()
-        {
-            backgroundImage = GetComponent<Image>();
-            if (backgroundImage != null)
-            {
-                originalColor = backgroundImage.color;
-            }
-        }
-
-        public bool IsHovered()
-        {
-            return isHovered;
-        }
+        public ServerItemData serverItem;
 
         public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData eventData)
         {
-            isHovered = true;
-            Crestforge.Visuals.AudioManager.Instance?.PlayUIHover();
-            
-            // Highlight effect
-            if (backgroundImage != null)
-            {
-                Color highlightColor = originalColor;
-                highlightColor.r = Mathf.Min(1f, highlightColor.r + 0.1f);
-                highlightColor.g = Mathf.Min(1f, highlightColor.g + 0.1f);
-                highlightColor.b = Mathf.Min(1f, highlightColor.b + 0.05f);
-                backgroundImage.color = highlightColor;
-            }
+            // Could show a mini hover tooltip here
         }
 
         public void OnPointerExit(UnityEngine.EventSystems.PointerEventData eventData)
         {
-            isHovered = false;
-            
-            // Restore original color
-            if (backgroundImage != null)
-            {
-                backgroundImage.color = originalColor;
-            }
+            // Could hide mini hover tooltip here
         }
 
-        public void SetOriginalColor(Color color)
+        public void OnPointerClick(UnityEngine.EventSystems.PointerEventData eventData)
         {
-            originalColor = color;
-            if (backgroundImage != null && !isHovered)
+            // Show item info when clicked
+            if (serverItem != null)
             {
-                backgroundImage.color = color;
+                GameUI.Instance?.ShowServerItemInfoTemporary(serverItem);
             }
         }
     }
