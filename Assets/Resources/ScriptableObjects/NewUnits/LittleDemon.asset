@@ -26,7 +26,7 @@ MonoBehaviour:
     magicResist: 20
     attack: 60
     attackSpeed: 0.8
-    range: 2
+    range: 1
     moveSpeed: 2
     startingMana: 0
     maxMana: 45

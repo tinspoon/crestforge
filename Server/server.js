@@ -541,13 +541,13 @@ function startCombat(room) {
     // Stop room's internal phase timer - we'll manage timing here
     room.stopPhaseTimer();
 
-    // Calculate when combat ends based on simulation duration
-    // Events are generated at 10 ticks per second
+    // Calculate when combat ends: real-time duration (ticks * 50ms) + small buffer
     const durations = room.combatResults.map(r => r.durationTicks || 0);
-    const maxDuration = durations.length > 0 ? Math.max(...durations) / 10 : 1;
-    const combatDuration = Math.min(maxDuration + 2, 60) * 1000; // Add 2 seconds buffer
+    const maxDurationTicks = durations.length > 0 ? Math.max(...durations) : 10;
+    const realTimeDuration = maxDurationTicks * 0.05; // 50ms per tick
+    const combatDuration = (realTimeDuration + 2) * 1000; // Add 2 seconds buffer
 
-    console.log(`[startCombat] Combat will end in ${combatDuration}ms`);
+    console.log(`[startCombat] Combat: ${maxDurationTicks} ticks = ${realTimeDuration.toFixed(1)}s, waiting ${combatDuration}ms`);
 
     // Wait for combat animation to complete, then send results
     setTimeout(() => {

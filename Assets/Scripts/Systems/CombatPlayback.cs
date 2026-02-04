@@ -15,7 +15,10 @@ namespace Crestforge.Systems
     public class CombatPlayback
     {
         // Settings
-        public float tickDuration = 0.4f;
+        // Match server's 50ms tick rate for real-time playback
+        public float tickDuration = 0.05f;
+        // Movement animation duration (matches single-player MOVE_COOLDOWN)
+        public float moveAnimationDuration = 0.35f;
         public float playbackSpeed = 1f;
 
         // State
@@ -40,6 +43,9 @@ namespace Crestforge.Systems
 
         // Original positions for reused visuals (so we can restore them after combat)
         private Dictionary<string, Vector3> reusedVisualOriginalPositions = new Dictionary<string, Vector3>();
+
+        // Track units that died during combat (so we don't restore them)
+        private HashSet<string> deadUnitIds = new HashSet<string>();
 
         // Coroutine reference for cleanup
         private Coroutine playbackCoroutine;
@@ -220,22 +226,9 @@ namespace Crestforge.Systems
                     nextEventTick = events[eventIndex].tick;
                 }
 
-                // Calculate wait time - if there's a big gap, compress it
+                // Wait real-time: tick gap * tick duration (no compression, true real-time playback)
                 int tickGap = nextEventTick - CurrentTick;
-                float waitTime;
-
-                if (tickGap <= 1)
-                {
-                    waitTime = tickDuration / playbackSpeed;
-                }
-                else if (hadEvents)
-                {
-                    waitTime = tickDuration / playbackSpeed + Mathf.Min(tickGap - 1, 5) * 0.05f;
-                }
-                else
-                {
-                    waitTime = 0.02f;
-                }
+                float waitTime = tickGap * tickDuration / playbackSpeed;
 
                 yield return new WaitForSeconds(waitTime);
                 CurrentTick = nextEventTick;
@@ -478,7 +471,7 @@ namespace Crestforge.Systems
             Vector3 targetPos = Board.GetTileWorldPosition(gridX, gridY);
             targetPos.y = 0.15f;
 
-            visual.MoveTo(targetPos, tickDuration / playbackSpeed);
+            visual.MoveTo(targetPos, moveAnimationDuration / playbackSpeed);
         }
 
         private void ProcessUnitMoveInstant(ServerCombatEvent evt)
@@ -532,6 +525,9 @@ namespace Crestforge.Systems
         {
             if (!combatUnits.TryGetValue(evt.instanceId, out var visual)) return;
             if (visual == null) return;
+
+            // Track that this unit died (so we don't restore it during cleanup)
+            deadUnitIds.Add(evt.instanceId);
 
             visual.PlayDeathAnimation();
             OnUnitDied?.Invoke(evt.instanceId);
@@ -648,16 +644,6 @@ namespace Crestforge.Systems
                 return;
             }
 
-            Vector3 towardsCamera = -cam.transform.forward;
-            towardsCamera.y = 0;
-            if (towardsCamera.sqrMagnitude < 0.01f)
-            {
-                towardsCamera = Vector3.back;
-            }
-            towardsCamera.Normalize();
-
-            Quaternion faceCamera = Quaternion.LookRotation(towardsCamera);
-
             int playerUnitsRotated = 0;
             bool myTeamWon = CombatWinner == viewingTeam;
 
@@ -666,11 +652,13 @@ namespace Crestforge.Systems
                 var visual = kvp.Value;
                 if (visual != null && visual.gameObject != null && visual.gameObject.activeInHierarchy)
                 {
-                    // Freeze position for reused visuals
+                    // Freeze position and lock rotation for reused visuals during victory pose
                     if (visual.IsReusedVisual && visual.BaseVisual != null)
                     {
                         visual.BaseVisual.SetPosition(visual.transform.position);
                         visual.BaseVisual.FreezePosition = true;
+                        visual.BaseVisual.LockRotation = true;  // Prevent UnitVisual3D.Update from overriding rotation
+                        visual.BaseVisual.StopAttackAnimation();  // Stop any in-progress attack animation
                     }
 
                     UnitAnimator unitAnimator = visual.GetComponentInChildren<UnitAnimator>();
@@ -683,11 +671,20 @@ namespace Crestforge.Systems
                             unitAnimator.PlayVictory();
                         }
 
-                        if (visual.TeamId == viewingTeam)
+                        // All winning units should face the camera for the viewer
+                        // Use camera's view direction - units should face where the camera is looking FROM
+                        // This works correctly regardless of camera rotation (including 180 degree for away player)
+                        Vector3 towardsCamera = -cam.transform.forward;
+                        towardsCamera.y = 0;
+                        if (towardsCamera.sqrMagnitude < 0.01f)
                         {
-                            coroutineRunner.StartCoroutine(RotateToFaceCamera(visual.transform, faceCamera));
-                            playerUnitsRotated++;
+                            towardsCamera = Vector3.back;
                         }
+                        towardsCamera.Normalize();
+                        Quaternion faceCamera = Quaternion.LookRotation(towardsCamera);
+
+                        coroutineRunner.StartCoroutine(RotateToFaceCamera(visual.transform, faceCamera));
+                        playerUnitsRotated++;
                     }
                     else
                     {
@@ -733,34 +730,46 @@ namespace Crestforge.Systems
 
                 if (visual != null && visual.gameObject != null)
                 {
+                    bool unitDied = deadUnitIds.Contains(instanceId);
+
                     if (visual.IsReusedVisual)
                     {
-                        // Restore original position if we saved one
-                        if (reusedVisualOriginalPositions.TryGetValue(instanceId, out Vector3 originalPos))
+                        // Only restore position and re-enable if the unit survived
+                        if (!unitDied)
                         {
+                            // Restore original position if we saved one
+                            if (reusedVisualOriginalPositions.TryGetValue(instanceId, out Vector3 originalPos))
+                            {
+                                if (visual.BaseVisual != null)
+                                {
+                                    visual.BaseVisual.SetPosition(originalPos);
+                                }
+                                else
+                                {
+                                    visual.transform.position = originalPos;
+                                }
+                            }
+
+                            // Reset animation and unfreeze position
                             if (visual.BaseVisual != null)
                             {
-                                visual.BaseVisual.SetPosition(originalPos);
+                                visual.BaseVisual.FreezePosition = false;
                             }
-                            else
+                            UnitAnimator unitAnimator = visual.GetComponentInChildren<UnitAnimator>();
+                            if (unitAnimator != null)
                             {
-                                visual.transform.position = originalPos;
+                                unitAnimator.ResetToIdle();
                             }
-                        }
 
-                        // Reset animation and unfreeze position
-                        if (visual.BaseVisual != null)
-                        {
-                            visual.BaseVisual.FreezePosition = false;
+                            // Re-enable the visual
+                            visual.gameObject.SetActive(true);
                         }
-                        UnitAnimator unitAnimator = visual.GetComponentInChildren<UnitAnimator>();
-                        if (unitAnimator != null)
+                        else
                         {
-                            unitAnimator.ResetToIdle();
+                            // Unit died - ensure the visual is hidden
+                            // (death animation coroutine might not have completed before we destroy the component)
+                            visual.gameObject.SetActive(false);
                         }
-
-                        // Re-enable the visual (in case it was hidden from death)
-                        visual.gameObject.SetActive(true);
 
                         GameObject.Destroy(visual); // Just the component
                     }
@@ -772,6 +781,7 @@ namespace Crestforge.Systems
             }
             combatUnits.Clear();
             reusedVisualOriginalPositions.Clear();
+            deadUnitIds.Clear();
         }
     }
 
@@ -835,6 +845,9 @@ namespace Crestforge.Systems
             isMoving = true;
         }
 
+        private Coroutine attackCoroutine;
+        private bool isAttacking;
+
         public void PlayAttackAnimation(Vector3 targetPosition)
         {
             if (BaseVisual != null)
@@ -845,11 +858,19 @@ namespace Crestforge.Systems
                 return;
             }
 
-            StartCoroutine(AttackCoroutine(targetPosition));
+            // Prevent overlapping attack coroutines
+            if (isAttacking) return;
+
+            if (attackCoroutine != null)
+            {
+                StopCoroutine(attackCoroutine);
+            }
+            attackCoroutine = StartCoroutine(AttackCoroutine(targetPosition));
         }
 
         private IEnumerator AttackCoroutine(Vector3 targetPos)
         {
+            isAttacking = true;
             Vector3 originalPos = transform.position;
             Vector3 lungeDir = (targetPos - originalPos).normalized;
             Vector3 lungePos = originalPos + lungeDir * 0.3f;
@@ -871,6 +892,8 @@ namespace Crestforge.Systems
             }
 
             transform.position = originalPos;
+            isAttacking = false;
+            attackCoroutine = null;
         }
 
         public void TakeDamage(int damage, int newHealth, int maxHealth)

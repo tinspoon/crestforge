@@ -26,7 +26,7 @@ MonoBehaviour:
     attack: 65
     attackSpeed: 0.85
     range: 1
-    moveSpeed: 2
+    moveSpeed: 3.5
     startingMana: 0
     maxMana: 40
   ability:

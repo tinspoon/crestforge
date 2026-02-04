@@ -23,7 +23,7 @@ MonoBehaviour:
     magicResist: 0
     attack: 10
     attackSpeed: 0.5
-    range: 2
+    range: 1
     moveSpeed: 2
     startingMana: 0
     maxMana: 100

@@ -73,9 +73,11 @@ namespace Crestforge.Visuals
 
         // Combat animation
         private bool isAttacking;
+        public bool IsAttacking => isAttacking;
+        public bool IsPlayingHit => unitAnimator != null && unitAnimator.IsPlayingHit;
         private Vector3 attackTarget;
         private float attackTimer;
-        private float attackDuration = 0.3f;
+        private float attackDuration = 0.3f; // Base duration, dynamically adjusted based on attack speed
 
         // Multiplayer instance ID (set when syncing from server state)
         public string ServerInstanceId { get; set; }
@@ -834,6 +836,23 @@ namespace Crestforge.Visuals
             isAttacking = true;
             attackTimer = 0f;
 
+            // Use override speed if provided, otherwise auto-detect
+            float attackSpeed = overrideAttackSpeed > 0 ? overrideAttackSpeed : GetCurrentAttackSpeed();
+
+            // Calculate dynamic attack duration based on attack speed
+            // Attack should complete within 50% of the attack interval to ensure
+            // animations finish before the next attack event arrives
+            if (attackSpeed > 0)
+            {
+                attackDuration = 0.5f / attackSpeed;
+                // Clamp to reasonable range (0.1s to 1.0s)
+                attackDuration = Mathf.Clamp(attackDuration, 0.1f, 1.0f);
+            }
+            else
+            {
+                attackDuration = 0.3f; // Default fallback
+            }
+
             // Face the target immediately
             Vector3 lookDir = (targetPos - transform.position);
             lookDir.y = 0;
@@ -846,8 +865,6 @@ namespace Crestforge.Visuals
             // Trigger attack animation with dynamic speed
             if (unitAnimator != null)
             {
-                // Use override speed if provided, otherwise auto-detect
-                float attackSpeed = overrideAttackSpeed > 0 ? overrideAttackSpeed : GetCurrentAttackSpeed();
                 unitAnimator.PlayAttack(attackSpeed);
             }
         }
@@ -869,7 +886,10 @@ namespace Crestforge.Visuals
                 }
             }
             flashCoroutine = StartCoroutine(FlashColor(Color.red, 0.25f));
-            StartCoroutine(ShakeEffect(0.1f, 0.05f));
+
+            // DISABLED: Shake effect conflicts with movement/attack animations
+            // It captures position at start and resets to it, causing jitter
+            // StartCoroutine(ShakeEffect(0.1f, 0.05f));
 
             // Skip hit animation if unit is already walking or attacking
             // This prevents jarring animation interruptions
@@ -878,11 +898,21 @@ namespace Crestforge.Visuals
                 return;
             }
 
+            // TESTING: Hit animations disabled to evaluate combat feel
             // Trigger hit animation
-            if (unitAnimator != null)
-            {
-                unitAnimator.PlayHit();
-            }
+            // if (unitAnimator != null)
+            // {
+            //     unitAnimator.PlayHit();
+            // }
+        }
+
+        /// <summary>
+        /// Stop any in-progress attack animation
+        /// </summary>
+        public void StopAttackAnimation()
+        {
+            isAttacking = false;
+            attackTimer = 0f;
         }
 
         /// <summary>

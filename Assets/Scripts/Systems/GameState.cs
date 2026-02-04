@@ -451,13 +451,14 @@ namespace Crestforge.Systems
         private void CheckAndPerformMerge(UnitInstance newUnit)
         {
             if (newUnit == null || newUnit.template == null) return;
-            
+
             var matches = new List<UnitInstance>();
-            
+            var boardMatches = new List<UnitInstance>();
+
             foreach (var unit in bench)
             {
-                if (unit != null && unit != newUnit && 
-                    unit.template == newUnit.template && 
+                if (unit != null && unit != newUnit &&
+                    unit.template == newUnit.template &&
                     unit.starLevel == newUnit.starLevel)
                 {
                     matches.Add(unit);
@@ -469,29 +470,51 @@ namespace Crestforge.Systems
                 for (int y = 0; y < GameConstants.Grid.HEIGHT; y++)
                 {
                     var unit = playerBoard[x, y];
-                    if (unit != null && 
-                        unit != newUnit && 
-                        unit.template == newUnit.template && 
+                    if (unit != null &&
+                        unit != newUnit &&
+                        unit.template == newUnit.template &&
                         unit.starLevel == newUnit.starLevel)
                     {
                         matches.Add(unit);
+                        boardMatches.Add(unit);
                     }
                 }
             }
 
             if (matches.Count >= 1)
             {
-                var mergeTarget = matches[0];
-                
-                RemoveUnit(newUnit);
-                
-                mergeTarget.starLevel++;
-                mergeTarget.RecalculateStats();
-                mergeTarget.currentHealth = mergeTarget.currentStats.health;
+                UnitInstance keepUnit;
+                UnitInstance removeUnit;
 
-                if (mergeTarget.starLevel < GameConstants.Units.MAX_STAR_LEVEL)
+                // Prioritize keeping units on the board
+                if (boardMatches.Count > 0)
                 {
-                    CheckAndPerformMerge(mergeTarget);
+                    // A matching unit is on the board - keep it
+                    keepUnit = boardMatches[0];
+                    removeUnit = newUnit;
+                }
+                else if (newUnit.isOnBoard)
+                {
+                    // New unit is on board, match is on bench - keep new unit
+                    keepUnit = newUnit;
+                    removeUnit = matches[0];
+                }
+                else
+                {
+                    // Both on bench - use first match as before
+                    keepUnit = matches[0];
+                    removeUnit = newUnit;
+                }
+
+                RemoveUnit(removeUnit);
+
+                keepUnit.starLevel++;
+                keepUnit.RecalculateStats();
+                keepUnit.currentHealth = keepUnit.currentStats.health;
+
+                if (keepUnit.starLevel < GameConstants.Units.MAX_STAR_LEVEL)
+                {
+                    CheckAndPerformMerge(keepUnit);
                 }
             }
         }

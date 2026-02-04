@@ -49,6 +49,8 @@ namespace Crestforge.Visuals
         private bool isInitialized = false;
         private bool useLegacy = false;
         private Coroutine returnToIdleCoroutine = null;
+        private bool isPlayingHit = false;
+        public bool IsPlayingHit => isPlayingHit;
 
         private void Awake()
         {
@@ -291,11 +293,16 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
-        /// Play attack animation with dynamic speed based on unit's attack speed
+        /// Play attack animation with dynamic speed based on unit's attack speed.
+        /// Attack has highest priority and will interrupt any other animation.
+        /// Plays exactly once and returns to idle.
         /// </summary>
         public void PlayAttack(float unitAttackSpeed = 0f)
         {
             if (!isInitialized) return;
+
+            // Attack takes priority - interrupt any hit animation
+            isPlayingHit = false;
 
             // Cancel any pending return-to-idle
             if (returnToIdleCoroutine != null)
@@ -306,34 +313,61 @@ namespace Crestforge.Visuals
 
             // Calculate dynamic speed if unit attack speed is provided
             float speed = attackAnimSpeed;
+            float clipDuration = GetClipDuration(attackClip);
+            if (clipDuration <= 0) clipDuration = 0.5f; // Default assumption
+
             if (unitAttackSpeed > 0)
             {
-                float clipDuration = GetClipDuration(attackClip);
-                if (clipDuration > 0)
-                {
-                    float attackInterval = 1f / unitAttackSpeed;
-                    // Scale animation to fit within 80% of attack interval (leave time for recovery)
-                    speed = clipDuration / (attackInterval * 0.8f);
-                    speed = Mathf.Clamp(speed, 0.5f, 4f); // Clamp to reasonable range
-                }
+                float attackInterval = 1f / unitAttackSpeed;
+                // Scale animation to fit within 50% of attack interval
+                // This ensures animations complete before the next attack event
+                speed = clipDuration / (attackInterval * 0.5f);
+                speed = Mathf.Clamp(speed, 0.5f, 6f); // Clamp to reasonable range
             }
+
+            // Calculate actual duration at this speed
+            float actualDuration = clipDuration / speed;
 
             if (useLegacy)
             {
                 PlayClipWithSpeed(attackClip, speed);
+                // Return to idle after animation completes
+                returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterAttack(actualDuration));
             }
             else if (animator != null)
             {
                 if (HasParameter(Attack))
                 {
                     animator.speed = speed;
+                    // Reset trigger first to prevent queuing multiple attacks
+                    animator.ResetTrigger(Attack);
                     animator.SetTrigger(Attack);
+                    // Return to idle after animation completes
+                    returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterAttack(actualDuration));
                 }
                 else
                 {
                     PlayClipWithSpeed(attackClip, speed);
+                    // Return to idle after animation completes
+                    returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterAttack(actualDuration));
                 }
             }
+        }
+
+        /// <summary>
+        /// Coroutine to return to idle after attack animation completes
+        /// </summary>
+        private System.Collections.IEnumerator ReturnToIdleAfterAttack(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            // Reset speed to normal
+            if (animator != null)
+            {
+                animator.speed = 1f;
+            }
+            // Play idle
+            PlayClip(idleClip);
+            returnToIdleCoroutine = null;
         }
 
         /// <summary>
@@ -466,7 +500,8 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
-        /// Play hit/hurt animation, then return to idle
+        /// Play hit/hurt animation, then return to idle.
+        /// Hit animations are low priority and can be interrupted by attacks.
         /// </summary>
         public void PlayHit()
         {
@@ -479,6 +514,7 @@ namespace Crestforge.Visuals
                 returnToIdleCoroutine = null;
             }
 
+            isPlayingHit = true;
             float speed = hitAnimSpeed;
 
             if (useLegacy)
@@ -495,6 +531,8 @@ namespace Crestforge.Visuals
                 if (HasParameter(Hit))
                 {
                     animator.speed = speed;
+                    // Reset trigger first to prevent queuing
+                    animator.ResetTrigger(Hit);
                     animator.SetTrigger(Hit);
                     // Reset speed after a short delay
                     returnToIdleCoroutine = StartCoroutine(ResetSpeedAfterDelay(0.5f / speed));
@@ -518,6 +556,7 @@ namespace Crestforge.Visuals
             {
                 animator.speed = 1f;
             }
+            isPlayingHit = false;
             returnToIdleCoroutine = null;
         }
 
@@ -527,6 +566,7 @@ namespace Crestforge.Visuals
         private System.Collections.IEnumerator ReturnToIdleAfterDelay(float delay)
         {
             yield return new WaitForSeconds(delay);
+            isPlayingHit = false;
             // Play idle directly without resetting speed
             PlayClip(idleClip);
             returnToIdleCoroutine = null;
@@ -723,6 +763,7 @@ namespace Crestforge.Visuals
         {
             if (!isInitialized) return;
 
+            isPlayingHit = false;
             ResetSpeed();
 
             // Force play idle animation immediately

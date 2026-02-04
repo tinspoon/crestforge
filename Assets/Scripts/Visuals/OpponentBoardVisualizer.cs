@@ -93,8 +93,8 @@ namespace Crestforge.Visuals
 
                 if (!string.IsNullOrEmpty(serverPlayerId))
                 {
-                    // Check for combat phase transitions
-                    bool isInCombatPhase = serverState.phase == "combat";
+                    // Check for combat phase transitions (include "results" since victory pose is still playing)
+                    bool isInCombatPhase = serverState.phase == "combat" || serverState.phase == "results";
                     if (isInCombatPhase && !wasInCombatPhase)
                     {
                         // Combat just started - hide board visuals (ServerCombatVisualizer will render combat)
@@ -678,9 +678,9 @@ namespace Crestforge.Visuals
             HashSet<string> currentBoardIds = new HashSet<string>();
             HashSet<int> currentBenchSlots = new HashSet<int>();
 
-            // Check if we're in combat phase - skip board unit sync during combat
-            // (ServerCombatVisualizer handles combat visualization)
-            bool isInCombatPhase = serverState.phase == "combat";
+            // Check if we're in combat/results phase - skip board unit sync during combat and victory pose
+            // (ServerCombatVisualizer handles combat visualization including victory pose)
+            bool isInCombatPhase = serverState.phase == "combat" || serverState.phase == "results";
 
             // Sync board units (only when not in combat)
             if (!isInCombatPhase && playerData.boardUnits != null)

@@ -69,6 +69,14 @@ namespace Crestforge.Visuals
             // Check if visual already exists
             if (boardVisuals.TryGetValue(serverUnit.instanceId, out UnitVisual3D existing) && existing != null)
             {
+                // Ensure visual is active (may have been deactivated during combat)
+                if (!existing.gameObject.activeSelf)
+                {
+                    existing.gameObject.SetActive(true);
+                }
+                // Unfreeze position (may have been frozen during combat)
+                existing.FreezePosition = false;
+
                 // Update position if needed
                 if (Vector3.Distance(existing.transform.position, worldPos) > 0.1f)
                 {
@@ -116,6 +124,14 @@ namespace Crestforge.Visuals
                 // Check if it's the same unit
                 if (existing.ServerInstanceId == serverUnit.instanceId)
                 {
+                    // Ensure visual is active (may have been deactivated during combat)
+                    if (!existing.gameObject.activeSelf)
+                    {
+                        existing.gameObject.SetActive(true);
+                    }
+                    // Unfreeze position (may have been frozen during combat)
+                    existing.FreezePosition = false;
+
                     // Only update position if NOT away (away visuals are managed by combat)
                     // This prevents the sync from pulling visuals back to home during combat
                     if (!isAway && Vector3.Distance(existing.transform.position, worldPos) > 0.1f)
@@ -306,6 +322,8 @@ namespace Crestforge.Visuals
                 return;
 
             // Return board visuals to original positions
+            // Restore ALL visuals that have saved positions, regardless of active state
+            // Dead unit visuals will be cleaned up by server state sync (SyncBoardVisuals)
             foreach (var kvp in boardVisuals)
             {
                 if (kvp.Value != null)
@@ -313,15 +331,14 @@ namespace Crestforge.Visuals
                     if (originalPositions.TryGetValue(kvp.Key, out Vector3 origPos))
                     {
                         kvp.Value.SetPosition(origPos);
+                        kvp.Value.gameObject.SetActive(true);  // Reactivate in case it was hidden
                     }
                     kvp.Value.LockRotation = false;
-                    // Re-enable visuals that survived combat
-                    // Dead units will be cleaned up by server state sync
-                    kvp.Value.gameObject.SetActive(true);
+                    kvp.Value.FreezePosition = false;
                 }
             }
 
-            // Return bench visuals
+            // Return bench visuals (bench units can't die in combat, so always restore)
             foreach (var kvp in benchVisuals)
             {
                 if (kvp.Value != null)
@@ -331,7 +348,7 @@ namespace Crestforge.Visuals
                         kvp.Value.SetPosition(origPos);
                     }
                     kvp.Value.LockRotation = false;
-                    // Re-enable bench visuals
+                    kvp.Value.FreezePosition = false;
                     kvp.Value.gameObject.SetActive(true);
                 }
             }

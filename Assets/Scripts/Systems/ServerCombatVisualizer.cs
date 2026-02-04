@@ -17,7 +17,7 @@ namespace Crestforge.Systems
         public static ServerCombatVisualizer Instance { get; private set; }
 
         [Header("Settings")]
-        public float tickDuration = 0.4f;
+        public float tickDuration = 0.05f; // Match server's 50ms tick rate for real-time playback
         public float playbackSpeed = 1f;
         public bool autoStartPlayback = true;
 
@@ -506,7 +506,7 @@ namespace Crestforge.Systems
             ClearAwayPlayerBenchVisuals();
             cachedAwayPlayerId = null;
 
-            // Return bench visuals from away position (if we were away)
+            // Return visuals from away position (if we were away)
             if (playerBoardWhenAway != null && playerBoardWhenAway.Registry != null && playerBoardWhenAway.Registry.IsAway)
             {
                 playerBoardWhenAway.Registry.ReturnFromAway();
@@ -520,7 +520,7 @@ namespace Crestforge.Systems
                 boardManager.SetBoardUnitVisualsVisible(true);
             }
 
-            // Reset camera
+            // Reset camera to player's board
             bool isScoutingOpponent = Crestforge.UI.ScoutingUI.Instance != null && Crestforge.UI.ScoutingUI.Instance.IsViewingOpponent;
             if (!isScoutingOpponent)
             {

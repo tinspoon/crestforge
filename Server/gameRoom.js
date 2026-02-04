@@ -360,6 +360,11 @@ const CombatEventType = {
     COMBAT_END: 'combatEnd'
 };
 
+// Default movement speed (tiles/sec) if unit doesn't have moveSpeed defined
+const DEFAULT_MOVE_SPEED = 2.5;
+// Delay before attacking after moving (matches client's moveAnimationDuration)
+const ATTACK_DELAY_AFTER_MOVE = 0.35;
+
 class CombatUnit {
     constructor(unit, playerId, x, y, combatStats) {
         this.instanceId = unit.instanceId;
@@ -371,7 +376,9 @@ class CombatUnit {
         this.stats = combatStats;
         this.currentHealth = combatStats.health;
         this.currentMana = unit.currentMana || 0;
+        // No initial delay - attack immediately when in range, then at constant rate
         this.attackCooldown = 0;
+        this.moveCooldown = 0; // Movement cooldown
         this.isDead = false;
         this.target = null;
         // Copy loot type for PvE enemies
@@ -386,8 +393,8 @@ class CombatSimulator {
         this.units = [];
         this.events = [];
         this.tick = 0;
-        this.maxTicks = 600; // 60 seconds at 10 ticks/sec
-        this.tickRate = 0.1; // 100ms per tick
+        this.maxTicks = 1200; // 60 seconds at 20 ticks/sec
+        this.tickRate = 0.05; // 50ms per tick (20Hz)
 
         // Initialize combat units from both players
         this.initializeUnits(player1Board, player1State, 'player1');
@@ -433,11 +440,22 @@ class CombatSimulator {
             }))
         });
 
+        // Debug: Log all units at combat start with full details
+        console.log(`[COMBAT] === Combat Start (tickRate: ${this.tickRate}s) ===`);
+        for (const u of this.units) {
+            console.log(`[COMBAT]   ${u.unitId} (${u.playerId}) at COMBAT pos (${u.x},${u.y}) - HP:${u.currentHealth} ATK:${u.stats.attack} atkSpd:${u.stats.attackSpeed} range:${u.stats.range}`);
+        }
+        // Log distance between units
+        if (this.units.length === 2) {
+            const dist = this.getDistance(this.units[0], this.units[1]);
+            console.log(`[COMBAT]   Initial distance: ${dist} tiles`);
+        }
+
         // Run combat simulation
         while (this.tick < this.maxTicks) {
             this.tick++;
 
-            // Process each living unit
+            // Process each unit
             for (const unit of this.getAliveUnits()) {
                 this.processUnit(unit);
             }
@@ -480,6 +498,8 @@ class CombatSimulator {
             damage: remainingUnits + 2 // Base damage + remaining units
         });
 
+        console.log(`[COMBAT] === Combat End at tick ${this.tick} (${(this.tick * this.tickRate).toFixed(2)}s) - Winner: ${winner} ===`);
+
         return {
             winner,
             remainingUnits,
@@ -498,10 +518,12 @@ class CombatSimulator {
     }
 
     processUnit(unit) {
-        // Reduce attack cooldown
+        // Reduce cooldowns
         if (unit.attackCooldown > 0) {
             unit.attackCooldown -= this.tickRate;
-            return;
+        }
+        if (unit.moveCooldown > 0) {
+            unit.moveCooldown -= this.tickRate;
         }
 
         // Find target
@@ -515,12 +537,23 @@ class CombatSimulator {
 
         // Check if in range
         if (distance <= unit.stats.range) {
-            // Attack
-            this.performAttack(unit, unit.target);
-            unit.attackCooldown = 1 / unit.stats.attackSpeed;
+            // Only attack if cooldown is ready
+            if (unit.attackCooldown <= 0) {
+                this.performAttack(unit, unit.target);
+                unit.attackCooldown = 1 / unit.stats.attackSpeed;
+            }
+            // If on cooldown and in range, just wait
         } else {
-            // Move towards target
-            this.moveTowardsTarget(unit, unit.target);
+            // Move towards target (only if move cooldown is ready)
+            if (unit.moveCooldown <= 0) {
+                this.moveTowardsTarget(unit, unit.target);
+                // Calculate move cooldown from unit's moveSpeed (tiles/sec)
+                // Cooldown = 1 / moveSpeed (e.g., 2.5 tiles/sec = 0.4s cooldown)
+                const moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
+                unit.moveCooldown = 1 / moveSpeed;
+                // Delay attack after moving so visual can catch up
+                unit.attackCooldown = Math.max(unit.attackCooldown, ATTACK_DELAY_AFTER_MOVE);
+            }
         }
     }
 
@@ -544,7 +577,19 @@ class CombatSimulator {
     }
 
     getDistance(unit1, unit2) {
-        return Math.abs(unit1.x - unit2.x) + Math.abs(unit1.y - unit2.y);
+        // Hex distance for odd-row offset coordinates
+        // Convert offset coords to cube coords, then calculate cube distance
+        const cube1 = this.offsetToCube(unit1.x, unit1.y);
+        const cube2 = this.offsetToCube(unit2.x, unit2.y);
+        return (Math.abs(cube1.q - cube2.q) + Math.abs(cube1.r - cube2.r) + Math.abs(cube1.s - cube2.s)) / 2;
+    }
+
+    offsetToCube(x, y) {
+        // Convert odd-row offset coordinates to cube coordinates
+        const q = x - Math.floor((y - (y & 1)) / 2);
+        const r = y;
+        const s = -q - r;
+        return { q, r, s };
     }
 
     moveTowardsTarget(unit, target) {
@@ -579,8 +624,12 @@ class CombatSimulator {
         }
 
         if (newX !== unit.x || newY !== unit.y) {
+            const oldX = unit.x;
+            const oldY = unit.y;
             unit.x = newX;
             unit.y = newY;
+
+            console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} (${unit.playerId}) moves (${oldX},${oldY}) -> (${newX},${newY}), target at (${target.x},${target.y})`);
 
             this.events.push({
                 type: CombatEventType.UNIT_MOVE,
@@ -602,6 +651,9 @@ class CombatSimulator {
         const armorReduction = target.stats.armor / (target.stats.armor + 100);
         const damage = Math.round(baseDamage * (1 - armorReduction));
 
+        // Debug logging for attack timing analysis
+        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} attacks ${target.unitId} (atkSpd: ${attacker.stats.attackSpeed}, cooldown will be: ${(1 / attacker.stats.attackSpeed).toFixed(2)}s)`);
+
         this.events.push({
             type: CombatEventType.UNIT_ATTACK,
             tick: this.tick,
@@ -610,7 +662,7 @@ class CombatSimulator {
             damage
         });
 
-        // Apply damage
+        // Apply damage immediately
         target.currentHealth -= damage;
 
         this.events.push({
@@ -632,17 +684,16 @@ class CombatSimulator {
                 killerId: attacker.instanceId
             };
             // Include loot type and lootId if the unit has loot
-            console.log(`[CombatSim] Unit died: ${target.name} (${target.instanceId}), lootType: ${target.lootType || 'none'}`);
+            console.log(`[COMBAT] Tick ${this.tick}: ${target.unitId} DIED (killed by ${attacker.unitId})`);
             if (target.lootType && target.lootType !== LootType.None) {
                 deathEvent.lootType = target.lootType;
                 deathEvent.lootPosition = { x: target.x, y: target.y };
                 deathEvent.lootId = uuidv4(); // Generate unique ID for this loot
-                console.log(`[CombatSim] Loot added to death event: ${deathEvent.lootType}, id: ${deathEvent.lootId}`);
             }
             this.events.push(deathEvent);
         }
 
-        // Generate mana for attacker and target
+        // Generate mana for attacker
         attacker.currentMana = Math.min(attacker.currentMana + 10, attacker.stats.mana);
     }
 }
@@ -847,6 +898,11 @@ class GameRoom {
         console.log(`[GameRoom] Starting planning phase for round ${this.round} (${roundType}), timer: ${this.phaseTimer}s`);
         this.phaseStartTime = Date.now();
 
+        // Check for pending merges (units bought during combat that can now merge with board units)
+        for (const player of this.getActivePlayers()) {
+            this.checkAllMerges(player);
+        }
+
         // Give income
         console.log(`[GameRoom] startPlanningPhase - giving income to ${this.getActivePlayers().length} players`);
         for (const player of this.getActivePlayers()) {
@@ -1005,6 +1061,34 @@ class GameRoom {
             player1.calculateTraits();
             player2.calculateTraits();
 
+            // Debug: Log matchup details
+            console.log(`[MATCHUP] Round ${this.round}: ${player1.name} (player1) vs ${player2.name} (player2)`);
+            console.log(`[MATCHUP] Host: ${matchup.hostPlayerId === matchup.player1 ? player1.name : player2.name}`);
+
+            // Log board positions for player1
+            console.log(`[MATCHUP] ${player1.name}'s board:`);
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 5; x++) {
+                    const unit = player1.board[x][y];
+                    if (unit) {
+                        const stats = player1.getUnitCombatStats(unit);
+                        console.log(`[MATCHUP]   ${unit.name} at (${x},${y}) - HP:${stats.health} ATK:${stats.attack} ASPD:${stats.attackSpeed} RNG:${stats.range}`);
+                    }
+                }
+            }
+
+            // Log board positions for player2
+            console.log(`[MATCHUP] ${player2.name}'s board:`);
+            for (let y = 0; y < 4; y++) {
+                for (let x = 0; x < 5; x++) {
+                    const unit = player2.board[x][y];
+                    if (unit) {
+                        const stats = player2.getUnitCombatStats(unit);
+                        console.log(`[MATCHUP]   ${unit.name} at (${x},${y}) - HP:${stats.health} ATK:${stats.attack} ASPD:${stats.attackSpeed} RNG:${stats.range}`);
+                    }
+                }
+            }
+
             // Run combat simulation
             const simulator = new CombatSimulator(
                 player1.board,
@@ -1013,6 +1097,9 @@ class GameRoom {
                 player2
             );
             const result = simulator.run();
+
+            // Debug: Log result
+            console.log(`[MATCHUP] Result: ${result.winner} wins in ${result.durationTicks} ticks`);
 
             // Map winner back to actual player IDs
             const winnerId = result.winner === 'player1' ? matchup.player1 : matchup.player2;
@@ -1777,34 +1864,73 @@ class GameRoom {
             }
         }
 
-        // Check board
-        for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
-            for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
-                const u = player.board[x][y];
-                if (u && u !== newUnit && u.unitId === newUnit.unitId && u.starLevel === newUnit.starLevel) {
-                    matches.push({ unit: u, location: { type: 'board', x, y } });
+        // Check board - only during planning phase
+        // During combat/results, board units are locked and shouldn't merge
+        if (this.phase === 'planning') {
+            for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+                for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+                    const u = player.board[x][y];
+                    if (u && u !== newUnit && u.unitId === newUnit.unitId && u.starLevel === newUnit.starLevel) {
+                        matches.push({ unit: u, location: { type: 'board', x, y } });
+                    }
                 }
             }
         }
 
-        if (matches.length >= 2 && newUnit.starLevel < GameConstants.Units.MAX_STAR_LEVEL) {
-            // Merge! Remove newUnit and one match, upgrade the other match
-            const keepUnit = matches[0].unit;
-            const removeUnit = matches[1];
+        if (matches.length >= 1 && newUnit.starLevel < GameConstants.Units.MAX_STAR_LEVEL) {
+            // Merge! Prioritize keeping the unit that's on the board
 
-            // Find and remove newUnit
+            // Check if newUnit is on board
+            let newUnitOnBoard = false;
+            let newUnitBoardPos = null;
+            for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+                for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+                    if (player.board[x][y] === newUnit) {
+                        newUnitOnBoard = true;
+                        newUnitBoardPos = { x, y };
+                        break;
+                    }
+                }
+                if (newUnitOnBoard) break;
+            }
+
+            // Find if any match is on board
+            const boardMatch = matches.find(m => m.location.type === 'board');
+
+            // Decide which unit to keep: prioritize board units
+            let keepUnit, removeUnit;
+            if (boardMatch) {
+                // Keep the board match, remove newUnit
+                keepUnit = boardMatch.unit;
+                removeUnit = newUnit;
+            } else if (newUnitOnBoard) {
+                // Keep newUnit (on board), remove the bench match
+                keepUnit = newUnit;
+                removeUnit = matches[0].unit;
+                // Remove the match from its location
+                if (matches[0].location.type === 'bench') {
+                    player.bench[matches[0].location.slot] = null;
+                }
+            } else {
+                // Both on bench, keep first match
+                keepUnit = matches[0].unit;
+                removeUnit = newUnit;
+            }
+
+            // Remove the unit that's not being kept
             for (let i = 0; i < player.bench.length; i++) {
-                if (player.bench[i] === newUnit) {
+                if (player.bench[i] === removeUnit) {
                     player.bench[i] = null;
                     break;
                 }
             }
-
-            // Remove second match
-            if (removeUnit.location.type === 'bench') {
-                player.bench[removeUnit.location.slot] = null;
-            } else {
-                player.board[removeUnit.location.x][removeUnit.location.y] = null;
+            for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+                for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+                    if (player.board[x][y] === removeUnit) {
+                        player.board[x][y] = null;
+                        break;
+                    }
+                }
             }
 
             // Upgrade kept unit
@@ -1819,6 +1945,53 @@ class GameRoom {
         }
 
         return { merged: false };
+    }
+
+    /**
+     * Check all units for possible merges.
+     * Called at the start of planning phase to handle units bought during combat
+     * that can now merge with board units.
+     */
+    checkAllMerges(player) {
+        let mergesOccurred = true;
+        let totalMerges = 0;
+
+        // Keep checking until no more merges happen (handles chain merges like 1->2->3 star)
+        while (mergesOccurred) {
+            mergesOccurred = false;
+
+            // Check each bench unit for possible merges
+            for (let i = 0; i < player.bench.length; i++) {
+                const unit = player.bench[i];
+                if (unit) {
+                    const result = this.checkAndMerge(player, unit);
+                    if (result.merged) {
+                        mergesOccurred = true;
+                        totalMerges++;
+                        console.log(`[GameRoom] Post-combat merge: ${unit.name} upgraded`);
+                    }
+                }
+            }
+
+            // Also check board units (in case two board units can merge with a bench unit)
+            for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+                for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+                    const unit = player.board[x][y];
+                    if (unit) {
+                        const result = this.checkAndMerge(player, unit);
+                        if (result.merged) {
+                            mergesOccurred = true;
+                            totalMerges++;
+                            console.log(`[GameRoom] Post-combat merge: ${unit.name} upgraded`);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (totalMerges > 0) {
+            console.log(`[GameRoom] ${player.name}: ${totalMerges} post-combat merge(s) completed`);
+        }
     }
 
     // ========== ITEM ACTIONS ==========
