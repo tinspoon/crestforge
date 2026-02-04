@@ -1182,50 +1182,63 @@ namespace Crestforge.Visuals
 
                             if (foundTile && !isEnemy && coord.y < 4)
                             {
-                                // Move visual directly for immediate feedback (no flicker)
-                                Vector3 targetPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
-                                targetPos.y = unitYOffset;
-
-                                // If there's a unit at target, swap to bench
+                                // Check if there's a unit at target (for swapping)
                                 string targetInstanceId = null;
                                 if (serverState.board[coord.x, coord.y] != null)
                                 {
                                     targetInstanceId = serverState.board[coord.x, coord.y].instanceId;
                                 }
 
-                                if (!string.IsNullOrEmpty(targetInstanceId) && serverUnitVisuals.TryGetValue(targetInstanceId, out UnitVisual3D targetVisual) && targetVisual != null)
+                                // If placing to empty tile, check if board is full (can't exceed level)
+                                bool isSwap = !string.IsNullOrEmpty(targetInstanceId);
+                                if (!isSwap && serverState.GetBoardUnitCount() >= serverState.level)
                                 {
-                                    // Swap: move target board unit to bench position
-                                    Vector3 benchPos = GetBenchSlotWorldPosition(benchDragIndex);
-                                    benchPos.y = unitYOffset;
-                                    targetVisual.SetPositionAndFaceCamera(benchPos);
-                                    serverBenchVisuals[benchDragIndex] = targetVisual;
-                                    serverUnitVisuals.Remove(targetInstanceId);
+                                    // Board is full - return to bench
+                                    draggedUnit.SetPositionAndFaceCamera(dragStartPos);
+                                    serverBenchVisuals[benchDragIndex] = draggedUnit;
+                                    if (draggedCollider != null) draggedCollider.enabled = true;
+                                    draggedUnit = null;
                                 }
                                 else
                                 {
-                                    // No swap needed, just clear bench slot
-                                    serverBenchVisuals.Remove(benchDragIndex);
+                                    // Move visual directly for immediate feedback (no flicker)
+                                    Vector3 targetPos = hexBoard.GetTileWorldPosition(coord.x, coord.y);
+                                    targetPos.y = unitYOffset;
+
+                                    if (isSwap && serverUnitVisuals.TryGetValue(targetInstanceId, out UnitVisual3D targetVisual) && targetVisual != null)
+                                    {
+                                        // Swap: move target board unit to bench position
+                                        Vector3 benchPos = GetBenchSlotWorldPosition(benchDragIndex);
+                                        benchPos.y = unitYOffset;
+                                        targetVisual.SetPositionAndFaceCamera(benchPos);
+                                        serverBenchVisuals[benchDragIndex] = targetVisual;
+                                        serverUnitVisuals.Remove(targetInstanceId);
+                                    }
+                                    else
+                                    {
+                                        // No swap needed, just clear bench slot
+                                        serverBenchVisuals.Remove(benchDragIndex);
+                                    }
+
+                                    // Move dragged unit to board
+                                    draggedUnit.SetPositionAndFaceCamera(targetPos);
+                                    serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
+
+                                    // Re-enable collider
+                                    if (draggedCollider != null) draggedCollider.enabled = true;
+
+                                    // Send place action to server
+                                    serverState.PlaceUnit(draggedServerUnitInstanceId, coord.x, coord.y);
+
+                                    // Mark as recently moved to prevent sync from moving it back
+                                    if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                                    {
+                                        recentlyMovedUnits.Add(draggedServerUnitInstanceId);
+                                    }
+
+                                    // Null out draggedUnit so it doesn't get destroyed
+                                    draggedUnit = null;
                                 }
-
-                                // Move dragged unit to board
-                                draggedUnit.SetPositionAndFaceCamera(targetPos);
-                                serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
-
-                                // Re-enable collider
-                                if (draggedCollider != null) draggedCollider.enabled = true;
-
-                                // Send place action to server
-                                serverState.PlaceUnit(draggedServerUnitInstanceId, coord.x, coord.y);
-
-                                // Mark as recently moved to prevent sync from moving it back
-                                if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
-                                {
-                                    recentlyMovedUnits.Add(draggedServerUnitInstanceId);
-                                }
-
-                                // Null out draggedUnit so it doesn't get destroyed
-                                draggedUnit = null;
                             }
                             else
                             {

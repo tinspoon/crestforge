@@ -196,6 +196,7 @@ namespace Crestforge.Networking
             isReceiving = true;
 
             var buffer = new byte[8192];
+            var messageBuffer = new List<byte>();
 
             try
             {
@@ -214,10 +215,21 @@ namespace Crestforge.Networking
 
                     if (result.MessageType == WebSocketMessageType.Text)
                     {
-                        var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                        lock (messageLock)
+                        // Accumulate message bytes (handles fragmented messages)
+                        for (int i = 0; i < result.Count; i++)
                         {
-                            receivedMessages.Enqueue(message);
+                            messageBuffer.Add(buffer[i]);
+                        }
+
+                        // Only process when we have the complete message
+                        if (result.EndOfMessage)
+                        {
+                            var message = Encoding.UTF8.GetString(messageBuffer.ToArray());
+                            messageBuffer.Clear();
+                            lock (messageLock)
+                            {
+                                receivedMessages.Enqueue(message);
+                            }
                         }
                     }
                 }

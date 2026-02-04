@@ -1285,11 +1285,12 @@ namespace Crestforge.Visuals
         {
             if (unit == null) return;
 
-            // During server combat, health is updated directly via UpdateHealthBar() calls from ServerCombatVisualizer
+            // During server combat or victory pose, health is updated directly via UpdateHealthBar() calls
             // Skip automatic polling to prevent overwriting server-provided health values
-            bool inServerCombat = Crestforge.Systems.ServerCombatVisualizer.Instance != null &&
-                                  Crestforge.Systems.ServerCombatVisualizer.Instance.isPlaying;
-            if (inServerCombat) return;
+            var combatVisualizer = Crestforge.Systems.ServerCombatVisualizer.Instance;
+            bool inServerCombat = combatVisualizer != null && combatVisualizer.isPlaying;
+            bool inVictoryPose = combatVisualizer != null && combatVisualizer.isInVictoryPose;
+            if (inServerCombat || inVictoryPose) return;
 
             float currentHealth = 0;
             float maxHealth = unit.template.baseStats.health * Mathf.Pow(1.8f, unit.starLevel - 1);
