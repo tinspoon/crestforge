@@ -808,16 +808,32 @@ namespace Crestforge.UI
                 if (useOppositeSide)
                 {
                     IsometricCameraSetup.Instance.FocusOnBoardFromOppositeSide(targetBoard);
+                    // Set bench rendering to reversed for opposite-side viewing
+                    if (targetBoard.Registry != null)
+                    {
+                        targetBoard.Registry.ViewFromOppositeSide = true;
+                    }
                 }
                 else
                 {
                     IsometricCameraSetup.Instance.FocusOnBoard(targetBoard);
+                    // Reset bench rendering to normal
+                    if (targetBoard.Registry != null)
+                    {
+                        targetBoard.Registry.ViewFromOppositeSide = false;
+                    }
                 }
             }
         }
 
         public void ReturnToPlayerBoard()
         {
+            // Reset opposite-side viewing flag on the board we were viewing
+            if (currentViewedBoard != null && currentViewedBoard.Registry != null)
+            {
+                currentViewedBoard.Registry.ViewFromOppositeSide = false;
+            }
+
             isViewingOpponent = false;
             currentViewedBoard = null;
             viewedOpponentId = null;
@@ -867,6 +883,11 @@ namespace Crestforge.UI
                         {
                             // View from away player's perspective (opposite side)
                             IsometricCameraSetup.Instance.FocusOnBoard(combatBoard, true);
+                            // Ensure bench is rendered reversed for opposite-side viewing
+                            if (combatBoard.Registry != null)
+                            {
+                                combatBoard.Registry.ViewFromOppositeSide = true;
+                            }
                             AudioManager.Instance?.PlayUIClick();
                             return;
                         }

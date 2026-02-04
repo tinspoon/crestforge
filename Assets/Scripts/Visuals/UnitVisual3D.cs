@@ -778,6 +778,35 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
+        /// Immediately rotate to face the camera
+        /// </summary>
+        public void FaceCamera()
+        {
+            if (LockRotation) return;
+
+            Camera cam = Camera.main;
+            if (cam != null)
+            {
+                // Use the opposite of camera's forward direction (horizontal only)
+                // This makes all units face the same direction rather than converging to a point
+                Vector3 towardsCamera = -cam.transform.forward;
+                towardsCamera.y = 0;
+
+                // If camera is looking straight down, fall back to using camera position
+                if (towardsCamera.sqrMagnitude < 0.01f)
+                {
+                    towardsCamera = cam.transform.position - transform.position;
+                    towardsCamera.y = 0;
+                }
+
+                if (towardsCamera.sqrMagnitude > 0.01f)
+                {
+                    transform.rotation = Quaternion.LookRotation(towardsCamera);
+                }
+            }
+        }
+
+        /// <summary>
         /// Teleport unit immediately and face camera (used for swapping)
         /// </summary>
         public void SetPositionAndFaceCamera(Vector3 worldPosition)
@@ -785,32 +814,7 @@ namespace Crestforge.Visuals
             transform.position = worldPosition;
             targetPosition = worldPosition;
             isMoving = false;
-
-            // Immediately face camera - use camera's forward direction so all units face uniformly
-            // Skip if rotation is locked
-            if (!LockRotation)
-            {
-                Camera cam = Camera.main;
-                if (cam != null)
-                {
-                    // Use the opposite of camera's forward direction (horizontal only)
-                    // This makes all units face the same direction rather than converging to a point
-                    Vector3 towardsCamera = -cam.transform.forward;
-                    towardsCamera.y = 0;
-
-                    // If camera is looking straight down, fall back to using camera position
-                    if (towardsCamera.sqrMagnitude < 0.01f)
-                    {
-                        towardsCamera = cam.transform.position - worldPosition;
-                        towardsCamera.y = 0;
-                    }
-
-                    if (towardsCamera.sqrMagnitude > 0.01f)
-                    {
-                        transform.rotation = Quaternion.LookRotation(towardsCamera);
-                    }
-                }
-            }
+            FaceCamera();
         }
 
         /// <summary>

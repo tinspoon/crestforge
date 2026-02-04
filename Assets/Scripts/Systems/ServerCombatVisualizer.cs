@@ -375,6 +375,13 @@ namespace Crestforge.Systems
                 if (playerBoardWhenAway != null && playerBoardWhenAway.Registry != null && combatBoard != null)
                 {
                     playerBoardWhenAway.Registry.TeleportToAwayPosition(combatBoard);
+
+                    // Set the combat board (host's board) to render benches reversed
+                    // since we're viewing from the opposite side (camera at 180°)
+                    if (combatBoard.Registry != null)
+                    {
+                        combatBoard.Registry.ViewFromOppositeSide = true;
+                    }
                 }
             }
             else
@@ -512,6 +519,12 @@ namespace Crestforge.Systems
                 playerBoardWhenAway.Registry.ReturnFromAway();
             }
             playerBoardWhenAway = null;
+
+            // Reset opposite-side viewing flag on combat board
+            if (combatBoard != null && combatBoard.Registry != null)
+            {
+                combatBoard.Registry.ViewFromOppositeSide = false;
+            }
 
             // Restore board units if we're the host
             var boardManager = BoardManager3D.Instance;

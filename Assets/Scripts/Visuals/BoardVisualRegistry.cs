@@ -31,6 +31,9 @@ namespace Crestforge.Visuals
         private Dictionary<string, Vector3> originalPositions = new Dictionary<string, Vector3>();
         private Dictionary<int, Vector3> originalBenchPositions = new Dictionary<int, Vector3>();
 
+        // Whether the viewer is on the opposite side (camera at 180°), requiring reversed bench order
+        private bool viewFromOppositeSide = false;
+
         /// <summary>
         /// Whether this board's units have been teleported away for combat
         /// </summary>
@@ -40,6 +43,49 @@ namespace Crestforge.Visuals
         /// The board where units are currently fighting (if away)
         /// </summary>
         public HexBoard3D AwayTargetBoard => awayTargetBoard;
+
+        /// <summary>
+        /// Set to true when the viewer is on the opposite side of the board (camera at 180°).
+        /// This reverses bench slot positions so they appear left-to-right from the camera,
+        /// and rotates all units to face the opposite direction.
+        /// </summary>
+        public bool ViewFromOppositeSide
+        {
+            get => viewFromOppositeSide;
+            set
+            {
+                if (viewFromOppositeSide != value)
+                {
+                    viewFromOppositeSide = value;
+                    // Rotate all units to face the new camera direction
+                    RotateAllUnitsForPerspective();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Rotate all board and bench units to face the camera
+        /// </summary>
+        private void RotateAllUnitsForPerspective()
+        {
+            // Rotate all board visuals to face camera
+            foreach (var kvp in boardVisuals)
+            {
+                if (kvp.Value != null)
+                {
+                    kvp.Value.FaceCamera();
+                }
+            }
+
+            // Rotate all bench visuals to face camera
+            foreach (var kvp in benchVisuals)
+            {
+                if (kvp.Value != null)
+                {
+                    kvp.Value.FaceCamera();
+                }
+            }
+        }
 
         private void Awake()
         {
@@ -98,6 +144,12 @@ namespace Crestforge.Visuals
             if (visual != null)
             {
                 boardVisuals[serverUnit.instanceId] = visual;
+
+                // Ensure new units face the camera when viewing from opposite side
+                if (viewFromOppositeSide)
+                {
+                    visual.FaceCamera();
+                }
             }
             return visual;
         }
@@ -138,6 +190,14 @@ namespace Crestforge.Visuals
                     {
                         existing.SetPosition(worldPos);
                     }
+
+                    // Always face camera when viewing from opposite side
+                    // This handles initial sync, repositioning, and any other updates
+                    if (viewFromOppositeSide)
+                    {
+                        existing.FaceCamera();
+                    }
+
                     existing.SetServerItems(serverUnit.items);
                     return existing;
                 }
@@ -161,6 +221,12 @@ namespace Crestforge.Visuals
                 {
                     originalBenchPositions[slotIndex] = GetBenchSlotWorldPosition(slotIndex);
                     visual.LockRotation = true;
+                }
+
+                // Ensure new units face the camera when viewing from opposite side
+                if (viewFromOppositeSide && !isAway)
+                {
+                    visual.FaceCamera();
                 }
             }
             return visual;
@@ -247,6 +313,11 @@ namespace Crestforge.Visuals
                     if (!visible && kvp.Value.GetComponent<CombatUnitVisual>() != null)
                         continue;
                     kvp.Value.gameObject.SetActive(visible);
+                    // When becoming visible again (e.g., after combat), face the camera
+                    if (visible)
+                    {
+                        kvp.Value.FaceCamera();
+                    }
                 }
             }
         }
@@ -268,6 +339,11 @@ namespace Crestforge.Visuals
                     if (!visible && kvp.Value.GetComponent<CombatUnitVisual>() != null)
                         continue;
                     kvp.Value.gameObject.SetActive(visible);
+                    // When becoming visible again (e.g., after combat), face the camera
+                    if (visible)
+                    {
+                        kvp.Value.FaceCamera();
+                    }
                 }
             }
         }
@@ -286,6 +362,9 @@ namespace Crestforge.Visuals
             originalPositions.Clear();
             originalBenchPositions.Clear();
 
+            // Rotation to face the away camera (180° from default)
+            Quaternion flipRotation = Quaternion.Euler(0f, 180f, 0f);
+
             // Teleport board visuals
             foreach (var kvp in boardVisuals)
             {
@@ -294,6 +373,8 @@ namespace Crestforge.Visuals
                     // Save original position
                     originalPositions[kvp.Key] = kvp.Value.transform.position;
                     kvp.Value.LockRotation = true;
+                    // Rotate to face the away camera
+                    kvp.Value.transform.rotation = kvp.Value.transform.rotation * flipRotation;
                 }
             }
 
@@ -309,6 +390,8 @@ namespace Crestforge.Visuals
                     Vector3 awayBenchPos = GetAwayBenchSlotWorldPosition(targetBoard, kvp.Key);
                     kvp.Value.SetPosition(awayBenchPos);
                     kvp.Value.LockRotation = true;
+                    // Rotate to face the away camera
+                    kvp.Value.transform.rotation = kvp.Value.transform.rotation * flipRotation;
                 }
             }
         }
@@ -335,6 +418,8 @@ namespace Crestforge.Visuals
                     }
                     kvp.Value.LockRotation = false;
                     kvp.Value.FreezePosition = false;
+                    // Face the home camera
+                    kvp.Value.FaceCamera();
                 }
             }
 
@@ -350,6 +435,8 @@ namespace Crestforge.Visuals
                     kvp.Value.LockRotation = false;
                     kvp.Value.FreezePosition = false;
                     kvp.Value.gameObject.SetActive(true);
+                    // Face the home camera
+                    kvp.Value.FaceCamera();
                 }
             }
 
@@ -574,6 +661,12 @@ namespace Crestforge.Visuals
             visual.ServerInstanceId = serverUnit.instanceId;
             visual.SetServerItems(serverUnit.items);
 
+            // If viewing from opposite side, rotate unit to face that camera
+            if (viewFromOppositeSide)
+            {
+                visual.transform.rotation = visual.transform.rotation * Quaternion.Euler(0f, 180f, 0f);
+            }
+
             return visual;
         }
 
@@ -594,19 +687,24 @@ namespace Crestforge.Visuals
             float slotSpacing = 0.8f;
             float totalWidth = (benchSize - 1) * slotSpacing;
 
+            // Reverse index if viewing from opposite side (camera at 180°)
+            // This makes bench visually fill left-to-right from camera's perspective
+            int visualIndex = viewFromOppositeSide ? (benchSize - 1 - index) : index;
+
             // Position behind the player's first row (negative Z from board center)
             Vector3 firstRowPos = hexBoard.GetTileWorldPosition(0, 0);
             float benchZ = firstRowPos.z - 1.5f;
 
             // Center horizontally on board
             float startX = hexBoard.transform.position.x - totalWidth / 2f;
-            float x = startX + index * slotSpacing;
+            float x = startX + visualIndex * slotSpacing;
 
             return new Vector3(x, unitYOffset, benchZ);
         }
 
         /// <summary>
         /// Get world position for an away bench slot (behind row 7 on target board)
+        /// Camera views from 180° when away, so reverse index for left-to-right visual order
         /// </summary>
         private Vector3 GetAwayBenchSlotWorldPosition(HexBoard3D targetBoard, int index)
         {
@@ -616,6 +714,10 @@ namespace Crestforge.Visuals
             float slotSpacing = 0.8f;
             float totalWidth = (benchSize - 1) * slotSpacing;
 
+            // Reverse index since camera views from opposite side (180°)
+            // This makes bench visually fill left-to-right from camera's perspective
+            int visualIndex = benchSize - 1 - index;
+
             // Position behind the enemy's last row (positive Z from board center)
             int lastRow = GameConstants.Grid.HEIGHT * 2 - 1;
             Vector3 lastRowPos = targetBoard.GetTileWorldPosition(0, lastRow);
@@ -623,7 +725,7 @@ namespace Crestforge.Visuals
 
             // Center horizontally on target board
             float startX = targetBoard.transform.position.x - totalWidth / 2f;
-            float x = startX + index * slotSpacing;
+            float x = startX + visualIndex * slotSpacing;
 
             return new Vector3(x, unitYOffset, benchZ);
         }
