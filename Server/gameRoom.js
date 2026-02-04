@@ -361,9 +361,7 @@ const CombatEventType = {
 };
 
 // Default movement speed (tiles/sec) if unit doesn't have moveSpeed defined
-const DEFAULT_MOVE_SPEED = 2.5;
-// Delay before attacking after moving (matches client's moveAnimationDuration)
-const ATTACK_DELAY_AFTER_MOVE = 0.35;
+const DEFAULT_MOVE_SPEED = 1.25;
 // Point in attack animation when damage lands (0.0 = start, 1.0 = end)
 const DEFAULT_HIT_POINT = 0.4;
 // Number of ticks a unit can be stuck before re-evaluating target (10 ticks = 0.5s)
@@ -538,21 +536,50 @@ class CombatSimulator {
             unit.moveCooldown -= this.tickRate;
         }
 
-        // Find target (or re-evaluate if stuck for too long)
+        // Find target (or re-evaluate if needed)
         if (!unit.target || unit.target.isDead) {
             unit.target = this.findTarget(unit);
             unit.stuckTicks = 0;
-        } else if (unit.stuckTicks >= STUCK_TICKS_BEFORE_RETARGET) {
-            // Unit has been stuck for too long - try finding a different target
-            const alternateTarget = this.findTarget(unit, unit.target);
-            if (alternateTarget) {
-                console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} re-targeting from ${unit.target.unitId} to ${alternateTarget.unitId} after being stuck`);
-                unit.target = alternateTarget;
-                unit.stuckTicks = 0;
+            // Reset previous position when getting new target - allows free movement toward new target
+            unit.previousX = unit.x;
+            unit.previousY = unit.y;
+        } else {
+            // Re-evaluate target if:
+            // 1. Current target is not in range AND there's a closer enemy that IS in range
+            // 2. Unit has been stuck for too long
+            const distToCurrentTarget = this.getDistance(unit, unit.target);
+            const range = unit.stats.range || 1;
+
+            if (distToCurrentTarget > range) {
+                // Current target not in range - check if there's an enemy we CAN attack right now
+                const closestEnemy = this.findTarget(unit);
+                if (closestEnemy && closestEnemy !== unit.target) {
+                    const distToClosest = this.getDistance(unit, closestEnemy);
+                    if (distToClosest <= range) {
+                        // There's an adjacent enemy we can attack! Switch to them
+                        console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} re-targeting from ${unit.target.unitId} (dist=${distToCurrentTarget}) to adjacent ${closestEnemy.unitId} (dist=${distToClosest})`);
+                        unit.target = closestEnemy;
+                        unit.stuckTicks = 0;
+                        unit.previousX = unit.x;
+                        unit.previousY = unit.y;
+                    }
+                }
             }
-            // If no alternate target, keep current target and reset stuck counter to avoid spamming
-            else {
-                unit.stuckTicks = 0;
+
+            // Also re-target if stuck for too long
+            if (unit.stuckTicks >= STUCK_TICKS_BEFORE_RETARGET) {
+                const alternateTarget = this.findTarget(unit, unit.target);
+                if (alternateTarget) {
+                    console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} re-targeting from ${unit.target.unitId} to ${alternateTarget.unitId} after being stuck`);
+                    unit.target = alternateTarget;
+                    unit.stuckTicks = 0;
+                    unit.previousX = unit.x;
+                    unit.previousY = unit.y;
+                }
+                // If no alternate target, keep current target and reset stuck counter to avoid spamming
+                else {
+                    unit.stuckTicks = 0;
+                }
             }
         }
 
@@ -576,19 +603,13 @@ class CombatSimulator {
                 unit.attackCooldown = 1 / unit.stats.attackSpeed;
                 unit.stuckTicks = 0; // Reset stuck counter on successful attack
             }
-            // If on cooldown or either unit still moving - wait
         } else {
             // Move towards target (only if move cooldown is ready)
             if (unit.moveCooldown <= 0) {
-                const moved = this.moveTowardsTarget(unit, unit.target);
+                this.moveTowardsTarget(unit, unit.target);
                 // Calculate move cooldown from unit's moveSpeed (tiles/sec)
-                // Cooldown = 1 / moveSpeed (e.g., 2.5 tiles/sec = 0.4s cooldown)
                 const moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
                 unit.moveCooldown = 1 / moveSpeed;
-                // Delay attack after moving so visual can catch up
-                if (moved) {
-                    unit.attackCooldown = Math.max(unit.attackCooldown, ATTACK_DELAY_AFTER_MOVE);
-                }
             }
         }
     }
@@ -636,79 +657,138 @@ class CombatSimulator {
         return { q, r, s };
     }
 
-    moveTowardsTarget(unit, target) {
-        const dx = Math.sign(target.x - unit.x);
-        const dy = Math.sign(target.y - unit.y);
-
-        // Helper to check if a position is the previous position (to avoid oscillation)
-        const isPreviousPos = (x, y) => x === unit.previousX && y === unit.previousY;
-
-        // Helper to check if a move is valid (not occupied and preferably not previous position)
-        const canMoveTo = (x, y, allowPrevious = false) => {
-            if (this.isOccupied(x, y, unit)) return false;
-            if (!allowPrevious && isPreviousPos(x, y)) return false;
-            return true;
-        };
-
-        // Try to move toward target with multiple fallback options
-        let newX = unit.x;
-        let newY = unit.y;
-
-        // Priority 1: Move in Y direction (toward/away from enemy side)
-        if (dy !== 0 && canMoveTo(unit.x, unit.y + dy)) {
-            newY = unit.y + dy;
+    // Get hex neighbors for a position (odd-row offset coordinates)
+    getHexNeighbors(x, y) {
+        // Neighbor offsets for odd-row offset coordinates (odd rows shifted right)
+        const isOddRow = y & 1;
+        if (isOddRow) {
+            // Odd row: shifted right
+            return [
+                { x: x + 1, y: y },     // East
+                { x: x + 1, y: y - 1 }, // NE
+                { x: x, y: y - 1 },     // NW
+                { x: x - 1, y: y },     // West
+                { x: x, y: y + 1 },     // SW
+                { x: x + 1, y: y + 1 }, // SE
+            ];
+        } else {
+            // Even row: not shifted
+            return [
+                { x: x + 1, y: y },     // East
+                { x: x, y: y - 1 },     // NE
+                { x: x - 1, y: y - 1 }, // NW
+                { x: x - 1, y: y },     // West
+                { x: x - 1, y: y + 1 }, // SW
+                { x: x, y: y + 1 },     // SE
+            ];
         }
-        // Priority 2: Move in X direction
-        else if (dx !== 0 && canMoveTo(unit.x + dx, unit.y)) {
-            newX = unit.x + dx;
+    }
+
+    // A* pathfinding to find next step toward target
+    findPathToTarget(unit, target) {
+        const startX = unit.x;
+        const startY = unit.y;
+        const range = unit.stats.range || 1;
+
+        const startDist = this.getDistance(unit, target);
+
+        // Check if already in range
+        if (startDist <= range) {
+            return null; // No movement needed
         }
-        // Priority 3: Try moving diagonally (Y + X)
-        else if (dy !== 0 && dx !== 0 && canMoveTo(unit.x + dx, unit.y + dy)) {
-            newX = unit.x + dx;
-            newY = unit.y + dy;
-        }
-        // Priority 4: Try alternate X direction to go around obstacles
-        else if (dy !== 0) {
-            // Try moving left or right to get around
-            if (canMoveTo(unit.x + 1, unit.y)) {
-                newX = unit.x + 1;
-            } else if (canMoveTo(unit.x - 1, unit.y)) {
-                newX = unit.x - 1;
+
+        // A* implementation
+        const openSet = [{ x: startX, y: startY, g: 0, h: 0, f: 0, parent: null }];
+        const closedSet = new Set();
+        const gScores = new Map();
+        gScores.set(`${startX},${startY}`, 0);
+
+        while (openSet.length > 0) {
+            // Get node with lowest f score
+            openSet.sort((a, b) => a.f - b.f);
+            const current = openSet.shift();
+            const currentKey = `${current.x},${current.y}`;
+
+            // Check if we've reached a position in range of target
+            const distToTarget = this.getDistance({ x: current.x, y: current.y }, target);
+            if (distToTarget <= range) {
+                // Reconstruct path and return first step
+                let node = current;
+                while (node.parent && node.parent.parent) {
+                    node = node.parent;
+                }
+                if (node.parent) {
+                    return { x: node.x, y: node.y };
+                }
+                return null;
             }
-        }
-        // Priority 5: Try any direction as a last resort (even backwards, but not previous position)
-        // This helps units navigate around obstacles when all preferred paths are blocked
-        if (newX === unit.x && newY === unit.y) {
-            // All possible moves, ordered by preference (forward > sideways > backward)
-            const allMoves = [
-                { x: unit.x, y: unit.y + dy },      // Forward Y
-                { x: unit.x + dx, y: unit.y },      // Forward X
-                { x: unit.x + dx, y: unit.y + dy }, // Forward diagonal
-                { x: unit.x + 1, y: unit.y },       // Right
-                { x: unit.x - 1, y: unit.y },       // Left
-                { x: unit.x + 1, y: unit.y + dy },  // Right-forward diagonal
-                { x: unit.x - 1, y: unit.y + dy },  // Left-forward diagonal
-                { x: unit.x, y: unit.y - dy },      // Backward Y (opposite of target)
-                { x: unit.x - dx, y: unit.y },      // Backward X
-                { x: unit.x + 1, y: unit.y - dy },  // Right-backward diagonal
-                { x: unit.x - 1, y: unit.y - dy },  // Left-backward diagonal
-            ].filter(m => m.x !== unit.x || m.y !== unit.y); // Remove no-ops when dx or dy is 0
 
-            for (const move of allMoves) {
-                if (canMoveTo(move.x, move.y)) {
-                    newX = move.x;
-                    newY = move.y;
-                    break;
+            closedSet.add(currentKey);
+
+            // Check all neighbors
+            const neighbors = this.getHexNeighbors(current.x, current.y);
+            for (const neighbor of neighbors) {
+                const neighborKey = `${neighbor.x},${neighbor.y}`;
+
+                // Skip if out of bounds (7 wide, 8 tall board)
+                if (neighbor.x < 0 || neighbor.x >= 7 || neighbor.y < 0 || neighbor.y >= 8) {
+                    continue;
+                }
+
+                // Skip if already evaluated
+                if (closedSet.has(neighborKey)) {
+                    continue;
+                }
+
+                // Skip if occupied (including target's position - we want to stop adjacent, not on top)
+                if (this.isOccupied(neighbor.x, neighbor.y, unit)) {
+                    continue;
+                }
+
+                const tentativeG = current.g + 1;
+                const existingG = gScores.get(neighborKey);
+
+                if (existingG === undefined || tentativeG < existingG) {
+                    const h = this.getDistance({ x: neighbor.x, y: neighbor.y }, target);
+                    // Small tie-breaker: prefer positions closer to target's x-coordinate (column)
+                    // This creates a natural zigzag pattern for vertical movement instead of drifting left/right
+                    const xDeviation = Math.abs(neighbor.x - target.x) * 0.01;
+                    const newNode = {
+                        x: neighbor.x,
+                        y: neighbor.y,
+                        g: tentativeG,
+                        h: h,
+                        f: tentativeG + h + xDeviation,
+                        parent: current
+                    };
+
+                    gScores.set(neighborKey, tentativeG);
+
+                    // Add to open set if not already there
+                    const existingIndex = openSet.findIndex(n => n.x === neighbor.x && n.y === neighbor.y);
+                    if (existingIndex >= 0) {
+                        openSet[existingIndex] = newNode;
+                    } else {
+                        openSet.push(newNode);
+                    }
                 }
             }
         }
 
-        // Priority 6: If still can't move, allow moving back to previous position as last resort
-        if (newX === unit.x && newY === unit.y) {
-            if (canMoveTo(unit.previousX, unit.previousY, true)) {
-                newX = unit.previousX;
-                newY = unit.previousY;
-            }
+        // No path found
+        return null;
+    }
+
+    moveTowardsTarget(unit, target) {
+        // Use A* pathfinding to find the best next step
+        const nextStep = this.findPathToTarget(unit, target);
+
+        let newX = unit.x;
+        let newY = unit.y;
+
+        if (nextStep) {
+            newX = nextStep.x;
+            newY = nextStep.y;
         }
 
         if (newX !== unit.x || newY !== unit.y) {
@@ -736,7 +816,9 @@ class CombatSimulator {
                 tick: this.tick,
                 instanceId: unit.instanceId,
                 x: newX,
-                y: newY
+                y: newY,
+                // Send movement duration so client animation matches server timing
+                duration: moveDuration
             });
 
             // Successfully moved - reset stuck counter

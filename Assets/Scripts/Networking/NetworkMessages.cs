@@ -445,6 +445,7 @@ namespace Crestforge.Networking
         public string instanceId;
         public int x;
         public int y;
+        public float duration; // Movement duration in seconds (from server)
 
         // For unitAttack
         public string attackerId;

@@ -17,8 +17,8 @@ namespace Crestforge.Systems
         // Settings
         // Match server's 50ms tick rate for real-time playback
         public float tickDuration = 0.05f;
-        // Movement animation duration (matches single-player MOVE_COOLDOWN)
-        public float moveAnimationDuration = 0.35f;
+        // Fallback movement duration if server doesn't provide one
+        public float moveAnimationDuration = 0.8f;
         public float playbackSpeed = 1f;
 
         // State
@@ -471,7 +471,9 @@ namespace Crestforge.Systems
             Vector3 targetPos = Board.GetTileWorldPosition(gridX, gridY);
             targetPos.y = 0.15f;
 
-            visual.MoveTo(targetPos, moveAnimationDuration / playbackSpeed);
+            // Use duration from server, fallback to default if not provided
+            float duration = evt.duration > 0 ? evt.duration : moveAnimationDuration;
+            visual.MoveTo(targetPos, duration / playbackSpeed);
         }
 
         private void ProcessUnitMoveInstant(ServerCombatEvent evt)
