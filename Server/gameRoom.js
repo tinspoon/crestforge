@@ -364,6 +364,10 @@ const CombatEventType = {
 const DEFAULT_MOVE_SPEED = 2.5;
 // Delay before attacking after moving (matches client's moveAnimationDuration)
 const ATTACK_DELAY_AFTER_MOVE = 0.35;
+// Point in attack animation when damage lands (0.0 = start, 1.0 = end)
+const DEFAULT_HIT_POINT = 0.4;
+// Number of ticks a unit can be stuck before re-evaluating target (10 ticks = 0.5s)
+const STUCK_TICKS_BEFORE_RETARGET = 10;
 
 class CombatUnit {
     constructor(unit, playerId, x, y, combatStats) {
@@ -382,6 +386,9 @@ class CombatUnit {
         this.arrivalTick = 0; // Tick when unit finishes moving to current position (0 = already there)
         this.isDead = false;
         this.target = null;
+        this.stuckTicks = 0; // Track how long unit has been unable to move toward target
+        this.previousX = x; // Track previous position to avoid oscillation
+        this.previousY = y;
         // Copy loot type for PvE enemies
         this.lootType = unit.lootType || null;
         // Copy items for display
@@ -393,6 +400,7 @@ class CombatSimulator {
     constructor(player1Board, player2Board, player1State, player2State) {
         this.units = [];
         this.events = [];
+        this.pendingAttacks = []; // Attacks that have started but haven't landed yet
         this.tick = 0;
         this.maxTicks = 1200; // 60 seconds at 20 ticks/sec
         this.tickRate = 0.05; // 50ms per tick (20Hz)
@@ -456,16 +464,19 @@ class CombatSimulator {
         while (this.tick < this.maxTicks) {
             this.tick++;
 
-            // Process each unit
+            // Process pending attacks (damage lands)
+            this.processPendingAttacks();
+
+            // Process each unit (movement, starting new attacks)
             for (const unit of this.getAliveUnits()) {
                 this.processUnit(unit);
             }
 
-            // Check for combat end
+            // Check for combat end (only if no pending attacks - let in-flight attacks resolve)
             const player1Units = this.getAliveUnits().filter(u => u.playerId === 'player1');
             const player2Units = this.getAliveUnits().filter(u => u.playerId === 'player2');
 
-            if (player1Units.length === 0 || player2Units.length === 0) {
+            if ((player1Units.length === 0 || player2Units.length === 0) && this.pendingAttacks.length === 0) {
                 break;
             }
         }
@@ -527,9 +538,22 @@ class CombatSimulator {
             unit.moveCooldown -= this.tickRate;
         }
 
-        // Find target
+        // Find target (or re-evaluate if stuck for too long)
         if (!unit.target || unit.target.isDead) {
             unit.target = this.findTarget(unit);
+            unit.stuckTicks = 0;
+        } else if (unit.stuckTicks >= STUCK_TICKS_BEFORE_RETARGET) {
+            // Unit has been stuck for too long - try finding a different target
+            const alternateTarget = this.findTarget(unit, unit.target);
+            if (alternateTarget) {
+                console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} re-targeting from ${unit.target.unitId} to ${alternateTarget.unitId} after being stuck`);
+                unit.target = alternateTarget;
+                unit.stuckTicks = 0;
+            }
+            // If no alternate target, keep current target and reset stuck counter to avoid spamming
+            else {
+                unit.stuckTicks = 0;
+            }
         }
 
         if (!unit.target) return;
@@ -550,34 +574,45 @@ class CombatSimulator {
             if (canAttack) {
                 this.performAttack(unit, unit.target);
                 unit.attackCooldown = 1 / unit.stats.attackSpeed;
+                unit.stuckTicks = 0; // Reset stuck counter on successful attack
             }
             // If on cooldown or either unit still moving - wait
         } else {
             // Move towards target (only if move cooldown is ready)
             if (unit.moveCooldown <= 0) {
-                this.moveTowardsTarget(unit, unit.target);
+                const moved = this.moveTowardsTarget(unit, unit.target);
                 // Calculate move cooldown from unit's moveSpeed (tiles/sec)
                 // Cooldown = 1 / moveSpeed (e.g., 2.5 tiles/sec = 0.4s cooldown)
                 const moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
                 unit.moveCooldown = 1 / moveSpeed;
                 // Delay attack after moving so visual can catch up
-                unit.attackCooldown = Math.max(unit.attackCooldown, ATTACK_DELAY_AFTER_MOVE);
+                if (moved) {
+                    unit.attackCooldown = Math.max(unit.attackCooldown, ATTACK_DELAY_AFTER_MOVE);
+                }
             }
         }
     }
 
-    findTarget(unit) {
+    findTarget(unit, excludeTarget = null) {
         const enemies = this.getEnemyUnits(unit);
         if (enemies.length === 0) return null;
 
-        // Find closest enemy
+        // Find closest enemy (optionally excluding a specific target)
+        // Tie-breaker: prefer enemies in the same column (more direct path)
         let closest = null;
         let closestDist = Infinity;
+        let closestXDiff = Infinity; // For tie-breaking
 
         for (const enemy of enemies) {
+            // Skip excluded target (used when re-evaluating due to being stuck)
+            if (excludeTarget && enemy === excludeTarget) continue;
+
             const dist = this.getDistance(unit, enemy);
-            if (dist < closestDist) {
+            const xDiff = Math.abs(unit.x - enemy.x); // For tie-breaking
+
+            if (dist < closestDist || (dist === closestDist && xDiff < closestXDiff)) {
                 closestDist = dist;
+                closestXDiff = xDiff;
                 closest = enemy;
             }
         }
@@ -605,36 +640,85 @@ class CombatSimulator {
         const dx = Math.sign(target.x - unit.x);
         const dy = Math.sign(target.y - unit.y);
 
+        // Helper to check if a position is the previous position (to avoid oscillation)
+        const isPreviousPos = (x, y) => x === unit.previousX && y === unit.previousY;
+
+        // Helper to check if a move is valid (not occupied and preferably not previous position)
+        const canMoveTo = (x, y, allowPrevious = false) => {
+            if (this.isOccupied(x, y, unit)) return false;
+            if (!allowPrevious && isPreviousPos(x, y)) return false;
+            return true;
+        };
+
         // Try to move toward target with multiple fallback options
         let newX = unit.x;
         let newY = unit.y;
 
         // Priority 1: Move in Y direction (toward/away from enemy side)
-        if (dy !== 0 && !this.isOccupied(unit.x, unit.y + dy, unit)) {
+        if (dy !== 0 && canMoveTo(unit.x, unit.y + dy)) {
             newY = unit.y + dy;
         }
         // Priority 2: Move in X direction
-        else if (dx !== 0 && !this.isOccupied(unit.x + dx, unit.y, unit)) {
+        else if (dx !== 0 && canMoveTo(unit.x + dx, unit.y)) {
             newX = unit.x + dx;
         }
         // Priority 3: Try moving diagonally (Y + X)
-        else if (dy !== 0 && dx !== 0 && !this.isOccupied(unit.x + dx, unit.y + dy, unit)) {
+        else if (dy !== 0 && dx !== 0 && canMoveTo(unit.x + dx, unit.y + dy)) {
             newX = unit.x + dx;
             newY = unit.y + dy;
         }
         // Priority 4: Try alternate X direction to go around obstacles
         else if (dy !== 0) {
             // Try moving left or right to get around
-            if (!this.isOccupied(unit.x + 1, unit.y, unit)) {
+            if (canMoveTo(unit.x + 1, unit.y)) {
                 newX = unit.x + 1;
-            } else if (!this.isOccupied(unit.x - 1, unit.y, unit)) {
+            } else if (canMoveTo(unit.x - 1, unit.y)) {
                 newX = unit.x - 1;
+            }
+        }
+        // Priority 5: Try any direction as a last resort (even backwards, but not previous position)
+        // This helps units navigate around obstacles when all preferred paths are blocked
+        if (newX === unit.x && newY === unit.y) {
+            // All possible moves, ordered by preference (forward > sideways > backward)
+            const allMoves = [
+                { x: unit.x, y: unit.y + dy },      // Forward Y
+                { x: unit.x + dx, y: unit.y },      // Forward X
+                { x: unit.x + dx, y: unit.y + dy }, // Forward diagonal
+                { x: unit.x + 1, y: unit.y },       // Right
+                { x: unit.x - 1, y: unit.y },       // Left
+                { x: unit.x + 1, y: unit.y + dy },  // Right-forward diagonal
+                { x: unit.x - 1, y: unit.y + dy },  // Left-forward diagonal
+                { x: unit.x, y: unit.y - dy },      // Backward Y (opposite of target)
+                { x: unit.x - dx, y: unit.y },      // Backward X
+                { x: unit.x + 1, y: unit.y - dy },  // Right-backward diagonal
+                { x: unit.x - 1, y: unit.y - dy },  // Left-backward diagonal
+            ].filter(m => m.x !== unit.x || m.y !== unit.y); // Remove no-ops when dx or dy is 0
+
+            for (const move of allMoves) {
+                if (canMoveTo(move.x, move.y)) {
+                    newX = move.x;
+                    newY = move.y;
+                    break;
+                }
+            }
+        }
+
+        // Priority 6: If still can't move, allow moving back to previous position as last resort
+        if (newX === unit.x && newY === unit.y) {
+            if (canMoveTo(unit.previousX, unit.previousY, true)) {
+                newX = unit.previousX;
+                newY = unit.previousY;
             }
         }
 
         if (newX !== unit.x || newY !== unit.y) {
             const oldX = unit.x;
             const oldY = unit.y;
+
+            // Track previous position to avoid oscillation
+            unit.previousX = oldX;
+            unit.previousY = oldY;
+
             unit.x = newX;
             unit.y = newY;
 
@@ -654,7 +738,15 @@ class CombatSimulator {
                 x: newX,
                 y: newY
             });
+
+            // Successfully moved - reset stuck counter
+            unit.stuckTicks = 0;
+            return true;
         }
+
+        // Couldn't move - increment stuck counter
+        unit.stuckTicks++;
+        return false;
     }
 
     isOccupied(x, y, excludeUnit) {
@@ -667,50 +759,103 @@ class CombatSimulator {
         const armorReduction = target.stats.armor / (target.stats.armor + 100);
         const damage = Math.round(baseDamage * (1 - armorReduction));
 
-        // Debug logging for attack timing analysis
-        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} attacks ${target.unitId} (atkSpd: ${attacker.stats.attackSpeed}, cooldown will be: ${(1 / attacker.stats.attackSpeed).toFixed(2)}s)`);
+        // Calculate when the attack will land (hit point in animation)
+        const attackDuration = 1 / attacker.stats.attackSpeed;
+        const hitDelay = attackDuration * DEFAULT_HIT_POINT;
+        const hitTick = this.tick + Math.ceil(hitDelay / this.tickRate);
 
+        // Determine if this is a ranged attack (range > 1)
+        const isRanged = attacker.stats.range > 1;
+
+        // Debug logging for attack timing analysis
+        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} starts attack on ${target.unitId} (${isRanged ? 'ranged' : 'melee'}, lands at tick ${hitTick})`);
+
+        // Emit attack start event (for client to begin animation)
         this.events.push({
             type: CombatEventType.UNIT_ATTACK,
             tick: this.tick,
             attackerId: attacker.instanceId,
             targetId: target.instanceId,
-            damage
-        });
-
-        // Apply damage immediately
-        target.currentHealth -= damage;
-
-        this.events.push({
-            type: CombatEventType.UNIT_DAMAGE,
-            tick: this.tick,
-            instanceId: target.instanceId,
             damage,
-            currentHealth: Math.max(0, target.currentHealth),
-            maxHealth: target.stats.health
+            hitTick // Include hit tick so client knows when damage lands
         });
 
-        // Check for death
-        if (target.currentHealth <= 0) {
-            target.isDead = true;
-            const deathEvent = {
-                type: CombatEventType.UNIT_DEATH,
+        // Queue the attack to land later
+        this.pendingAttacks.push({
+            attackerId: attacker.instanceId,
+            attackerUnitId: attacker.unitId, // For logging
+            targetId: target.instanceId,
+            targetUnitId: target.unitId, // For logging
+            damage,
+            hitTick,
+            isRanged
+        });
+
+        // Generate mana for attacker (on attack start, not on hit)
+        attacker.currentMana = Math.min(attacker.currentMana + 10, attacker.stats.mana);
+    }
+
+    processPendingAttacks() {
+        // Process attacks that should land this tick
+        const attacksToProcess = this.pendingAttacks.filter(a => a.hitTick <= this.tick);
+        this.pendingAttacks = this.pendingAttacks.filter(a => a.hitTick > this.tick);
+
+        for (const attack of attacksToProcess) {
+            const attacker = this.getUnitByInstanceId(attack.attackerId);
+            const target = this.getUnitByInstanceId(attack.targetId);
+
+            // Check if attack should land:
+            // - Ranged attacks always land (projectile is in flight)
+            // - Melee attacks only land if attacker is still alive
+            const attackerAlive = attacker && !attacker.isDead;
+            const shouldLand = attack.isRanged || attackerAlive;
+
+            if (!shouldLand) {
+                console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s melee attack on ${attack.targetUnitId} interrupted (attacker died)`);
+                continue;
+            }
+
+            // Check if target is still alive
+            if (!target || target.isDead) {
+                console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s attack on ${attack.targetUnitId} missed (target already dead)`);
+                continue;
+            }
+
+            // Apply damage
+            console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s attack LANDS on ${attack.targetUnitId} for ${attack.damage} damage`);
+            target.currentHealth -= attack.damage;
+
+            this.events.push({
+                type: CombatEventType.UNIT_DAMAGE,
                 tick: this.tick,
                 instanceId: target.instanceId,
-                killerId: attacker.instanceId
-            };
-            // Include loot type and lootId if the unit has loot
-            console.log(`[COMBAT] Tick ${this.tick}: ${target.unitId} DIED (killed by ${attacker.unitId})`);
-            if (target.lootType && target.lootType !== LootType.None) {
-                deathEvent.lootType = target.lootType;
-                deathEvent.lootPosition = { x: target.x, y: target.y };
-                deathEvent.lootId = uuidv4(); // Generate unique ID for this loot
-            }
-            this.events.push(deathEvent);
-        }
+                damage: attack.damage,
+                currentHealth: Math.max(0, target.currentHealth),
+                maxHealth: target.stats.health
+            });
 
-        // Generate mana for attacker
-        attacker.currentMana = Math.min(attacker.currentMana + 10, attacker.stats.mana);
+            // Check for death
+            if (target.currentHealth <= 0) {
+                target.isDead = true;
+                const deathEvent = {
+                    type: CombatEventType.UNIT_DEATH,
+                    tick: this.tick,
+                    instanceId: target.instanceId,
+                    killerId: attack.attackerId
+                };
+                console.log(`[COMBAT] Tick ${this.tick}: ${target.unitId} DIED (killed by ${attack.attackerUnitId})`);
+                if (target.lootType && target.lootType !== LootType.None) {
+                    deathEvent.lootType = target.lootType;
+                    deathEvent.lootPosition = { x: target.x, y: target.y };
+                    deathEvent.lootId = uuidv4();
+                }
+                this.events.push(deathEvent);
+            }
+        }
+    }
+
+    getUnitByInstanceId(instanceId) {
+        return this.units.find(u => u.instanceId === instanceId) || null;
     }
 }
 

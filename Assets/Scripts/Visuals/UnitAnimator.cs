@@ -319,9 +319,9 @@ namespace Crestforge.Visuals
             if (unitAttackSpeed > 0)
             {
                 float attackInterval = 1f / unitAttackSpeed;
-                // Scale animation to fit within 50% of attack interval
-                // This ensures animations complete before the next attack event
-                speed = clipDuration / (attackInterval * 0.5f);
+                // Scale animation to match the full attack interval
+                // Server hit lands at 60% through, so animation peak should align with that
+                speed = clipDuration / attackInterval;
                 speed = Mathf.Clamp(speed, 0.5f, 6f); // Clamp to reasonable range
             }
 

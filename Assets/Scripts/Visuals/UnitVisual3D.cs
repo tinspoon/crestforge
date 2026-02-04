@@ -844,17 +844,17 @@ namespace Crestforge.Visuals
             float attackSpeed = overrideAttackSpeed > 0 ? overrideAttackSpeed : GetCurrentAttackSpeed();
 
             // Calculate dynamic attack duration based on attack speed
-            // Attack should complete within 50% of the attack interval to ensure
-            // animations finish before the next attack event arrives
+            // Animation duration matches the full attack cooldown (1 / attackSpeed)
+            // The hit lands at 60% through the animation (matching server's DEFAULT_HIT_POINT)
             if (attackSpeed > 0)
             {
-                attackDuration = 0.5f / attackSpeed;
-                // Clamp to reasonable range (0.1s to 1.0s)
-                attackDuration = Mathf.Clamp(attackDuration, 0.1f, 1.0f);
+                attackDuration = 1f / attackSpeed;
+                // Clamp to reasonable range (0.2s to 2.0s)
+                attackDuration = Mathf.Clamp(attackDuration, 0.2f, 2.0f);
             }
             else
             {
-                attackDuration = 0.3f; // Default fallback
+                attackDuration = 0.5f; // Default fallback
             }
 
             // Face the target immediately
@@ -1244,19 +1244,21 @@ namespace Crestforge.Visuals
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 15f);
 
                 // Only do procedural lunge if no animator
+                // Lunge peaks at 40% (when damage lands on server)
                 if (unitAnimator == null)
                 {
-                    if (t < 0.4f)
+                    const float hitPoint = 0.4f; // Match server's DEFAULT_HIT_POINT
+                    if (t < hitPoint)
                     {
-                        // Lunge toward target
-                        float lungeT = t / 0.4f;
+                        // Lunge toward target (peak at hit point)
+                        float lungeT = t / hitPoint;
                         Vector3 lungeTarget = Vector3.Lerp(attackStartPos, attackTarget, 0.3f);
                         transform.position = Vector3.Lerp(attackStartPos, lungeTarget, lungeT);
                     }
                     else if (t < 1f)
                     {
                         // Return to position
-                        float returnT = (t - 0.4f) / 0.6f;
+                        float returnT = (t - hitPoint) / (1f - hitPoint);
                         Vector3 lungeTarget = Vector3.Lerp(attackStartPos, attackTarget, 0.3f);
                         transform.position = Vector3.Lerp(lungeTarget, targetPosition, returnT);
                     }

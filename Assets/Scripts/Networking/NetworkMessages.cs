@@ -450,6 +450,7 @@ namespace Crestforge.Networking
         public string attackerId;
         public string targetId;
         public int damage;
+        public int hitTick; // Tick when the attack will land (for animation sync)
 
         // For unitDamage
         public int currentHealth;
