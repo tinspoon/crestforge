@@ -1118,6 +1118,16 @@ namespace Crestforge.Visuals
                 merchantObj.AddComponent<MadMerchantUI>();
             }
 
+            // Create MerchantArea3D for 3D merchant rounds (hidden by default)
+            MerchantArea3D existingMerchantArea = FindAnyObjectByType<MerchantArea3D>();
+            if (existingMerchantArea == null)
+            {
+                GameObject merchantAreaObj = new GameObject("MerchantArea3D");
+                // Position in front of boards (away from the main board area)
+                merchantAreaObj.transform.position = new Vector3(0, 0, 25f);
+                merchantAreaObj.AddComponent<MerchantArea3D>();
+            }
+
             // Load UnitModelDatabase if not already assigned
             if (UnitVisual3D.modelDatabase == null)
             {

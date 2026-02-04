@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace Crestforge.Visuals
 {
@@ -233,8 +234,11 @@ namespace Crestforge.Visuals
             // Skip all input if blocked (e.g., during unit dragging)
             if (inputBlocked) return;
 
-            // Zoom with scroll wheel (PC)
-            if (enableZoom)
+            // Skip input if pointer is over UI (prevents scroll affecting camera when scrolling dropdowns)
+            bool isOverUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+
+            // Zoom with scroll wheel (PC) - skip if over UI
+            if (enableZoom && !isOverUI)
             {
                 float scroll = Input.GetAxis("Mouse ScrollWheel");
                 if (scroll != 0)
@@ -246,10 +250,10 @@ namespace Crestforge.Visuals
                 }
             }
 
-            // Pan with middle mouse or right mouse + drag
+            // Pan with middle mouse or right mouse + drag - don't start pan when over UI
             if (enablePan)
             {
-                if (Input.GetMouseButtonDown(2) || Input.GetMouseButtonDown(1))
+                if ((Input.GetMouseButtonDown(2) || Input.GetMouseButtonDown(1)) && !isOverUI)
                 {
                     isPanning = true;
                     lastMousePos = Input.mousePosition;
@@ -484,5 +488,27 @@ namespace Crestforge.Visuals
         /// Check if camera is currently transitioning between boards
         /// </summary>
         public bool IsTransitioning => isTransitioning;
+
+        /// <summary>
+        /// Focus camera on the merchant area with smooth transition
+        /// Uses a standard front-facing view (rotationY = 0)
+        /// </summary>
+        /// <param name="merchantCenter">Center position of the merchant area</param>
+        public void FocusOnMerchantArea(Vector3 merchantCenter)
+        {
+            targetBoard = null; // Not focusing on a board
+            transitionStartPos = focusPoint;
+            transitionTargetPos = merchantCenter + new Vector3(0, 0, 1f); // Slight offset for better view
+            transitionProgress = 0f;
+            isTransitioning = true;
+
+            // Standard front-facing view for merchant area
+            startRotationY = rotationY;
+            targetRotationY = 0f;
+            rotationTransitionProgress = 0f;
+            isViewingFromOppositeSide = false;
+
+            Debug.Log($"[Camera] Transitioning to merchant area at {merchantCenter}");
+        }
     }
 }

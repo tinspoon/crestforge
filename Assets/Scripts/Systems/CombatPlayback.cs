@@ -211,12 +211,10 @@ namespace Crestforge.Systems
             while (IsPlaying && eventIndex < events.Count)
             {
                 // Process all events at current tick
-                bool hadEvents = false;
                 while (eventIndex < events.Count && events[eventIndex].tick <= CurrentTick)
                 {
                     ProcessEvent(events[eventIndex], reuseExistingVisuals);
                     eventIndex++;
-                    hadEvents = true;
                 }
 
                 // Find the next tick that has events
@@ -402,23 +400,35 @@ namespace Crestforge.Systems
 
         private UnitVisual3D CreateUnitVisual3DForCombat(ServerCombatUnit unit, Vector3 worldPos)
         {
+            UnitData template = null;
+
+            // First try ServerGameState
             var serverState = ServerGameState.Instance;
-            if (serverState == null)
+            if (serverState != null)
             {
-                Debug.LogWarning("[CombatPlayback] ServerGameState not available");
-                return null;
+                template = serverState.GetUnitTemplate(unit.unitId);
             }
 
-            var template = serverState.GetUnitTemplate(unit.unitId);
+            // If no template from ServerGameState, try CombatTestUI (for test mode)
             if (template == null)
             {
-                // Try direct load by name (for PvE enemies)
+                var testUI = Crestforge.UI.CombatTestUI.Instance;
+                if (testUI != null)
+                {
+                    template = testUI.GetUnitTemplate(unit.unitId);
+                }
+            }
+
+            // Last resort: direct load by name
+            if (template == null)
+            {
                 string capitalized = char.ToUpper(unit.unitId[0]) + unit.unitId.Substring(1);
                 string[] searchPaths = new string[]
                 {
+                    $"ScriptableObjects/NewUnits/{capitalized}",
+                    $"ScriptableObjects/NewUnits/{unit.unitId}",
                     $"ScriptableObjects/PvEUnits/{capitalized}",
                     $"ScriptableObjects/PvEUnits/{unit.unitId}",
-                    $"ScriptableObjects/NewUnits/{capitalized}",
                     $"ScriptableObjects/Units/{capitalized}"
                 };
 
@@ -430,12 +440,12 @@ namespace Crestforge.Systems
                         break;
                     }
                 }
+            }
 
-                if (template == null)
-                {
-                    Debug.LogError($"[CombatPlayback] Could not find template for '{unit.unitId}'");
-                    return null;
-                }
+            if (template == null)
+            {
+                Debug.LogError($"[CombatPlayback] Could not find template for '{unit.unitId}'");
+                return null;
             }
 
             // Create temporary UnitInstance

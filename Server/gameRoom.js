@@ -1158,6 +1158,17 @@ class GameRoom {
 
         // Timers
         this.timerInterval = null;
+
+        // Mad Merchant state
+        this.merchantState = null;
+        // Structure when active:
+        // {
+        //   options: [{optionId, optionType, itemId, goldAmount, name, description, isPicked, pickedBy, pickedByName}],
+        //   pickOrder: [{clientId, name, health}],
+        //   currentPickerIndex: 0,
+        //   currentPickerId: null,
+        //   isActive: false
+        // }
     }
 
     addPlayer(clientId, name) {
@@ -1325,6 +1336,9 @@ class GameRoom {
         const roundType = this.getCurrentRoundType();
         if (roundType === 'pve_intro') {
             this.phaseTimer = GameConstants.Rounds.PVE_INTRO_PLANNING_DURATION;
+        } else if (roundType === 'mad_merchant') {
+            // Merchant rounds have longer timer - 45 seconds to allow turn-based picking
+            this.phaseTimer = 45;
         } else {
             this.phaseTimer = GameConstants.Rounds.PLANNING_DURATION;
         }
@@ -1890,6 +1904,22 @@ class GameRoom {
         this.onResultsEndCallback = callback;
     }
 
+    setOnMerchantStart(callback) {
+        this.onMerchantStartCallback = callback;
+    }
+
+    setOnMerchantPick(callback) {
+        this.onMerchantPickCallback = callback;
+    }
+
+    setOnMerchantTurnUpdate(callback) {
+        this.onMerchantTurnUpdateCallback = callback;
+    }
+
+    setOnMerchantEnd(callback) {
+        this.onMerchantEndCallback = callback;
+    }
+
     // ========== PLAYER ACTIONS ==========
 
     handleAction(clientId, action) {
@@ -1924,6 +1954,12 @@ class GameRoom {
                 return this.selectCrestChoice(player, action.choiceIndex);
             case 'selectItemChoice':
                 return this.selectItemChoice(player, action.choiceIndex);
+            case 'merchantPick':
+                // Merchant pick is allowed during the merchant round
+                if (this.getCurrentRoundType() !== 'mad_merchant') {
+                    return { success: false, error: 'Not a merchant round' };
+                }
+                return this.handleMerchantPick(clientId, action.optionId);
         }
 
         // All other actions require planning phase
@@ -2754,6 +2790,263 @@ class GameRoom {
 
         console.log(`[GameRoom] Player selected item: ${selectedItem.name}`);
         return { success: true, item: selectedItem };
+    }
+
+    // ========== MAD MERCHANT ==========
+
+    /**
+     * Generate merchant options for the Mad Merchant round
+     * Creates 12 options: 9 random items, 2 crest tokens, 1 gold pile
+     */
+    generateMerchantOptions() {
+        const options = [];
+
+        // Generate 9 random items
+        const availableItems = Object.values(ItemTemplates).filter(i => !i.isComponent);
+        const shuffledItems = [...availableItems].sort(() => Math.random() - 0.5);
+
+        for (let i = 0; i < 9 && i < shuffledItems.length; i++) {
+            const item = shuffledItems[i];
+            options.push({
+                optionId: `item_${i}`,
+                optionType: 'item',
+                itemId: item.itemId,
+                goldAmount: 0,
+                name: item.name,
+                description: item.description || '',
+                rarity: item.rarity || 'common',
+                stats: item.stats || {},
+                isPicked: false,
+                pickedBy: null,
+                pickedByName: null
+            });
+        }
+
+        // Add 2 crest tokens
+        options.push({
+            optionId: 'crest_1',
+            optionType: 'crest_token',
+            itemId: 'crest_token',
+            goldAmount: 0,
+            name: 'Crest Token',
+            description: 'Use to select a Minor Crest for your team',
+            rarity: 'rare',
+            isPicked: false,
+            pickedBy: null,
+            pickedByName: null
+        });
+
+        options.push({
+            optionId: 'crest_2',
+            optionType: 'crest_token',
+            itemId: 'crest_token',
+            goldAmount: 0,
+            name: 'Crest Token',
+            description: 'Use to select a Minor Crest for your team',
+            rarity: 'rare',
+            isPicked: false,
+            pickedBy: null,
+            pickedByName: null
+        });
+
+        // Add 1 gold pile (random 3-8 gold)
+        const goldAmount = Math.floor(Math.random() * 6) + 3; // 3-8 gold
+        options.push({
+            optionId: 'gold_1',
+            optionType: 'gold',
+            itemId: null,
+            goldAmount: goldAmount,
+            name: `${goldAmount} Gold`,
+            description: `Gain ${goldAmount} gold immediately`,
+            rarity: 'common',
+            isPicked: false,
+            pickedBy: null,
+            pickedByName: null
+        });
+
+        // Shuffle all options
+        return options.sort(() => Math.random() - 0.5);
+    }
+
+    /**
+     * Determine pick order for Mad Merchant (lowest health first)
+     */
+    determineMerchantPickOrder() {
+        const activePlayers = this.getActivePlayers();
+
+        // Sort by health (lowest first), then by board index (tie-breaker)
+        return activePlayers
+            .map(p => ({
+                clientId: p.clientId,
+                name: p.name,
+                health: p.health,
+                boardIndex: p.boardIndex
+            }))
+            .sort((a, b) => {
+                if (a.health !== b.health) {
+                    return a.health - b.health; // Lowest health first
+                }
+                return a.boardIndex - b.boardIndex; // Tie-breaker
+            });
+    }
+
+    /**
+     * Start the Mad Merchant round
+     */
+    startMerchantRound() {
+        console.log(`[GameRoom] Starting Mad Merchant round`);
+
+        const options = this.generateMerchantOptions();
+        const pickOrder = this.determineMerchantPickOrder();
+
+        this.merchantState = {
+            options: options,
+            pickOrder: pickOrder,
+            currentPickerIndex: 0,
+            currentPickerId: pickOrder.length > 0 ? pickOrder[0].clientId : null,
+            isActive: true
+        };
+
+        console.log(`[GameRoom] Merchant options: ${options.length}, pick order: ${pickOrder.map(p => p.name).join(' -> ')}`);
+
+        // Return the merchant start data for broadcasting
+        return {
+            options: options,
+            pickOrder: pickOrder,
+            currentPickerId: this.merchantState.currentPickerId,
+            currentPickerName: pickOrder.length > 0 ? pickOrder[0].name : null
+        };
+    }
+
+    /**
+     * Handle a player picking a merchant option
+     */
+    handleMerchantPick(clientId, optionId) {
+        if (!this.merchantState || !this.merchantState.isActive) {
+            return { success: false, error: 'Merchant round not active' };
+        }
+
+        // Verify it's this player's turn
+        if (this.merchantState.currentPickerId !== clientId) {
+            return { success: false, error: 'Not your turn to pick' };
+        }
+
+        // Find the option
+        const option = this.merchantState.options.find(o => o.optionId === optionId);
+        if (!option) {
+            return { success: false, error: 'Invalid option' };
+        }
+
+        if (option.isPicked) {
+            return { success: false, error: 'Option already picked' };
+        }
+
+        const player = this.getPlayer(clientId);
+        if (!player) {
+            return { success: false, error: 'Player not found' };
+        }
+
+        // Mark option as picked
+        option.isPicked = true;
+        option.pickedBy = clientId;
+        option.pickedByName = player.name;
+
+        // Apply the reward
+        if (option.optionType === 'item') {
+            // Add item to player's inventory
+            const itemTemplate = ItemTemplates[option.itemId];
+            if (itemTemplate && player.itemInventory.length < 10) {
+                player.itemInventory.push({
+                    itemId: itemTemplate.itemId,
+                    name: itemTemplate.name,
+                    description: itemTemplate.description,
+                    rarity: itemTemplate.rarity || 'common',
+                    stats: itemTemplate.stats,
+                    isCombined: !itemTemplate.isComponent
+                });
+                console.log(`[GameRoom] ${player.name} picked item: ${itemTemplate.name}`);
+            }
+        } else if (option.optionType === 'crest_token') {
+            // Add crest token to player's inventory
+            if (player.itemInventory.length < 10) {
+                player.itemInventory.push({
+                    itemId: 'crest_token',
+                    itemName: 'Crest Token',
+                    description: 'Use to select a Minor Crest for your team.',
+                    rarity: 'rare',
+                    isConsumable: true,
+                    effect: 'consumable_crest_token'
+                });
+                console.log(`[GameRoom] ${player.name} picked crest token`);
+            }
+        } else if (option.optionType === 'gold') {
+            // Add gold directly
+            player.gold += option.goldAmount;
+            console.log(`[GameRoom] ${player.name} picked ${option.goldAmount} gold`);
+        }
+
+        // Return success with pick info for broadcasting
+        return {
+            success: true,
+            optionId: optionId,
+            pickedById: clientId,
+            pickedByName: player.name,
+            optionType: option.optionType
+        };
+    }
+
+    /**
+     * Advance to the next picker in the merchant round
+     */
+    advanceMerchantTurn() {
+        if (!this.merchantState || !this.merchantState.isActive) {
+            return null;
+        }
+
+        this.merchantState.currentPickerIndex++;
+
+        // Check if all players have picked
+        if (this.merchantState.currentPickerIndex >= this.merchantState.pickOrder.length) {
+            console.log(`[GameRoom] All players have picked, ending merchant round`);
+            return { allPicked: true };
+        }
+
+        const nextPicker = this.merchantState.pickOrder[this.merchantState.currentPickerIndex];
+        this.merchantState.currentPickerId = nextPicker.clientId;
+
+        console.log(`[GameRoom] Merchant turn advanced to: ${nextPicker.name}`);
+
+        return {
+            allPicked: false,
+            currentPickerId: nextPicker.clientId,
+            currentPickerName: nextPicker.name
+        };
+    }
+
+    /**
+     * End the merchant round
+     */
+    endMerchantRound() {
+        if (this.merchantState) {
+            this.merchantState.isActive = false;
+            console.log(`[GameRoom] Merchant round ended`);
+        }
+        this.merchantState = null;
+    }
+
+    /**
+     * Get current merchant state for broadcasting
+     */
+    getMerchantState() {
+        if (!this.merchantState) return null;
+
+        return {
+            options: this.merchantState.options,
+            pickOrder: this.merchantState.pickOrder,
+            currentPickerId: this.merchantState.currentPickerId,
+            currentPickerIndex: this.merchantState.currentPickerIndex,
+            isActive: this.merchantState.isActive
+        };
     }
 
     // ========== SERIALIZATION ==========

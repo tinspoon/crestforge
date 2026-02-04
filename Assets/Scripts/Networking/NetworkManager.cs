@@ -98,6 +98,12 @@ namespace Crestforge.Networking
         public event Action<string> OnPlayerEndedPlanning;
         public event Action<string, string> OnChatReceived;
 
+        // Events - Mad Merchant
+        public event Action<MerchantStartMessage> OnMerchantStart;
+        public event Action<string, string> OnMerchantTurnUpdate; // currentPickerId, currentPickerName
+        public event Action<string, string, string> OnMerchantPick; // optionId, pickedById, pickedByName
+        public event Action OnMerchantEnd;
+
         private void Awake()
         {
             if (Instance == null)
@@ -852,6 +858,55 @@ namespace Crestforge.Networking
                         OnChatReceived?.Invoke(chat.playerName, chat.message);
                         break;
 
+                    case "testCombatResult":
+                        HandleTestCombatResult(data);
+                        break;
+
+                    // Mad Merchant messages
+                    case "merchantStart":
+                        try
+                        {
+                            var merchantStart = JsonUtility.FromJson<MerchantStartMessage>(data);
+                            Debug.Log($"[NetworkManager] Merchant round started - {merchantStart.options?.Count ?? 0} options, picker: {merchantStart.currentPickerName}");
+                            OnMerchantStart?.Invoke(merchantStart);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[NetworkManager] Failed to parse merchantStart: {ex.Message}");
+                        }
+                        break;
+
+                    case "merchantTurnUpdate":
+                        try
+                        {
+                            var turnUpdate = JsonUtility.FromJson<MerchantTurnUpdateMessage>(data);
+                            Debug.Log($"[NetworkManager] Merchant turn: {turnUpdate.currentPickerName}");
+                            OnMerchantTurnUpdate?.Invoke(turnUpdate.currentPickerId, turnUpdate.currentPickerName);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[NetworkManager] Failed to parse merchantTurnUpdate: {ex.Message}");
+                        }
+                        break;
+
+                    case "merchantPick":
+                        try
+                        {
+                            var pick = JsonUtility.FromJson<MerchantPickMessage>(data);
+                            Debug.Log($"[NetworkManager] Merchant pick: {pick.pickedByName} picked {pick.optionId}");
+                            OnMerchantPick?.Invoke(pick.optionId, pick.pickedById, pick.pickedByName);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[NetworkManager] Failed to parse merchantPick: {ex.Message}");
+                        }
+                        break;
+
+                    case "merchantEnd":
+                        Debug.Log("[NetworkManager] Merchant round ended");
+                        OnMerchantEnd?.Invoke();
+                        break;
+
                     default:
                         Debug.LogWarning($"[NetworkManager] Unknown message type: {baseMsg.type}");
                         break;
@@ -866,6 +921,28 @@ namespace Crestforge.Networking
         // ============================================
         // Utility
         // ============================================
+
+        /// <summary>
+        /// Handle test combat result from server
+        /// </summary>
+        private void HandleTestCombatResult(string json)
+        {
+            try
+            {
+                var result = JsonUtility.FromJson<TestCombatResultMessage>(json);
+
+                // Notify CombatTestUI
+                var testUI = Crestforge.UI.CombatTestUI.Instance;
+                if (testUI != null)
+                {
+                    testUI.OnTestCombatResult(result);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[NetworkManager] Failed to parse test combat result: {ex.Message}");
+            }
+        }
 
         /// <summary>
         /// Forward accumulated combat events to visualizer
@@ -905,6 +982,33 @@ namespace Crestforge.Networking
         public PlayerInfo GetOpponent()
         {
             return playersInRoom.Find(p => p.id != clientId);
+        }
+
+        /// <summary>
+        /// Send a test combat request to the server
+        /// </summary>
+        public void SendTestCombat(Crestforge.UI.TestTeamConfig teamA, Crestforge.UI.TestTeamConfig teamB)
+        {
+            var message = new TestCombatMessage(teamA, teamB);
+            string json = JsonUtility.ToJson(message);
+            webSocket?.Send(json);
+        }
+
+        /// <summary>
+        /// Send a merchant pick action to the server
+        /// </summary>
+        public void SendMerchantPick(string optionId)
+        {
+            if (!IsInGame)
+            {
+                Debug.LogWarning("[NetworkManager] Cannot send merchant pick - not in game");
+                return;
+            }
+
+            var action = new MerchantPickAction(optionId);
+            string actionJson = JsonUtility.ToJson(action);
+            string json = $"{{\"type\":\"action\",\"action\":{actionJson}}}";
+            webSocket?.Send(json);
         }
     }
 }

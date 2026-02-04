@@ -489,4 +489,169 @@ namespace Crestforge.Networking
         public ServerUnitStats stats;
         public List<ServerItemData> items;
     }
+
+    // ============================================
+    // Combat Test Messages
+    // ============================================
+
+    /// <summary>
+    /// Message sent to server to request a test combat simulation
+    /// </summary>
+    [Serializable]
+    public class TestCombatMessage : NetworkMessage
+    {
+        public TestTeamConfigData teamA;
+        public TestTeamConfigData teamB;
+
+        public TestCombatMessage(Crestforge.UI.TestTeamConfig a, Crestforge.UI.TestTeamConfig b)
+        {
+            this.type = "testCombat";
+            this.teamA = ConvertTeamConfig(a);
+            this.teamB = ConvertTeamConfig(b);
+        }
+
+        private static TestTeamConfigData ConvertTeamConfig(Crestforge.UI.TestTeamConfig config)
+        {
+            var data = new TestTeamConfigData
+            {
+                minorCrestId = config.minorCrestId ?? "",
+                majorCrestId = config.majorCrestId ?? "",
+                units = new List<TestUnitConfigData>()
+            };
+
+            foreach (var unit in config.units)
+            {
+                data.units.Add(new TestUnitConfigData
+                {
+                    unitId = unit.unitId,
+                    starLevel = unit.starLevel,
+                    boardX = unit.boardX,
+                    boardY = unit.boardY,
+                    itemIds = unit.itemIds ?? new List<string>()
+                });
+            }
+
+            return data;
+        }
+    }
+
+    [Serializable]
+    public class TestTeamConfigData
+    {
+        public List<TestUnitConfigData> units;
+        public string minorCrestId;
+        public string majorCrestId;
+    }
+
+    [Serializable]
+    public class TestUnitConfigData
+    {
+        public string unitId;
+        public int starLevel;
+        public int boardX;
+        public int boardY;
+        public List<string> itemIds;
+    }
+
+    /// <summary>
+    /// Message received from server with test combat results
+    /// </summary>
+    [Serializable]
+    public class TestCombatResultMessage : NetworkMessage
+    {
+        public string winner; // "teamA" or "teamB"
+        public int remainingUnits;
+        public int damage;
+        public List<ServerCombatEvent> events;
+    }
+
+    // ============================================
+    // Mad Merchant Messages
+    // ============================================
+
+    /// <summary>
+    /// Action sent by client to pick an option in the Mad Merchant round
+    /// </summary>
+    [Serializable]
+    public class MerchantPickAction
+    {
+        public string type;
+        public string optionId;
+
+        public MerchantPickAction(string optionId)
+        {
+            this.type = "merchantPick";
+            this.optionId = optionId;
+        }
+    }
+
+    /// <summary>
+    /// Message sent by server when Mad Merchant round starts
+    /// </summary>
+    [Serializable]
+    public class MerchantStartMessage : NetworkMessage
+    {
+        public List<MerchantOptionData> options;
+        public List<MerchantPickerData> pickOrder;
+        public string currentPickerId;
+        public string currentPickerName;
+    }
+
+    /// <summary>
+    /// Data for a single merchant option (item, crest token, or gold)
+    /// </summary>
+    [Serializable]
+    public class MerchantOptionData
+    {
+        public string optionId;
+        public string optionType; // "item", "crest_token", "gold"
+        public string itemId;
+        public int goldAmount;
+        public string name;
+        public string description;
+        public string rarity;
+        public bool isPicked;
+        public string pickedByName;
+    }
+
+    /// <summary>
+    /// Data for a player in the pick order
+    /// </summary>
+    [Serializable]
+    public class MerchantPickerData
+    {
+        public string clientId;
+        public string name;
+        public int health;
+    }
+
+    /// <summary>
+    /// Message sent when it's a new player's turn to pick
+    /// </summary>
+    [Serializable]
+    public class MerchantTurnUpdateMessage : NetworkMessage
+    {
+        public string currentPickerId;
+        public string currentPickerName;
+    }
+
+    /// <summary>
+    /// Message sent when a player picks an option
+    /// </summary>
+    [Serializable]
+    public class MerchantPickMessage : NetworkMessage
+    {
+        public string optionId;
+        public string pickedById;
+        public string pickedByName;
+    }
+
+    /// <summary>
+    /// Message sent when the merchant round ends
+    /// </summary>
+    [Serializable]
+    public class MerchantEndMessage : NetworkMessage
+    {
+        // No additional data needed
+    }
 }

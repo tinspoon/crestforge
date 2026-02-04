@@ -5,8 +5,8 @@
 
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
-const { GameRoom } = require('./gameRoom');
-const { GameConstants } = require('./gameData');
+const { GameRoom, CombatSimulator, UnitInstance, PlayerState } = require('./gameRoom');
+const { GameConstants, UnitTemplates, ItemTemplates, CrestTemplates, getStarScaledStats, calculateActiveTraits, applyTraitBonuses, applyItemBonuses, applyCrestBonuses } = require('./gameData');
 
 const PORT = process.env.PORT || 8080;
 
@@ -103,6 +103,9 @@ function handleMessage(client, message) {
             break;
         case 'chat':
             handleChat(client, message);
+            break;
+        case 'testCombat':
+            handleTestCombat(client, message);
             break;
         default:
             send(client.ws, { type: 'error', message: `Unknown message type: ${message.type}` });
@@ -350,6 +353,38 @@ function handleGameAction(client, message) {
     });
 
     if (result.success) {
+        // Special handling for merchant picks
+        if (message.action.type === 'merchantPick') {
+            // Broadcast the pick to all players
+            broadcastMerchantPick(room, {
+                optionId: result.optionId,
+                pickedById: result.pickedById,
+                pickedByName: result.pickedByName
+            });
+
+            // Advance to next turn
+            const turnResult = room.advanceMerchantTurn();
+            if (turnResult) {
+                if (turnResult.allPicked) {
+                    // All players have picked - end merchant round
+                    room.endMerchantRound();
+                    broadcastMerchantEnd(room);
+
+                    // Merchant rounds skip combat - advance to next round after a short delay
+                    console.log(`[handleGameAction] Merchant round complete, advancing to next round`);
+                    setTimeout(() => {
+                        endResults(room);
+                    }, 2000); // 2 second delay to let clients see the final state
+                } else {
+                    // Notify all players of the new picker
+                    broadcastMerchantTurnUpdate(room, {
+                        currentPickerId: turnResult.currentPickerId,
+                        currentPickerName: turnResult.currentPickerName
+                    });
+                }
+            }
+        }
+
         // Broadcast updated state to all players
         broadcastStateToRoom(room);
 
@@ -376,6 +411,174 @@ function handleDisconnect(client) {
     if (client.roomId) {
         handleLeaveRoom(client);
     }
+}
+
+// ============================================
+// Test Combat Handler
+// ============================================
+
+function handleTestCombat(client, message) {
+    const { teamA, teamB } = message;
+
+    console.log(`[TestCombat] Received request from ${client.id}`);
+    console.log(`[TestCombat] Team A: ${teamA?.units?.length || 0} units, Team B: ${teamB?.units?.length || 0} units`);
+
+    try {
+        // Build test boards from config
+        const boardA = buildTestBoard(teamA);
+        const boardB = buildTestBoard(teamB);
+
+        // Build mock PlayerState objects with combat stats calculation
+        const stateA = buildTestPlayerState('teamA', teamA, boardA);
+        const stateB = buildTestPlayerState('teamB', teamB, boardB);
+
+        // Log units for debugging
+        console.log('[TestCombat] Team A units:');
+        for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+            for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+                const unit = boardA[x][y];
+                if (unit) {
+                    const stats = stateA.getUnitCombatStats(unit);
+                    console.log(`  ${unit.name} (${unit.starLevel}*) at (${x},${y}) - HP:${stats.health} ATK:${stats.attack}`);
+                }
+            }
+        }
+
+        console.log('[TestCombat] Team B units:');
+        for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+            for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+                const unit = boardB[x][y];
+                if (unit) {
+                    const stats = stateB.getUnitCombatStats(unit);
+                    console.log(`  ${unit.name} (${unit.starLevel}*) at (${x},${y}) - HP:${stats.health} ATK:${stats.attack}`);
+                }
+            }
+        }
+
+        // Run combat simulation
+        const simulator = new CombatSimulator(boardA, boardB, stateA, stateB);
+        const result = simulator.run();
+
+        console.log(`[TestCombat] Combat complete: ${result.winner || 'draw'} wins with ${result.remainingUnits} units, ${result.events.length} events`);
+
+        // Determine winner string - handle draw case
+        let winnerStr;
+        if (result.winner === 'player1') {
+            winnerStr = 'teamA';
+        } else if (result.winner === 'player2') {
+            winnerStr = 'teamB';
+        } else {
+            winnerStr = 'draw';
+        }
+
+        // Send result back
+        send(client.ws, {
+            type: 'testCombatResult',
+            winner: winnerStr,
+            remainingUnits: result.remainingUnits,
+            damage: result.damage,
+            events: result.events
+        });
+    } catch (error) {
+        console.error('[TestCombat] Error:', error);
+        send(client.ws, {
+            type: 'error',
+            message: `Combat test failed: ${error.message}`
+        });
+    }
+}
+
+function buildTestBoard(teamConfig) {
+    // Create empty board
+    const board = [];
+    for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+        board[x] = new Array(GameConstants.Grid.HEIGHT).fill(null);
+    }
+
+    if (!teamConfig || !teamConfig.units) return board;
+
+    // Place units from config
+    for (const unitConfig of teamConfig.units) {
+        const template = UnitTemplates[unitConfig.unitId];
+        if (!template) {
+            console.warn(`[TestCombat] Unknown unit: ${unitConfig.unitId}`);
+            continue;
+        }
+
+        // Create unit instance
+        const unit = new UnitInstance(template, unitConfig.starLevel || 1);
+
+        // Add items
+        if (unitConfig.itemIds && unitConfig.itemIds.length > 0) {
+            for (const itemId of unitConfig.itemIds) {
+                if (itemId && ItemTemplates[itemId]) {
+                    unit.items.push(ItemTemplates[itemId]);
+                }
+            }
+        }
+
+        // Place on board
+        const x = unitConfig.boardX;
+        const y = unitConfig.boardY;
+        if (x >= 0 && x < GameConstants.Grid.WIDTH && y >= 0 && y < GameConstants.Grid.HEIGHT) {
+            board[x][y] = unit;
+        }
+    }
+
+    return board;
+}
+
+function buildTestPlayerState(teamId, teamConfig, board) {
+    // Get all units from board
+    const boardUnits = [];
+    for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+        for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+            if (board[x][y]) {
+                boardUnits.push(board[x][y]);
+            }
+        }
+    }
+
+    // Calculate active traits
+    const activeTraits = calculateActiveTraits(boardUnits);
+
+    // Get crests
+    const minorCrest = teamConfig.minorCrestId ? CrestTemplates[teamConfig.minorCrestId] : null;
+    const majorCrest = teamConfig.majorCrestId ? CrestTemplates[teamConfig.majorCrestId] : null;
+
+    // Create a minimal PlayerState-like object with the necessary methods
+    return {
+        clientId: teamId,
+        name: teamId,
+        board: board,
+        minorCrest: minorCrest,
+        majorCrest: majorCrest,
+        activeTraits: activeTraits,
+
+        // Method to calculate combat stats for a unit
+        getUnitCombatStats: function(unit) {
+            if (!unit) return null;
+
+            // Start with current stats (already star-scaled from UnitInstance constructor)
+            let stats = { ...unit.currentStats };
+
+            // Apply trait bonuses
+            stats = applyTraitBonuses(stats, this.activeTraits, unit.traits);
+
+            // Apply item bonuses
+            if (unit.items && unit.items.length > 0) {
+                stats = applyItemBonuses(stats, unit.items);
+            }
+
+            // Apply crest bonuses
+            const crests = [];
+            if (this.majorCrest) crests.push(this.majorCrest);
+            if (this.minorCrest) crests.push(this.minorCrest);
+            stats = applyCrestBonuses(stats, crests);
+
+            return stats;
+        }
+    };
 }
 
 // ============================================
@@ -414,6 +617,27 @@ function startGame(room) {
         endResults(r);
     });
 
+    // Register merchant callbacks
+    room.setOnMerchantStart((r, merchantData) => {
+        console.log(`[startGame] Merchant start callback triggered`);
+        broadcastMerchantStart(r, merchantData);
+    });
+
+    room.setOnMerchantPick((r, pickData) => {
+        console.log(`[startGame] Merchant pick callback triggered`);
+        broadcastMerchantPick(r, pickData);
+    });
+
+    room.setOnMerchantTurnUpdate((r, turnData) => {
+        console.log(`[startGame] Merchant turn update callback triggered`);
+        broadcastMerchantTurnUpdate(r, turnData);
+    });
+
+    room.setOnMerchantEnd((r) => {
+        console.log(`[startGame] Merchant end callback triggered`);
+        broadcastMerchantEnd(r);
+    });
+
     broadcastToRoom(room, {
         type: 'gameStart',
         round: room.round
@@ -423,6 +647,13 @@ function startGame(room) {
 
     // Start phase timer updates
     startPhaseUpdates(room);
+
+    // Check if this is a merchant round and start it
+    const roundType = room.getCurrentRoundType();
+    if (roundType === 'mad_merchant') {
+        console.log(`[startGame] Starting merchant round for round ${room.round}`);
+        startMerchantRound(room);
+    }
 }
 
 function checkAllReady(room) {
@@ -596,6 +827,13 @@ function endResults(room) {
     });
 
     broadcastStateToRoom(room);
+
+    // Check if this is a merchant round and start it
+    const roundType = room.getCurrentRoundType();
+    if (roundType === 'mad_merchant') {
+        console.log(`[endResults] Starting merchant round for round ${room.round}`);
+        startMerchantRound(room);
+    }
 }
 
 function endGame(room, winnerId) {
@@ -640,6 +878,57 @@ function startPhaseUpdates(room) {
             round: room.round
         });
     }, 1000);
+}
+
+// ============================================
+// Mad Merchant Broadcasts
+// ============================================
+
+function broadcastMerchantStart(room, merchantData) {
+    console.log(`[broadcastMerchantStart] Broadcasting to ${room.players.size} players`);
+    broadcastToRoom(room, {
+        type: 'merchantStart',
+        options: merchantData.options,
+        pickOrder: merchantData.pickOrder,
+        currentPickerId: merchantData.currentPickerId,
+        currentPickerName: merchantData.currentPickerName
+    });
+}
+
+function broadcastMerchantPick(room, pickData) {
+    console.log(`[broadcastMerchantPick] ${pickData.pickedByName} picked option ${pickData.optionId}`);
+    broadcastToRoom(room, {
+        type: 'merchantPick',
+        optionId: pickData.optionId,
+        pickedById: pickData.pickedById,
+        pickedByName: pickData.pickedByName
+    });
+}
+
+function broadcastMerchantTurnUpdate(room, turnData) {
+    console.log(`[broadcastMerchantTurnUpdate] Current picker: ${turnData.currentPickerName}`);
+    broadcastToRoom(room, {
+        type: 'merchantTurnUpdate',
+        currentPickerId: turnData.currentPickerId,
+        currentPickerName: turnData.currentPickerName
+    });
+}
+
+function broadcastMerchantEnd(room) {
+    console.log(`[broadcastMerchantEnd] Merchant round ended`);
+    broadcastToRoom(room, {
+        type: 'merchantEnd'
+    });
+}
+
+/**
+ * Start the merchant round - called when planning phase starts for a mad_merchant round
+ */
+function startMerchantRound(room) {
+    const merchantData = room.startMerchantRound();
+    if (merchantData) {
+        broadcastMerchantStart(room, merchantData);
+    }
 }
 
 // ============================================
