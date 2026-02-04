@@ -361,7 +361,7 @@ const CombatEventType = {
 };
 
 // Default movement speed (tiles/sec) if unit doesn't have moveSpeed defined
-const DEFAULT_MOVE_SPEED = 1.25;
+const DEFAULT_MOVE_SPEED = 1.75;
 // Point in attack animation when damage lands (0.0 = start, 1.0 = end)
 const DEFAULT_HIT_POINT = 0.4;
 // Number of ticks a unit can be stuck before re-evaluating target (10 ticks = 0.5s)
@@ -465,9 +465,29 @@ class CombatSimulator {
             // Process pending attacks (damage lands)
             this.processPendingAttacks();
 
-            // Process each unit (movement, starting new attacks)
+            // Snapshot positions at start of tick for simultaneous movement decisions
+            const positionSnapshot = new Map();
             for (const unit of this.getAliveUnits()) {
-                this.processUnit(unit);
+                positionSnapshot.set(unit.instanceId, { x: unit.x, y: unit.y });
+            }
+
+            // Phase 1: Collect movement decisions (using snapshot positions)
+            const pendingMoves = [];
+            for (const unit of this.getAliveUnits()) {
+                const moveDecision = this.getUnitMoveDecision(unit, positionSnapshot);
+                if (moveDecision) {
+                    pendingMoves.push(moveDecision);
+                }
+            }
+
+            // Phase 2: Apply all movements simultaneously
+            for (const move of pendingMoves) {
+                this.applyUnitMove(move.unit, move.newX, move.newY, move.target);
+            }
+
+            // Phase 3: Process attacks (after all movement is complete)
+            for (const unit of this.getAliveUnits()) {
+                this.processUnitAttack(unit);
             }
 
             // Check for combat end (only if no pending attacks - let in-flight attacks resolve)
@@ -610,6 +630,177 @@ class CombatSimulator {
                 // Calculate move cooldown from unit's moveSpeed (tiles/sec)
                 const moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
                 unit.moveCooldown = 1 / moveSpeed;
+            }
+        }
+    }
+
+    // Get distance using snapshot positions (for simultaneous movement decisions)
+    getDistanceWithSnapshot(unit, target, positionSnapshot) {
+        const unitPos = positionSnapshot.get(unit.instanceId) || { x: unit.x, y: unit.y };
+        const targetPos = positionSnapshot.get(target.instanceId) || { x: target.x, y: target.y };
+
+        const cube1 = this.offsetToCube(unitPos.x, unitPos.y);
+        const cube2 = this.offsetToCube(targetPos.x, targetPos.y);
+        return (Math.abs(cube1.q - cube2.q) + Math.abs(cube1.r - cube2.r) + Math.abs(cube1.s - cube2.s)) / 2;
+    }
+
+    // Find target using snapshot positions
+    findTargetWithSnapshot(unit, positionSnapshot, excludeTarget = null) {
+        const enemies = this.getEnemyUnits(unit);
+        if (enemies.length === 0) return null;
+
+        const unitPos = positionSnapshot.get(unit.instanceId) || { x: unit.x, y: unit.y };
+
+        let closest = null;
+        let closestDist = Infinity;
+        let closestXDiff = Infinity;
+
+        for (const enemy of enemies) {
+            if (excludeTarget && enemy === excludeTarget) continue;
+
+            const dist = this.getDistanceWithSnapshot(unit, enemy, positionSnapshot);
+            const enemyPos = positionSnapshot.get(enemy.instanceId) || { x: enemy.x, y: enemy.y };
+            const xDiff = Math.abs(unitPos.x - enemyPos.x);
+
+            if (dist < closestDist || (dist === closestDist && xDiff < closestXDiff)) {
+                closestDist = dist;
+                closestXDiff = xDiff;
+                closest = enemy;
+            }
+        }
+
+        return closest;
+    }
+
+    // Decide if unit should move this tick (using snapshot positions for fairness)
+    getUnitMoveDecision(unit, positionSnapshot) {
+        // Reduce cooldowns
+        if (unit.attackCooldown > 0) {
+            unit.attackCooldown -= this.tickRate;
+        }
+        if (unit.moveCooldown > 0) {
+            unit.moveCooldown -= this.tickRate;
+        }
+
+        // Find target (or re-evaluate if needed) using snapshot positions
+        if (!unit.target || unit.target.isDead) {
+            unit.target = this.findTargetWithSnapshot(unit, positionSnapshot);
+            unit.stuckTicks = 0;
+            unit.previousX = unit.x;
+            unit.previousY = unit.y;
+        } else {
+            // Re-evaluate target using snapshot positions
+            const distToCurrentTarget = this.getDistanceWithSnapshot(unit, unit.target, positionSnapshot);
+            const range = unit.stats.range || 1;
+
+            if (distToCurrentTarget > range) {
+                const closestEnemy = this.findTargetWithSnapshot(unit, positionSnapshot);
+                if (closestEnemy && closestEnemy !== unit.target) {
+                    const distToClosest = this.getDistanceWithSnapshot(unit, closestEnemy, positionSnapshot);
+                    if (distToClosest <= range) {
+                        console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} re-targeting from ${unit.target.unitId} (dist=${distToCurrentTarget}) to adjacent ${closestEnemy.unitId} (dist=${distToClosest})`);
+                        unit.target = closestEnemy;
+                        unit.stuckTicks = 0;
+                        unit.previousX = unit.x;
+                        unit.previousY = unit.y;
+                    }
+                }
+            }
+
+            if (unit.stuckTicks >= STUCK_TICKS_BEFORE_RETARGET) {
+                const alternateTarget = this.findTargetWithSnapshot(unit, positionSnapshot, unit.target);
+                if (alternateTarget) {
+                    console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} re-targeting from ${unit.target.unitId} to ${alternateTarget.unitId} after being stuck`);
+                    unit.target = alternateTarget;
+                    unit.stuckTicks = 0;
+                    unit.previousX = unit.x;
+                    unit.previousY = unit.y;
+                } else {
+                    unit.stuckTicks = 0;
+                }
+            }
+        }
+
+        if (!unit.target) return null;
+
+        // Use snapshot distance to decide if we need to move
+        const distance = this.getDistanceWithSnapshot(unit, unit.target, positionSnapshot);
+
+        // If in range, don't move (will attack in attack phase)
+        if (distance <= unit.stats.range) {
+            return null;
+        }
+
+        // Move towards target (only if move cooldown is ready)
+        if (unit.moveCooldown <= 0) {
+            const nextStep = this.findPathToTarget(unit, unit.target);
+            if (nextStep) {
+                return { unit, newX: nextStep.x, newY: nextStep.y, target: unit.target };
+            }
+            // Couldn't find path - increment stuck counter
+            unit.stuckTicks++;
+        }
+
+        return null;
+    }
+
+    // Apply a movement decision
+    applyUnitMove(unit, newX, newY, target) {
+        // Check if destination is now occupied (by a unit that moved earlier this tick)
+        if (this.isOccupied(newX, newY, unit)) {
+            unit.stuckTicks++;
+            return false;
+        }
+
+        const oldX = unit.x;
+        const oldY = unit.y;
+
+        unit.previousX = oldX;
+        unit.previousY = oldY;
+        unit.x = newX;
+        unit.y = newY;
+
+        const moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
+        const moveDuration = 1 / moveSpeed;
+        const moveDurationTicks = Math.ceil(moveDuration / this.tickRate);
+        unit.arrivalTick = this.tick + moveDurationTicks;
+        unit.moveCooldown = moveDuration;
+
+        console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} (${unit.playerId}) moves (${oldX},${oldY}) -> (${newX},${newY}), arrives at tick ${unit.arrivalTick}, target at (${target.x},${target.y})`);
+
+        this.events.push({
+            type: CombatEventType.UNIT_MOVE,
+            tick: this.tick,
+            instanceId: unit.instanceId,
+            x: newX,
+            y: newY,
+            duration: moveDuration
+        });
+
+        unit.stuckTicks = 0;
+        return true;
+    }
+
+    // Process attacks for a unit (after all movement is complete)
+    processUnitAttack(unit) {
+        if (!unit.target || unit.target.isDead) {
+            unit.target = this.findTarget(unit);
+        }
+        if (!unit.target) return;
+
+        const distance = this.getDistance(unit, unit.target);
+
+        if (distance <= unit.stats.range) {
+            const isRanged = unit.stats.range > 1;
+            // Ranged units can attack moving targets, melee units cannot
+            const canAttack = unit.attackCooldown <= 0
+                && unit.arrivalTick <= this.tick
+                && (isRanged || unit.target.arrivalTick <= this.tick);
+
+            if (canAttack) {
+                this.performAttack(unit, unit.target);
+                unit.attackCooldown = 1 / unit.stats.attackSpeed;
+                unit.stuckTicks = 0;
             }
         }
     }

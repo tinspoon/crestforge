@@ -83,70 +83,70 @@ const UnitTemplates = {
         name: 'Archer',
         cost: 1,
         traits: ['firstblood', 'fury'],
-        stats: { health: 400, attack: 55, armor: 15, magicResist: 15, attackSpeed: 0.8, range: 4, mana: 50, moveSpeed: 1.25 }
+        stats: { health: 400, attack: 55, armor: 15, magicResist: 15, attackSpeed: 0.8, range: 4, mana: 50, moveSpeed: 1.75 }
     },
     'bat': {
         unitId: 'bat',
         name: 'Bat',
         cost: 1,
         traits: ['fury', 'momentum'],
-        stats: { health: 400, attack: 55, armor: 15, magicResist: 15, attackSpeed: 0.9, range: 1, mana: 40, moveSpeed: 1.5 }
+        stats: { health: 400, attack: 55, armor: 15, magicResist: 15, attackSpeed: 0.9, range: 1, mana: 40, moveSpeed: 2.15 }
     },
     'blueslime': {
         unitId: 'blueslime',
         name: 'Blue Slime',
         cost: 1,
         traits: ['bruiser', 'mitigation'],
-        stats: { health: 550, attack: 40, armor: 25, magicResist: 25, attackSpeed: 0.6, range: 1, mana: 60, moveSpeed: 1.25 }
+        stats: { health: 550, attack: 40, armor: 25, magicResist: 25, attackSpeed: 0.6, range: 1, mana: 60, moveSpeed: 1.75 }
     },
     'crawler': {
         unitId: 'crawler',
         name: 'Crawler',
         cost: 1,
         traits: ['scavenger', 'fury'],
-        stats: { health: 420, attack: 50, armor: 25, magicResist: 15, attackSpeed: 0.75, range: 1, mana: 50, moveSpeed: 1.25 }
+        stats: { health: 420, attack: 50, armor: 25, magicResist: 15, attackSpeed: 0.75, range: 1, mana: 50, moveSpeed: 1.75 }
     },
     'greenspider': {
         unitId: 'greenspider',
         name: 'Green Spider',
         cost: 1,
         traits: ['reflective', 'mitigation'],
-        stats: { health: 500, attack: 40, armor: 30, magicResist: 25, attackSpeed: 0.65, range: 1, mana: 55, moveSpeed: 1.25 }
+        stats: { health: 500, attack: 40, armor: 30, magicResist: 25, attackSpeed: 0.65, range: 1, mana: 55, moveSpeed: 1.75 }
     },
     'littledemon': {
         unitId: 'littledemon',
         name: 'Little Demon',
         cost: 1,
         traits: ['firstblood', 'overkill', 'attuned'],
-        stats: { health: 400, attack: 60, armor: 15, magicResist: 20, attackSpeed: 0.8, range: 1, mana: 45, moveSpeed: 1.25 }
+        stats: { health: 400, attack: 60, armor: 15, magicResist: 20, attackSpeed: 0.8, range: 1, mana: 45, moveSpeed: 1.75 }
     },
     'mushroom': {
         unitId: 'mushroom',
         name: 'Mushroom',
         cost: 1,
         traits: ['invigorating', 'volatile'],
-        stats: { health: 480, attack: 35, armor: 20, magicResist: 30, attackSpeed: 0.6, range: 2, mana: 60, moveSpeed: 1.25 }
+        stats: { health: 480, attack: 35, armor: 20, magicResist: 30, attackSpeed: 0.6, range: 1, mana: 60, moveSpeed: 1.75 }
     },
     'ratassassin': {
         unitId: 'ratassassin',
         name: 'Rat Assassin',
         cost: 1,
         traits: ['firstblood', 'momentum'],
-        stats: { health: 380, attack: 65, armor: 15, magicResist: 15, attackSpeed: 0.85, range: 1, mana: 40, moveSpeed: 1.5 }
+        stats: { health: 380, attack: 65, armor: 15, magicResist: 15, attackSpeed: 0.85, range: 1, mana: 40, moveSpeed: 2.15 }
     },
     'redslime': {
         unitId: 'redslime',
         name: 'Red Slime',
         cost: 1,
         traits: ['scavenger', 'volatile'],
-        stats: { health: 450, attack: 45, armor: 20, magicResist: 20, attackSpeed: 0.65, range: 1, mana: 50, moveSpeed: 1.25 }
+        stats: { health: 450, attack: 45, armor: 20, magicResist: 20, attackSpeed: 0.65, range: 1, mana: 50, moveSpeed: 1.75 }
     },
     'starfish': {
         unitId: 'starfish',
         name: 'Starfish',
         cost: 1,
         traits: ['invigorating', 'reflective'],
-        stats: { health: 520, attack: 35, armor: 20, magicResist: 25, attackSpeed: 0.55, range: 1, mana: 65, moveSpeed: 1.25 }
+        stats: { health: 520, attack: 35, armor: 20, magicResist: 25, attackSpeed: 0.55, range: 1, mana: 65, moveSpeed: 1.75 }
     },
 
     // ============================================
@@ -157,70 +157,70 @@ const UnitTemplates = {
         name: 'Battle Bee',
         cost: 2,
         traits: ['fury', 'cleave'],
-        stats: { health: 480, attack: 60, armor: 20, magicResist: 20, attackSpeed: 0.85, range: 1, mana: 45, moveSpeed: 1.25 }
+        stats: { health: 480, attack: 60, armor: 20, magicResist: 20, attackSpeed: 0.85, range: 1, mana: 45, moveSpeed: 1.75 }
     },
     'blacksmith': {
         unitId: 'blacksmith',
         name: 'Blacksmith',
         cost: 2,
         traits: ['crestmaker'],
-        stats: { health: 650, attack: 50, armor: 30, magicResist: 30, attackSpeed: 0.6, range: 1, mana: 80, moveSpeed: 1.25 }
+        stats: { health: 650, attack: 50, armor: 30, magicResist: 30, attackSpeed: 0.6, range: 1, mana: 80, moveSpeed: 1.75 }
     },
     'chestmonster': {
         unitId: 'chestmonster',
         name: 'Chest Monster',
         cost: 2,
         traits: ['treasure'],
-        stats: { health: 600, attack: 55, armor: 35, magicResist: 25, attackSpeed: 0.6, range: 1, mana: 60, moveSpeed: 1.25 }
+        stats: { health: 600, attack: 55, armor: 35, magicResist: 25, attackSpeed: 0.6, range: 1, mana: 60, moveSpeed: 1.75 }
     },
     'crabmonster': {
         unitId: 'crabmonster',
         name: 'Crab Monster',
         cost: 2,
         traits: ['bruiser', 'reflective'],
-        stats: { health: 700, attack: 50, armor: 45, magicResist: 25, attackSpeed: 0.55, range: 1, mana: 70, moveSpeed: 1.25 }
+        stats: { health: 700, attack: 50, armor: 45, magicResist: 25, attackSpeed: 0.55, range: 1, mana: 70, moveSpeed: 1.75 }
     },
     'evilplant': {
         unitId: 'evilplant',
         name: 'Evil Plant',
         cost: 2,
         traits: ['invigorating', 'volatile'],
-        stats: { health: 580, attack: 50, armor: 25, magicResist: 30, attackSpeed: 0.6, range: 2, mana: 60, moveSpeed: 1.25 }
+        stats: { health: 580, attack: 50, armor: 25, magicResist: 30, attackSpeed: 0.6, range: 2, mana: 60, moveSpeed: 1.75 }
     },
     'fishman': {
         unitId: 'fishman',
         name: 'Fishman',
         cost: 2,
         traits: ['scavenger', 'cleave'],
-        stats: { health: 600, attack: 55, armor: 30, magicResist: 20, attackSpeed: 0.7, range: 1, mana: 60, moveSpeed: 1.25 }
+        stats: { health: 600, attack: 55, armor: 30, magicResist: 20, attackSpeed: 0.7, range: 1, mana: 60, moveSpeed: 1.75 }
     },
     'flowermonster': {
         unitId: 'flowermonster',
         name: 'Flower Monster',
         cost: 2,
         traits: ['invigorating', 'gigamega'],
-        stats: { health: 500, attack: 45, armor: 20, magicResist: 35, attackSpeed: 0.6, range: 3, mana: 80, moveSpeed: 1.25 }
+        stats: { health: 500, attack: 45, armor: 20, magicResist: 35, attackSpeed: 0.6, range: 3, mana: 80, moveSpeed: 1.75 }
     },
     'golem': {
         unitId: 'golem',
         name: 'Golem',
         cost: 2,
         traits: ['forged', 'bruiser'],
-        stats: { health: 800, attack: 50, armor: 40, magicResist: 25, attackSpeed: 0.5, range: 1, mana: 75, moveSpeed: 1.25 }
+        stats: { health: 800, attack: 50, armor: 40, magicResist: 25, attackSpeed: 0.5, range: 1, mana: 75, moveSpeed: 1.75 }
     },
     'salamander': {
         unitId: 'salamander',
         name: 'Salamander',
         cost: 2,
         traits: ['forged', 'overkill'],
-        stats: { health: 550, attack: 65, armor: 25, magicResist: 30, attackSpeed: 0.7, range: 2, mana: 55, moveSpeed: 1.25 }
+        stats: { health: 550, attack: 65, armor: 25, magicResist: 30, attackSpeed: 0.7, range: 2, mana: 55, moveSpeed: 1.75 }
     },
     'wormmonster': {
         unitId: 'wormmonster',
         name: 'Worm Monster',
         cost: 2,
         traits: ['bruiser', 'mitigation'],
-        stats: { health: 750, attack: 45, armor: 35, magicResist: 30, attackSpeed: 0.5, range: 1, mana: 70, moveSpeed: 1.25 }
+        stats: { health: 750, attack: 45, armor: 35, magicResist: 30, attackSpeed: 0.5, range: 1, mana: 70, moveSpeed: 1.75 }
     },
 
     // ============================================
@@ -231,56 +231,56 @@ const UnitTemplates = {
         name: 'Beholder',
         cost: 3,
         traits: ['gigamega', 'volatile'],
-        stats: { health: 550, attack: 65, armor: 20, magicResist: 45, attackSpeed: 0.6, range: 4, mana: 70, moveSpeed: 1.25 }
+        stats: { health: 550, attack: 65, armor: 20, magicResist: 45, attackSpeed: 0.6, range: 4, mana: 70, moveSpeed: 1.75 }
     },
     'cleric': {
         unitId: 'cleric',
         name: 'Cleric',
         cost: 3,
         traits: ['invigorating', 'attuned'],
-        stats: { health: 700, attack: 45, armor: 30, magicResist: 45, attackSpeed: 0.55, range: 3, mana: 100, moveSpeed: 1.25 }
+        stats: { health: 700, attack: 45, armor: 30, magicResist: 45, attackSpeed: 0.55, range: 3, mana: 100, moveSpeed: 1.75 }
     },
     'cyclops': {
         unitId: 'cyclops',
         name: 'Cyclops',
         cost: 3,
         traits: ['overkill', 'cleave'],
-        stats: { health: 850, attack: 90, armor: 35, magicResist: 25, attackSpeed: 0.6, range: 1, mana: 70, moveSpeed: 1.25 }
+        stats: { health: 850, attack: 90, armor: 35, magicResist: 25, attackSpeed: 0.6, range: 1, mana: 70, moveSpeed: 1.75 }
     },
     'icegolem': {
         unitId: 'icegolem',
         name: 'Ice Golem',
         cost: 3,
         traits: ['bruiser', 'attuned'],
-        stats: { health: 950, attack: 55, armor: 45, magicResist: 40, attackSpeed: 0.5, range: 1, mana: 80, moveSpeed: 1.25 }
+        stats: { health: 950, attack: 55, armor: 45, magicResist: 40, attackSpeed: 0.5, range: 1, mana: 80, moveSpeed: 1.75 }
     },
     'lizardwarrior': {
         unitId: 'lizardwarrior',
         name: 'Lizard Warrior',
         cost: 3,
         traits: ['cleave', 'forged'],
-        stats: { health: 800, attack: 75, armor: 40, magicResist: 25, attackSpeed: 0.7, range: 1, mana: 65, moveSpeed: 1.25 }
+        stats: { health: 800, attack: 75, armor: 40, magicResist: 25, attackSpeed: 0.7, range: 1, mana: 65, moveSpeed: 1.75 }
     },
     'nagawizard': {
         unitId: 'nagawizard',
         name: 'Naga Wizard',
         cost: 3,
         traits: ['gigamega', 'scavenger', 'attuned'],
-        stats: { health: 650, attack: 55, armor: 25, magicResist: 50, attackSpeed: 0.6, range: 4, mana: 90, moveSpeed: 1.25 }
+        stats: { health: 650, attack: 55, armor: 25, magicResist: 50, attackSpeed: 0.6, range: 4, mana: 90, moveSpeed: 1.75 }
     },
     'specter': {
         unitId: 'specter',
         name: 'Specter',
         cost: 3,
         traits: ['gigamega', 'reflective'],
-        stats: { health: 600, attack: 60, armor: 20, magicResist: 45, attackSpeed: 0.65, range: 3, mana: 75, moveSpeed: 1.25 }
+        stats: { health: 600, attack: 60, armor: 20, magicResist: 45, attackSpeed: 0.65, range: 3, mana: 75, moveSpeed: 1.75 }
     },
     'werewolf': {
         unitId: 'werewolf',
         name: 'Werewolf',
         cost: 3,
         traits: ['momentum', 'firstblood'],
-        stats: { health: 750, attack: 85, armor: 30, magicResist: 25, attackSpeed: 0.85, range: 1, mana: 55, moveSpeed: 1.25 }
+        stats: { health: 750, attack: 85, armor: 30, magicResist: 25, attackSpeed: 0.85, range: 1, mana: 55, moveSpeed: 1.75 }
     },
 
     // ============================================
@@ -291,49 +291,49 @@ const UnitTemplates = {
         name: 'Bishop Knight',
         cost: 4,
         traits: ['mitigation', 'reflective'],
-        stats: { health: 1100, attack: 70, armor: 60, magicResist: 50, attackSpeed: 0.5, range: 1, mana: 90, moveSpeed: 1.25 }
+        stats: { health: 1100, attack: 70, armor: 60, magicResist: 50, attackSpeed: 0.5, range: 1, mana: 90, moveSpeed: 1.75 }
     },
     'blackknight': {
         unitId: 'blackknight',
         name: 'Black Knight',
         cost: 4,
         traits: ['forged', 'cleave'],
-        stats: { health: 1000, attack: 95, armor: 55, magicResist: 35, attackSpeed: 0.65, range: 1, mana: 80, moveSpeed: 1.25 }
+        stats: { health: 1000, attack: 95, armor: 55, magicResist: 35, attackSpeed: 0.65, range: 1, mana: 80, moveSpeed: 1.75 }
     },
     'bonedragon': {
         unitId: 'bonedragon',
         name: 'Bone Dragon',
         cost: 4,
         traits: ['volatile', 'attuned'],
-        stats: { health: 900, attack: 80, armor: 35, magicResist: 40, attackSpeed: 0.6, range: 2, mana: 85, moveSpeed: 1.25 }
+        stats: { health: 900, attack: 80, armor: 35, magicResist: 40, attackSpeed: 0.6, range: 2, mana: 85, moveSpeed: 1.75 }
     },
     'eviloldmage': {
         unitId: 'eviloldmage',
         name: 'Evil Old Mage',
         cost: 4,
         traits: ['gigamega', 'scavenger'],
-        stats: { health: 700, attack: 70, armor: 25, magicResist: 55, attackSpeed: 0.55, range: 4, mana: 95, moveSpeed: 1.25 }
+        stats: { health: 700, attack: 70, armor: 25, magicResist: 55, attackSpeed: 0.55, range: 4, mana: 95, moveSpeed: 1.75 }
     },
     'fatdragon': {
         unitId: 'fatdragon',
         name: 'Fat Dragon',
         cost: 4,
         traits: ['bruiser', 'cleave'],
-        stats: { health: 1200, attack: 85, armor: 45, magicResist: 40, attackSpeed: 0.5, range: 1, mana: 85, moveSpeed: 1.25 }
+        stats: { health: 1200, attack: 85, armor: 45, magicResist: 40, attackSpeed: 0.5, range: 1, mana: 85, moveSpeed: 1.75 }
     },
     'flyingdemon': {
         unitId: 'flyingdemon',
         name: 'Flying Demon',
         cost: 4,
         traits: ['momentum', 'overkill'],
-        stats: { health: 850, attack: 100, armor: 30, magicResist: 35, attackSpeed: 0.75, range: 1, mana: 70, moveSpeed: 1.25 }
+        stats: { health: 850, attack: 100, armor: 30, magicResist: 35, attackSpeed: 0.75, range: 1, mana: 70, moveSpeed: 1.75 }
     },
     'orcwithmace': {
         unitId: 'orcwithmace',
         name: 'Orc with Mace',
         cost: 4,
         traits: ['firstblood', 'overkill'],
-        stats: { health: 950, attack: 110, armor: 40, magicResist: 30, attackSpeed: 0.6, range: 1, mana: 75, moveSpeed: 1.25 }
+        stats: { health: 950, attack: 110, armor: 40, magicResist: 30, attackSpeed: 0.6, range: 1, mana: 75, moveSpeed: 1.75 }
     },
 
     // ============================================
@@ -344,35 +344,35 @@ const UnitTemplates = {
         name: 'Castle Monster',
         cost: 5,
         traits: ['bruiser', 'forged'],
-        stats: { health: 1500, attack: 80, armor: 60, magicResist: 50, attackSpeed: 0.4, range: 1, mana: 100, moveSpeed: 1.25 }
+        stats: { health: 1500, attack: 80, armor: 60, magicResist: 50, attackSpeed: 0.4, range: 1, mana: 100, moveSpeed: 1.75 }
     },
     'demonking': {
         unitId: 'demonking',
         name: 'Demon King',
         cost: 5,
         traits: ['overkill', 'momentum'],
-        stats: { health: 1100, attack: 120, armor: 45, magicResist: 45, attackSpeed: 0.65, range: 1, mana: 100, moveSpeed: 1.25 }
+        stats: { health: 1100, attack: 120, armor: 45, magicResist: 45, attackSpeed: 0.65, range: 1, mana: 100, moveSpeed: 1.75 }
     },
     'flameknight': {
         unitId: 'flameknight',
         name: 'Flame Knight',
         cost: 5,
         traits: ['volatile', 'overkill'],
-        stats: { health: 950, attack: 105, armor: 40, magicResist: 45, attackSpeed: 0.65, range: 1, mana: 85, moveSpeed: 1.25 }
+        stats: { health: 950, attack: 105, armor: 40, magicResist: 45, attackSpeed: 0.65, range: 1, mana: 85, moveSpeed: 1.75 }
     },
     'skeletonmage': {
         unitId: 'skeletonmage',
         name: 'Skeleton Mage',
         cost: 5,
         traits: ['gigamega', 'attuned'],
-        stats: { health: 750, attack: 75, armor: 25, magicResist: 55, attackSpeed: 0.55, range: 4, mana: 120, moveSpeed: 1.25 }
+        stats: { health: 750, attack: 75, armor: 25, magicResist: 55, attackSpeed: 0.55, range: 4, mana: 120, moveSpeed: 1.75 }
     },
     'spikyshellturtle': {
         unitId: 'spikyshellturtle',
         name: 'Spiky Shell Turtle',
         cost: 5,
         traits: ['reflective', 'mitigation'],
-        stats: { health: 1400, attack: 60, armor: 70, magicResist: 60, attackSpeed: 0.35, range: 1, mana: 90, moveSpeed: 1.25 }
+        stats: { health: 1400, attack: 60, armor: 70, magicResist: 60, attackSpeed: 0.35, range: 1, mana: 90, moveSpeed: 1.75 }
     },
 
     // ============================================
@@ -383,7 +383,7 @@ const UnitTemplates = {
         name: 'Stingray',
         cost: 0, // Cost 0 = not available in shop
         traits: [],
-        stats: { health: 80, attack: 15, armor: 0, magicResist: 0, attackSpeed: 0.6, range: 1, mana: 0, moveSpeed: 1.25 },
+        stats: { health: 80, attack: 15, armor: 0, magicResist: 0, attackSpeed: 0.6, range: 1, mana: 0, moveSpeed: 1.75 },
         isPvE: true
     },
     'cactus': {
@@ -391,7 +391,7 @@ const UnitTemplates = {
         name: 'Cactus',
         cost: 0,
         traits: [],
-        stats: { health: 100, attack: 10, armor: 5, magicResist: 0, attackSpeed: 0.5, range: 1, mana: 0, moveSpeed: 1.25 },
+        stats: { health: 100, attack: 10, armor: 5, magicResist: 0, attackSpeed: 0.5, range: 1, mana: 0, moveSpeed: 1.75 },
         isPvE: true
     }
 };

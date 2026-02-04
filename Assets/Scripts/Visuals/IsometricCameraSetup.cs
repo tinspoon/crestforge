@@ -416,7 +416,10 @@ namespace Crestforge.Visuals
 
             targetBoard = board;
             transitionStartPos = focusPoint;
-            transitionTargetPos = board.BoardCenter + new Vector3(0, 0, 2f); // Slight offset for better view
+            // Offset toward enemy side (away from camera) for better view
+            // Flip the offset direction when viewing from opposite side
+            float zOffset = fromOppositeSide ? -2f : 2f;
+            transitionTargetPos = board.BoardCenter + new Vector3(0, 0, zOffset);
             transitionProgress = 0f;
             isTransitioning = true;
 
