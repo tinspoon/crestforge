@@ -379,6 +379,7 @@ class CombatUnit {
         // No initial delay - attack immediately when in range, then at constant rate
         this.attackCooldown = 0;
         this.moveCooldown = 0; // Movement cooldown
+        this.arrivalTick = 0; // Tick when unit finishes moving to current position (0 = already there)
         this.isDead = false;
         this.target = null;
         // Copy loot type for PvE enemies
@@ -537,12 +538,20 @@ class CombatSimulator {
 
         // Check if in range
         if (distance <= unit.stats.range) {
-            // Only attack if cooldown is ready
-            if (unit.attackCooldown <= 0) {
+            // Only attack if:
+            // 1. Attack cooldown is ready
+            // 2. This unit has finished moving (arrived at its tile)
+            // 3. Target has finished moving (arrived at their tile)
+            // This prevents "drive-by" attacks while moving and hitting units mid-step
+            const canAttack = unit.attackCooldown <= 0
+                && unit.arrivalTick <= this.tick
+                && unit.target.arrivalTick <= this.tick;
+
+            if (canAttack) {
                 this.performAttack(unit, unit.target);
                 unit.attackCooldown = 1 / unit.stats.attackSpeed;
             }
-            // If on cooldown and in range, just wait
+            // If on cooldown or either unit still moving - wait
         } else {
             // Move towards target (only if move cooldown is ready)
             if (unit.moveCooldown <= 0) {
@@ -629,7 +638,14 @@ class CombatSimulator {
             unit.x = newX;
             unit.y = newY;
 
-            console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} (${unit.playerId}) moves (${oldX},${oldY}) -> (${newX},${newY}), target at (${target.x},${target.y})`);
+            // Calculate how many ticks until the unit "arrives" at the new position
+            // This equals the movement duration (1 / moveSpeed) converted to ticks
+            const moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
+            const moveDuration = 1 / moveSpeed; // seconds
+            const moveDurationTicks = Math.ceil(moveDuration / this.tickRate);
+            unit.arrivalTick = this.tick + moveDurationTicks;
+
+            console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} (${unit.playerId}) moves (${oldX},${oldY}) -> (${newX},${newY}), arrives at tick ${unit.arrivalTick}, target at (${target.x},${target.y})`);
 
             this.events.push({
                 type: CombatEventType.UNIT_MOVE,
