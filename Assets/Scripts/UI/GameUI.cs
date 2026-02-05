@@ -58,7 +58,14 @@ namespace Crestforge.UI
 
         [Header("Crest Display")]
         public RectTransform crestPanel;
-        public CrestSlotUI minorCrestSlot;
+        public CrestSlotUI majorCrestSlot;
+        public CrestSlotUI[] minorCrestSlots = new CrestSlotUI[3];
+
+        [Header("Game End Screen")]
+        public RectTransform gameEndPanel;
+        public Text gameEndTitle;
+        public Text gameEndSubtitle;
+        public Button exitToMenuButton;
 
         [Header("Trait Panel")]
         public RectTransform traitPanel;
@@ -157,6 +164,7 @@ namespace Crestforge.UI
             if (ServerGameState.Instance != null)
             {
                 ServerGameState.Instance.OnActionResult += HandleActionResult;
+                ServerGameState.Instance.OnGameEnded += HandleGameEnded;
             }
         }
 
@@ -166,6 +174,7 @@ namespace Crestforge.UI
             if (ServerGameState.Instance != null)
             {
                 ServerGameState.Instance.OnActionResult -= HandleActionResult;
+                ServerGameState.Instance.OnGameEnded -= HandleGameEnded;
             }
         }
 
@@ -349,6 +358,7 @@ namespace Crestforge.UI
             CreateTraitPanel();
             CreateTraitTooltip();
             CreateCrestPanel();
+            CreateGameEndPanel();
         }
 
         private void CreateTopBar()
@@ -1053,7 +1063,7 @@ namespace Crestforge.UI
             crestPanel.anchorMax = new Vector2(0, 1);
             crestPanel.pivot = new Vector2(0, 1);
             crestPanel.anchoredPosition = new Vector2(10, -400);
-            crestPanel.sizeDelta = new Vector2(105, 100);
+            crestPanel.sizeDelta = new Vector2(105, 250); // Increased height for 1 major + 3 minor slots
 
             Image panelBg = crestObj.GetComponent<Image>();
             panelBg.color = new Color(0.12f, 0.12f, 0.18f, 0.9f);
@@ -1067,14 +1077,24 @@ namespace Crestforge.UI
             vlg.childForceExpandWidth = true;
 
             // Header
-            Text header = CreateTooltipText("CREST", crestObj.transform, 10, FontStyle.Bold, new Color(0.7f, 0.6f, 0.9f), 14);
+            Text header = CreateTooltipText("CRESTS", crestObj.transform, 10, FontStyle.Bold, new Color(0.7f, 0.6f, 0.9f), 14);
             header.alignment = TextAnchor.MiddleCenter;
 
-            // Minor crest slot
-            minorCrestSlot = CrestSlotUI.Create(crestObj.transform, new Vector2(90, 50), "Minor");
+            // Major crest slot (on top)
+            majorCrestSlot = CrestSlotUI.Create(crestObj.transform, new Vector2(90, 50), "Major");
 
-            // Initialize with no crest
-            minorCrestSlot.SetCrest(null);
+            // Minor crest slots (up to 3)
+            for (int i = 0; i < 3; i++)
+            {
+                minorCrestSlots[i] = CrestSlotUI.Create(crestObj.transform, new Vector2(90, 50), "Minor");
+                minorCrestSlots[i].SetCrest(null); // Hide initially
+            }
+
+            // Initialize with no crests - this will hide the slots
+            majorCrestSlot.SetCrest(null);
+
+            // Hide the entire panel initially (will show when a crest is acquired)
+            crestPanel.gameObject.SetActive(false);
 
             // Create crest tooltip
             CreateCrestTooltip();
@@ -1137,6 +1157,182 @@ namespace Crestforge.UI
             crestTooltipBonus = CreateTooltipText("Bonus effect", tooltipObj.transform, 13, FontStyle.Normal, new Color(0.7f, 0.9f, 0.7f), 20);
 
             crestTooltipPanel.gameObject.SetActive(false);
+        }
+
+        private void CreateGameEndPanel()
+        {
+            // Full-screen overlay for game end
+            GameObject panelObj = CreatePanel("GameEndPanel", mainCanvas.transform);
+            gameEndPanel = panelObj.GetComponent<RectTransform>();
+
+            // Full screen
+            gameEndPanel.anchorMin = Vector2.zero;
+            gameEndPanel.anchorMax = Vector2.one;
+            gameEndPanel.offsetMin = Vector2.zero;
+            gameEndPanel.offsetMax = Vector2.zero;
+
+            // Semi-transparent dark background
+            Image bg = panelObj.GetComponent<Image>();
+            bg.color = new Color(0.05f, 0.05f, 0.1f, 0.9f);
+
+            // Content container (centered)
+            GameObject contentObj = new GameObject("Content");
+            contentObj.transform.SetParent(gameEndPanel, false);
+            RectTransform contentRT = contentObj.AddComponent<RectTransform>();
+            contentRT.anchorMin = new Vector2(0.5f, 0.5f);
+            contentRT.anchorMax = new Vector2(0.5f, 0.5f);
+            contentRT.pivot = new Vector2(0.5f, 0.5f);
+            contentRT.sizeDelta = new Vector2(400, 300);
+
+            // Background for content
+            Image contentBg = contentObj.AddComponent<Image>();
+            contentBg.color = new Color(0.15f, 0.15f, 0.2f, 0.95f);
+
+            // Outline
+            Outline outline = contentObj.AddComponent<Outline>();
+            outline.effectColor = new Color(0.5f, 0.4f, 0.7f);
+            outline.effectDistance = new Vector2(2, 2);
+
+            // Vertical layout for content
+            VerticalLayoutGroup vlg = contentObj.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(30, 30, 40, 30);
+            vlg.spacing = 20;
+            vlg.childAlignment = TextAnchor.MiddleCenter;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+            vlg.childForceExpandWidth = true;
+
+            // Title (Victory! / Defeat)
+            GameObject titleObj = new GameObject("Title");
+            titleObj.transform.SetParent(contentObj.transform, false);
+            gameEndTitle = titleObj.AddComponent<Text>();
+            gameEndTitle.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            gameEndTitle.fontSize = 48;
+            gameEndTitle.fontStyle = FontStyle.Bold;
+            gameEndTitle.alignment = TextAnchor.MiddleCenter;
+            gameEndTitle.text = "VICTORY!";
+            gameEndTitle.color = new Color(1f, 0.85f, 0.3f);
+            LayoutElement titleLE = titleObj.AddComponent<LayoutElement>();
+            titleLE.preferredHeight = 60;
+
+            // Subtitle (winner name)
+            GameObject subtitleObj = new GameObject("Subtitle");
+            subtitleObj.transform.SetParent(contentObj.transform, false);
+            gameEndSubtitle = subtitleObj.AddComponent<Text>();
+            gameEndSubtitle.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            gameEndSubtitle.fontSize = 20;
+            gameEndSubtitle.alignment = TextAnchor.MiddleCenter;
+            gameEndSubtitle.text = "Winner: Player Name";
+            gameEndSubtitle.color = new Color(0.8f, 0.8f, 0.9f);
+            LayoutElement subtitleLE = subtitleObj.AddComponent<LayoutElement>();
+            subtitleLE.preferredHeight = 30;
+
+            // Spacer
+            GameObject spacerObj = new GameObject("Spacer");
+            spacerObj.transform.SetParent(contentObj.transform, false);
+            spacerObj.AddComponent<RectTransform>();
+            LayoutElement spacerLE = spacerObj.AddComponent<LayoutElement>();
+            spacerLE.preferredHeight = 20;
+
+            // Exit button
+            GameObject buttonObj = new GameObject("ExitButton");
+            buttonObj.transform.SetParent(contentObj.transform, false);
+            Image buttonBg = buttonObj.AddComponent<Image>();
+            buttonBg.color = new Color(0.3f, 0.25f, 0.5f);
+            exitToMenuButton = buttonObj.AddComponent<Button>();
+            exitToMenuButton.targetGraphic = buttonBg;
+
+            // Button hover colors
+            ColorBlock colors = exitToMenuButton.colors;
+            colors.highlightedColor = new Color(0.4f, 0.35f, 0.6f);
+            colors.pressedColor = new Color(0.25f, 0.2f, 0.4f);
+            exitToMenuButton.colors = colors;
+
+            LayoutElement buttonLE = buttonObj.AddComponent<LayoutElement>();
+            buttonLE.preferredHeight = 50;
+            buttonLE.preferredWidth = 200;
+
+            // Button text
+            GameObject buttonTextObj = new GameObject("Text");
+            buttonTextObj.transform.SetParent(buttonObj.transform, false);
+            Text buttonText = buttonTextObj.AddComponent<Text>();
+            buttonText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            buttonText.fontSize = 22;
+            buttonText.fontStyle = FontStyle.Bold;
+            buttonText.alignment = TextAnchor.MiddleCenter;
+            buttonText.text = "Exit to Menu";
+            buttonText.color = Color.white;
+            RectTransform buttonTextRT = buttonTextObj.GetComponent<RectTransform>();
+            buttonTextRT.anchorMin = Vector2.zero;
+            buttonTextRT.anchorMax = Vector2.one;
+            buttonTextRT.offsetMin = Vector2.zero;
+            buttonTextRT.offsetMax = Vector2.zero;
+
+            // Button click handler
+            exitToMenuButton.onClick.AddListener(OnExitToMenuClicked);
+
+            // Hide panel initially
+            gameEndPanel.gameObject.SetActive(false);
+        }
+
+        private void HandleGameEnded(string winnerId, string winnerName)
+        {
+            if (gameEndPanel == null) return;
+
+            // Determine if local player won
+            bool isWinner = false;
+            if (serverState != null)
+            {
+                isWinner = winnerId == serverState.localPlayerId;
+            }
+
+            // Set title based on win/loss
+            if (isWinner)
+            {
+                gameEndTitle.text = "VICTORY!";
+                gameEndTitle.color = new Color(1f, 0.85f, 0.3f); // Gold
+            }
+            else
+            {
+                gameEndTitle.text = "DEFEAT";
+                gameEndTitle.color = new Color(0.8f, 0.3f, 0.3f); // Red
+            }
+
+            // Set subtitle
+            gameEndSubtitle.text = $"Winner: {winnerName}";
+
+            // Show the panel
+            gameEndPanel.gameObject.SetActive(true);
+        }
+
+        private void OnExitToMenuClicked()
+        {
+            // Leave the room
+            if (NetworkManager.Instance != null)
+            {
+                NetworkManager.Instance.LeaveRoom();
+            }
+
+            // Reset server game state
+            if (serverState != null)
+            {
+                serverState.ResetState();
+            }
+
+            // Hide game end panel
+            if (gameEndPanel != null)
+            {
+                gameEndPanel.gameObject.SetActive(false);
+            }
+
+            // Hide game UI
+            gameObject.SetActive(false);
+
+            // Show main menu
+            if (MainMenuUI.Instance != null)
+            {
+                MainMenuUI.Instance.Show();
+            }
         }
 
         private int lastTraitHash = 0;
@@ -1977,6 +2173,7 @@ namespace Crestforge.UI
 
         private bool multiplayerCrestSelectionShown = false;
         private bool multiplayerItemSelectionShown = false;
+        private bool multiplayerCrestReplacementShown = false;
 
         private void UpdatePhaseUIMultiplayer()
         {
@@ -1988,6 +2185,10 @@ namespace Crestforge.UI
             // Check for pending selections (from consumables like crest_token or item_anvil)
             bool hasPendingCrestSelection = ss.pendingCrestSelection != null && ss.pendingCrestSelection.Count > 0;
             bool hasPendingItemSelection = ss.pendingItemSelection != null && ss.pendingItemSelection.Count > 0;
+            // Check crestId to avoid false positives from empty deserialized objects
+            bool hasPendingCrestReplacement = ss.pendingCrestReplacement != null
+                && ss.pendingCrestReplacement.newCrest != null
+                && !string.IsNullOrEmpty(ss.pendingCrestReplacement.newCrest.crestId);
 
             switch (currentPhase)
             {
@@ -1998,6 +2199,7 @@ namespace Crestforge.UI
                     selectionPanel.gameObject.SetActive(false);
                     multiplayerCrestSelectionShown = false;
                     multiplayerItemSelectionShown = false;
+                    multiplayerCrestReplacementShown = false;
                     break;
 
                 case "planning":
@@ -2020,6 +2222,15 @@ namespace Crestforge.UI
                         }
                         shopPanel.gameObject.SetActive(false);
                     }
+                    else if (hasPendingCrestReplacement)
+                    {
+                        if (!multiplayerCrestReplacementShown)
+                        {
+                            ShowCrestReplacementMultiplayer();
+                            multiplayerCrestReplacementShown = true;
+                        }
+                        shopPanel.gameObject.SetActive(false);
+                    }
                     else
                     {
                         // No pending selections - show normal planning UI
@@ -2027,6 +2238,7 @@ namespace Crestforge.UI
                         selectionShown = false;
                         multiplayerCrestSelectionShown = false;
                         multiplayerItemSelectionShown = false;
+                        multiplayerCrestReplacementShown = false;
                         shopPanel.gameObject.SetActive(true);
                         UpdateShop();
                         UpdateShopButtons();
@@ -2057,12 +2269,22 @@ namespace Crestforge.UI
                         }
                         shopPanel.gameObject.SetActive(false);
                     }
+                    else if (hasPendingCrestReplacement)
+                    {
+                        if (!multiplayerCrestReplacementShown)
+                        {
+                            ShowCrestReplacementMultiplayer();
+                            multiplayerCrestReplacementShown = true;
+                        }
+                        shopPanel.gameObject.SetActive(false);
+                    }
                     else
                     {
                         selectionPanel.gameObject.SetActive(false);
                         selectionShown = false;
                         multiplayerCrestSelectionShown = false;
                         multiplayerItemSelectionShown = false;
+                        multiplayerCrestReplacementShown = false;
                         shopPanel.gameObject.SetActive(true);
                         // Refresh shop so players can buy during combat/results
                         UpdateShop();
@@ -2611,23 +2833,71 @@ namespace Crestforge.UI
 
         public void UpdateCrestDisplay()
         {
+            bool hasAnyCrest = false;
+
             // Multiplayer mode - use server crest data
             if (IsMultiplayer && serverState != null)
             {
-                if (minorCrestSlot != null)
+                // Check major crest
+                bool hasMajorCrest = serverState.majorCrest != null && !string.IsNullOrEmpty(serverState.majorCrest.crestId);
+                if (majorCrestSlot != null)
                 {
-                    minorCrestSlot.SetServerCrest(serverState.minorCrest);
+                    majorCrestSlot.SetServerCrest(hasMajorCrest ? serverState.majorCrest : null);
+                    if (hasMajorCrest) hasAnyCrest = true;
+                }
+
+                // Update minor crest slots (up to 3)
+                for (int i = 0; i < minorCrestSlots.Length; i++)
+                {
+                    if (minorCrestSlots[i] != null)
+                    {
+                        ServerCrestData minorCrest = (serverState.minorCrests != null && i < serverState.minorCrests.Count)
+                            ? serverState.minorCrests[i]
+                            : null;
+                        bool hasValidCrest = minorCrest != null && !string.IsNullOrEmpty(minorCrest.crestId);
+                        minorCrestSlots[i].SetServerCrest(hasValidCrest ? minorCrest : null);
+                        if (hasValidCrest) hasAnyCrest = true;
+                    }
+                }
+
+                // Hide entire crest panel if no crests are active
+                if (crestPanel != null)
+                {
+                    crestPanel.gameObject.SetActive(hasAnyCrest);
                 }
                 return;
             }
 
-            if (minorCrestSlot == null || state == null) return;
+            if (state == null) return;
 
-            // Update minor crest slot with the first minor crest (if any)
-            CrestData activeCrest = (state.minorCrests != null && state.minorCrests.Count > 0)
-                ? state.minorCrests[0]
-                : null;
-            minorCrestSlot.SetCrest(activeCrest);
+            // Update major crest slot with the first major crest (if any)
+            if (majorCrestSlot != null)
+            {
+                CrestData activeMajorCrest = (state.majorCrests != null && state.majorCrests.Count > 0)
+                    ? state.majorCrests[0]
+                    : null;
+                majorCrestSlot.SetCrest(activeMajorCrest);
+                if (activeMajorCrest != null) hasAnyCrest = true;
+            }
+
+            // Update minor crest slots (up to 3)
+            for (int i = 0; i < minorCrestSlots.Length; i++)
+            {
+                if (minorCrestSlots[i] != null)
+                {
+                    CrestData activeMinorCrest = (state.minorCrests != null && i < state.minorCrests.Count)
+                        ? state.minorCrests[i]
+                        : null;
+                    minorCrestSlots[i].SetCrest(activeMinorCrest);
+                    if (activeMinorCrest != null) hasAnyCrest = true;
+                }
+            }
+
+            // Hide entire crest panel if no crests are active
+            if (crestPanel != null)
+            {
+                crestPanel.gameObject.SetActive(hasAnyCrest);
+            }
         }
 
         private void UpdateShopButtons()
@@ -2636,11 +2906,26 @@ namespace Crestforge.UI
             if (IsMultiplayer)
             {
                 var ss = serverState;
-                bool mpCanReroll = ss.gold >= 2; // REROLL_COST
+                // Can reroll if have free rerolls OR enough gold
+                bool mpCanReroll = ss.freeRerolls > 0 || ss.gold >= 2; // REROLL_COST
                 bool mpCanBuyXP = ss.gold >= 4 && ss.level < 9; // XP_COST, MAX_LEVEL
 
                 rerollButton.interactable = mpCanReroll;
                 buyXPButton.interactable = mpCanBuyXP;
+
+                // Update reroll button text to show free rerolls
+                var rerollText = rerollButton.GetComponentInChildren<Text>();
+                if (rerollText != null)
+                {
+                    if (ss.freeRerolls > 0)
+                    {
+                        rerollText.text = $"🔄 0 ({ss.freeRerolls})";
+                    }
+                    else
+                    {
+                        rerollText.text = "🔄 $2";
+                    }
+                }
 
                 string mpLockIcon = ss.shopLocked ? "🔒" : "🔓";
                 lockButton.GetComponentInChildren<Text>().text = mpLockIcon;
@@ -2743,6 +3028,90 @@ namespace Crestforge.UI
         }
 
         /// <summary>
+        /// Show crest replacement panel when player has max crests and tries to get a new one.
+        /// Displays current 3 crests and lets player pick which to replace.
+        /// </summary>
+        private void ShowCrestReplacementMultiplayer()
+        {
+            selectionPanel.gameObject.SetActive(true);
+            ClearSelectionPanel();
+
+            var ss = serverState;
+            if (ss.pendingCrestReplacement == null
+                || ss.pendingCrestReplacement.newCrest == null
+                || string.IsNullOrEmpty(ss.pendingCrestReplacement.newCrest.crestId))
+            {
+                Debug.LogWarning("[GameUI] ShowCrestReplacementMultiplayer called but pendingCrestReplacement is null or empty");
+                return;
+            }
+
+            var newCrest = ss.pendingCrestReplacement.newCrest;
+
+            // Title showing the new crest being added
+            Text title = CreateText("REPLACE A CREST", selectionPanel, 0);
+            title.fontSize = 28;
+            title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
+            title.GetComponent<LayoutElement>().preferredHeight = 40;
+
+            // Subtitle showing the new crest
+            Text subtitle = CreateText($"New: {newCrest.name ?? newCrest.crestId}", selectionPanel, 0);
+            subtitle.fontSize = 20;
+            subtitle.alignment = TextAnchor.MiddleCenter;
+            subtitle.color = new Color(0.4f, 1f, 0.5f);  // Green for new crest
+            subtitle.GetComponent<LayoutElement>().preferredHeight = 30;
+
+            // Show description of new crest
+            if (!string.IsNullOrEmpty(newCrest.description))
+            {
+                Text descText = CreateText(newCrest.description, selectionPanel, 0);
+                descText.fontSize = 16;
+                descText.alignment = TextAnchor.MiddleCenter;
+                descText.color = new Color(0.8f, 0.8f, 0.8f);
+                descText.GetComponent<LayoutElement>().preferredHeight = 25;
+            }
+
+            // Instructions
+            Text instructions = CreateText("Choose which crest to replace:", selectionPanel, 0);
+            instructions.fontSize = 18;
+            instructions.alignment = TextAnchor.MiddleCenter;
+            instructions.color = new Color(1f, 0.9f, 0.7f);
+            instructions.GetComponent<LayoutElement>().preferredHeight = 30;
+
+            // Display current 3 crests as options to replace
+            if (ss.minorCrests == null || ss.minorCrests.Count == 0)
+            {
+                Debug.LogWarning("[GameUI] No minor crests to replace");
+                return;
+            }
+
+            for (int i = 0; i < ss.minorCrests.Count; i++)
+            {
+                var crest = ss.minorCrests[i];
+                if (crest == null) continue;
+
+                int replaceIndex = i;
+                Color crestColor = new Color(0.5f, 0.4f, 0.4f);  // Dimmer color for crests being replaced
+
+                string rankText = crest.rank > 1 ? $" (Rank {crest.rank})" : "";
+                string crestName = (crest.name ?? crest.crestId) + rankText;
+                string description = crest.description ?? "";
+
+                if (!string.IsNullOrEmpty(crest.grantsTrait))
+                {
+                    description = $"+1 {crest.grantsTrait}\n{description}";
+                }
+
+                CreateSelectionCard(
+                    crestName,
+                    description,
+                    crestColor,
+                    () => OnCrestReplacedMultiplayer(replaceIndex)
+                );
+            }
+        }
+
+        /// <summary>
         /// Show item selection panel for multiplayer mode (uses server data)
         /// </summary>
         private void ShowItemSelectionMultiplayer()
@@ -2794,6 +3163,21 @@ namespace Crestforge.UI
             // Hide selection panel - it will be re-shown if there are more selections pending
             selectionPanel.gameObject.SetActive(false);
             multiplayerCrestSelectionShown = false;
+
+            // Update the crest display UI
+            UpdateCrestDisplay();
+        }
+
+        private void OnCrestReplacedMultiplayer(int replaceIndex)
+        {
+            Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+            Crestforge.Visuals.AudioManager.Instance?.PlayLevelUp();
+
+            serverState.ReplaceCrest(replaceIndex);
+
+            // Hide selection panel
+            selectionPanel.gameObject.SetActive(false);
+            multiplayerCrestReplacementShown = false;
 
             // Update the crest display UI
             UpdateCrestDisplay();

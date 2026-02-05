@@ -43,11 +43,12 @@ namespace Crestforge.Networking
         public int lossStreak;
         public bool isReady;
         public bool shopLocked;
+        public int freeRerolls;
 
         // Items, Crests, and Traits
         [Header("Items & Crests")]
         public List<ServerItemData> itemInventory = new List<ServerItemData>();
-        public ServerCrestData minorCrest;
+        public List<ServerCrestData> minorCrests = new List<ServerCrestData>();
         public ServerCrestData majorCrest;
         public List<ServerActiveTraitEntry> activeTraits = new List<ServerActiveTraitEntry>();
 
@@ -55,6 +56,7 @@ namespace Crestforge.Networking
         [Header("Pending Selections")]
         public List<ServerCrestData> pendingCrestSelection = new List<ServerCrestData>();
         public List<ServerItemData> pendingItemSelection = new List<ServerItemData>();
+        public ServerPendingCrestReplacement pendingCrestReplacement;
 
         // Board and bench - stored as serializable data
         [Header("Board")]
@@ -83,6 +85,7 @@ namespace Crestforge.Networking
         public event Action<string, bool> OnActionResult; // action, success
         public event Action<int> OnBoardIndexAssigned; // boardIndex - fired when local player's board position is known
         public event Action OnSelectionAvailable; // fired when pendingCrestSelection or pendingItemSelection is populated
+        public event Action OnCrestReplacementNeeded; // fired when player needs to choose which crest to replace
 
         // Unit data reference (for looking up unit templates)
         public UnitData[] allUnits;
@@ -332,8 +335,9 @@ namespace Crestforge.Networking
             lossStreak = data.lossStreak;
             isReady = data.isReady;
             shopLocked = data.shopLocked;
+            freeRerolls = data.freeRerolls;
 
-            
+
             // Update board from flat list with coordinates
             // First clear the board
             for (int x = 0; x < 7; x++)
@@ -385,7 +389,10 @@ namespace Crestforge.Networking
             }
 
             // Update crests
-            minorCrest = data.minorCrest;
+            if (data.minorCrests != null)
+            {
+                minorCrests = data.minorCrests;
+            }
             majorCrest = data.majorCrest;
 
             // Update active traits
@@ -422,6 +429,15 @@ namespace Crestforge.Networking
             if ((!hadCrestSelection && hasCrestSelection) || (!hadItemSelection && hasItemSelection))
             {
                 OnSelectionAvailable?.Invoke();
+            }
+
+            // Handle pending crest replacement
+            bool hadCrestReplacement = pendingCrestReplacement != null;
+            pendingCrestReplacement = data.pendingCrestReplacement;
+            bool hasCrestReplacement = pendingCrestReplacement != null && pendingCrestReplacement.newCrest != null;
+            if (!hadCrestReplacement && hasCrestReplacement)
+            {
+                OnCrestReplacementNeeded?.Invoke();
             }
         }
 
@@ -602,6 +618,11 @@ namespace Crestforge.Networking
             SendAction(new GameAction { type = "selectItemChoice", choiceIndex = choiceIndex });
         }
 
+        public void ReplaceCrest(int replaceIndex)
+        {
+            SendAction(new GameAction { type = "replaceCrest", replaceIndex = replaceIndex });
+        }
+
         // ============================================
         // Loot Actions
         // ============================================
@@ -771,6 +792,46 @@ namespace Crestforge.Networking
         {
             return phase == "combat" && currentHostPlayerId == localPlayerId;
         }
+
+        /// <summary>
+        /// Reset state when leaving a game
+        /// </summary>
+        public void ResetState()
+        {
+            roomId = null;
+            phase = "waiting";
+            round = 0;
+            phaseTimer = 0;
+            localPlayerId = null;
+            currentHostPlayerId = null;
+            currentCombatTeam = null;
+            gold = 0;
+            health = 100;
+            maxHealth = 100;
+            level = 1;
+            xp = 0;
+            xpToNext = 4;
+            maxUnits = 1;
+            winStreak = 0;
+            lossStreak = 0;
+            isReady = false;
+            shopLocked = false;
+
+            otherPlayers.Clear();
+            matchups.Clear();
+            combatResults.Clear();
+            itemInventory.Clear();
+            activeTraits.Clear();
+            minorCrests.Clear();
+            majorCrest = null;
+
+            // Reset arrays
+            board = null;
+            bench = null;
+            shop = null;
+
+            Debug.Log("[ServerGameState] State reset for returning to menu");
+        }
     }
 
     // ============================================
@@ -807,18 +868,27 @@ namespace Crestforge.Networking
         public int lossStreak;
         public bool isReady;
         public bool shopLocked;
+        public int freeRerolls;
         public bool isEliminated;
         public List<ServerBoardUnit> boardUnits; // Flat list with coordinates (replaces 2D array)
         public ServerUnitData[] bench;   // 9 slots
         public ServerShopUnit[] shop;    // 5 slots
         // Items, Crests, and Traits
         public List<ServerItemData> itemInventory;
-        public ServerCrestData minorCrest;
+        public List<ServerCrestData> minorCrests;
         public ServerCrestData majorCrest;
         public List<ServerActiveTraitEntry> activeTraits;
         // Pending selections (from consumables like crest_token or item_anvil)
         public List<ServerCrestData> pendingCrestSelection;
         public List<ServerItemData> pendingItemSelection;
+        // Pending crest replacement (when at max crests and need to choose which to replace)
+        public ServerPendingCrestReplacement pendingCrestReplacement;
+    }
+
+    [Serializable]
+    public class ServerPendingCrestReplacement
+    {
+        public ServerCrestData newCrest;
     }
 
     [Serializable]
@@ -915,6 +985,8 @@ namespace Crestforge.Networking
         public string lootId;
         // Selection actions
         public int choiceIndex;
+        // Crest replacement
+        public int replaceIndex;
     }
 
     [Serializable]
@@ -949,6 +1021,7 @@ namespace Crestforge.Networking
         public string name;
         public string description;
         public string type; // "minor" or "major"
+        public int rank; // 1, 2, or 3 - determines bonus multiplier (1x, 1.5x, 2x)
         public string grantsTrait; // For minor crests
         public ServerCrestBonus teamBonus; // For major crests
     }

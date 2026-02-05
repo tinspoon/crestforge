@@ -22,7 +22,9 @@ const {
 const LootType = {
     None: 'none',
     CrestToken: 'crest_token',
-    ItemAnvil: 'item_anvil'
+    ItemAnvil: 'item_anvil',
+    MixedLoot: 'mixed_loot', // Random loot - gold or unit
+    LargeMixedLoot: 'large_mixed_loot' // Boss loot - more gold or better unit
 };
 
 class UnitPool {
@@ -101,7 +103,7 @@ class PlayerState {
 
         // Economy
         this.gold = GameConstants.Economy.STARTING_GOLD;
-        this.health = 20;
+        this.health = 15;
         this.maxHealth = 20;
         this.level = GameConstants.Player.STARTING_LEVEL;
         this.xp = 0;
@@ -123,12 +125,15 @@ class PlayerState {
         this.shop = new Array(GameConstants.Economy.SHOP_SIZE).fill(null);
         this.shopLocked = false;
 
+        // Free rerolls (earned from rewards, persists between phases)
+        this.freeRerolls = 0;
+
         // Items: inventory of unequipped items (max 10)
         this.itemInventory = [];
 
         // Crests: active crests for the player
         this.crests = []; // { minor: CrestData, major: CrestData }
-        this.minorCrest = null;
+        this.minorCrests = []; // Up to 3 minor crests
         this.majorCrest = null;
 
         // Active traits (calculated from board units)
@@ -137,6 +142,7 @@ class PlayerState {
         // Pending selections (for consumables)
         this.pendingCrestSelection = []; // Array of crest options to choose from
         this.pendingItemSelection = []; // Array of item options to choose from
+        this.pendingCrestReplacement = null; // { newCrest: CrestData } - when player needs to choose which crest to replace
 
         // Ready state
         this.isReady = false;
@@ -186,7 +192,9 @@ class PlayerState {
         // Apply crest bonuses (both are team-wide now)
         const crests = [];
         if (this.majorCrest) crests.push(this.majorCrest);
-        if (this.minorCrest) crests.push(this.minorCrest);
+        if (this.minorCrests && this.minorCrests.length > 0) {
+            crests.push(...this.minorCrests);
+        }
         stats = applyCrestBonuses(stats, crests);
 
         return stats;
@@ -288,16 +296,18 @@ class PlayerState {
             bench: serializedBench,
             shop: serializedShop,
             shopLocked: this.shopLocked,
+            freeRerolls: this.freeRerolls,
             isReady: this.isReady,
             isEliminated: this.isEliminated,
             // New fields
             itemInventory: this.itemInventory,
-            minorCrest: this.minorCrest,
+            minorCrests: this.minorCrests,
             majorCrest: this.majorCrest,
             activeTraits: this.serializeActiveTraits(),
             // Pending selections for consumables
             pendingCrestSelection: this.pendingCrestSelection,
-            pendingItemSelection: this.pendingItemSelection
+            pendingItemSelection: this.pendingItemSelection,
+            pendingCrestReplacement: this.pendingCrestReplacement
         };
     }
 
@@ -366,6 +376,8 @@ const DEFAULT_MOVE_SPEED = 1.75;
 const DEFAULT_HIT_POINT = 0.4;
 // Number of ticks a unit can be stuck before re-evaluating target (10 ticks = 0.5s)
 const STUCK_TICKS_BEFORE_RETARGET = 10;
+// Fixed duration for ability animations (seconds) - does not scale with attack speed
+const ABILITY_DURATION = 1.0;
 
 class CombatUnit {
     constructor(unit, playerId, x, y, combatStats) {
@@ -377,7 +389,10 @@ class CombatUnit {
         this.y = y;
         this.stats = combatStats;
         this.currentHealth = combatStats.health;
-        this.currentMana = unit.currentMana || 0;
+        // Mana for abilities - starts at 0, fills from auto attacks
+        this.maxMana = combatStats.maxMana || 40;
+        this.currentMana = 0; // Always start at 0 mana
+        this.manaPerAttack = 10; // Mana gained per auto attack
         // No initial delay - attack immediately when in range, then at constant rate
         this.attackCooldown = 0;
         this.moveCooldown = 0; // Movement cooldown
@@ -387,10 +402,28 @@ class CombatUnit {
         this.stuckTicks = 0; // Track how long unit has been unable to move toward target
         this.previousX = x; // Track previous position to avoid oscillation
         this.previousY = y;
-        // Copy loot type for PvE enemies
+        // Copy loot type(s) for PvE enemies
         this.lootType = unit.lootType || null;
+        this.lootTypes = unit.lootTypes || null; // Array for multiple drops (boss)
         // Copy items for display
         this.items = unit.items || [];
+    }
+
+    // Check if unit has enough mana to cast ability
+    canCastAbility() {
+        return this.currentMana >= this.maxMana;
+    }
+
+    // Gain mana (from auto attacks)
+    gainMana(amount) {
+        this.currentMana = Math.min(this.currentMana + amount, this.maxMana * 2); // Cap at 2x max to prevent overflow
+    }
+
+    // Use ability and reset mana (keeping overfill)
+    useAbility() {
+        const overfill = Math.max(0, this.currentMana - this.maxMana);
+        this.currentMana = overfill;
+        return overfill;
     }
 }
 
@@ -442,6 +475,8 @@ class CombatSimulator {
                 y: u.y,
                 health: u.currentHealth,
                 maxHealth: u.stats.health,
+                mana: u.currentMana,
+                maxMana: u.maxMana,
                 stats: u.stats,
                 items: u.items || []
             }))
@@ -520,12 +555,15 @@ class CombatSimulator {
             remainingUnits = winner === 'player1' ? player1Units.length : player2Units.length;
         }
 
+        // Damage = 1 (base for losing) + number of surviving enemy units
+        const damage = 1 + remainingUnits;
+
         this.events.push({
             type: CombatEventType.COMBAT_END,
             tick: this.tick,
             winner,
             remainingUnits,
-            damage: remainingUnits + 2 // Base damage + remaining units
+            damage
         });
 
         console.log(`[COMBAT] === Combat End at tick ${this.tick} (${(this.tick * this.tickRate).toFixed(2)}s) - Winner: ${winner} ===`);
@@ -533,7 +571,7 @@ class CombatSimulator {
         return {
             winner,
             remainingUnits,
-            damage: remainingUnits + 2,
+            damage,
             events: this.events,
             durationTicks: this.tick
         };
@@ -798,8 +836,17 @@ class CombatSimulator {
                 && (isRanged || unit.target.arrivalTick <= this.tick);
 
             if (canAttack) {
-                this.performAttack(unit, unit.target);
-                unit.attackCooldown = 1 / unit.stats.attackSpeed;
+                // Check if unit can cast ability (mana is full)
+                if (unit.canCastAbility()) {
+                    const abilityDuration = this.performAbility(unit, unit.target);
+                    // Use the longer of ability duration or normal attack cooldown
+                    unit.attackCooldown = Math.max(abilityDuration, 1 / unit.stats.attackSpeed);
+                    // Also prevent movement during ability animation
+                    unit.moveCooldown = abilityDuration;
+                } else {
+                    this.performAttack(unit, unit.target);
+                    unit.attackCooldown = 1 / unit.stats.attackSpeed;
+                }
                 unit.stuckTicks = 0;
             }
         }
@@ -1065,7 +1112,52 @@ class CombatSimulator {
         });
 
         // Generate mana for attacker (on attack start, not on hit)
-        attacker.currentMana = Math.min(attacker.currentMana + 10, attacker.stats.mana);
+        attacker.gainMana(attacker.manaPerAttack);
+    }
+
+    performAbility(attacker, target) {
+        // Use mana (resets to 0, or keeps overfill)
+        attacker.useAbility();
+
+        // Default ability: 3x auto attack damage
+        const baseDamage = attacker.stats.attack * 3;
+        const armorReduction = target.stats.armor / (target.stats.armor + 100);
+        const damage = Math.round(baseDamage * (1 - armorReduction));
+
+        // Abilities use a fixed duration (does not scale with attack speed)
+        const hitDelay = ABILITY_DURATION * DEFAULT_HIT_POINT;
+        const hitTick = this.tick + Math.ceil(hitDelay / this.tickRate);
+
+        const isRanged = attacker.stats.range > 1;
+
+        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} casts ABILITY on ${target.unitId} (${damage} damage, lands at tick ${hitTick}, duration ${ABILITY_DURATION}s)`);
+
+        // Emit ability event (for client to play ability animation)
+        this.events.push({
+            type: CombatEventType.UNIT_ABILITY,
+            tick: this.tick,
+            attackerId: attacker.instanceId,
+            targetId: target.instanceId,
+            damage,
+            hitTick,
+            abilityName: 'default', // Future: unit-specific abilities
+            abilityDuration: ABILITY_DURATION // Fixed duration for client animation
+        });
+
+        // Queue the ability damage to land later (using same pending attacks system)
+        this.pendingAttacks.push({
+            attackerId: attacker.instanceId,
+            attackerUnitId: attacker.unitId,
+            targetId: target.instanceId,
+            targetUnitId: target.unitId,
+            damage,
+            hitTick,
+            isRanged,
+            isAbility: true // Flag for logging
+        });
+
+        // Return the ability duration so caller can set appropriate cooldown
+        return ABILITY_DURATION;
     }
 
     processPendingAttacks() {
@@ -1095,7 +1187,8 @@ class CombatSimulator {
             }
 
             // Apply damage
-            console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s attack LANDS on ${attack.targetUnitId} for ${attack.damage} damage`);
+            const attackType = attack.isAbility ? 'ABILITY' : 'attack';
+            console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s ${attackType} LANDS on ${attack.targetUnitId} for ${attack.damage} damage`);
             target.currentHealth -= attack.damage;
 
             this.events.push({
@@ -1117,7 +1210,19 @@ class CombatSimulator {
                     killerId: attack.attackerId
                 };
                 console.log(`[COMBAT] Tick ${this.tick}: ${target.unitId} DIED (killed by ${attack.attackerUnitId})`);
-                if (target.lootType && target.lootType !== LootType.None) {
+
+                // Support multiple loot drops (for bosses) or single loot drop
+                if (target.lootTypes && target.lootTypes.length > 0) {
+                    // Multiple loot drops - spawn each with slight position offset
+                    deathEvent.lootDrops = target.lootTypes.map((lootType, index) => ({
+                        lootType,
+                        lootPosition: { x: target.x, y: target.y },
+                        lootId: uuidv4(),
+                        offsetIndex: index // Client uses this to offset orb positions
+                    }));
+                    console.log(`[COMBAT] ${target.unitId} drops ${target.lootTypes.length} loot orbs: ${target.lootTypes.join(', ')}`);
+                } else if (target.lootType && target.lootType !== LootType.None) {
+                    // Single loot drop (backwards compatible)
                     deathEvent.lootType = target.lootType;
                     deathEvent.lootPosition = { x: target.x, y: target.y };
                     deathEvent.lootId = uuidv4();
@@ -1332,19 +1437,32 @@ class GameRoom {
     startPlanningPhase() {
         this.phase = 'planning';
 
+        // Stop any existing timer from previous phase
+        this.stopPhaseTimer();
+
         // Use shorter timer for intro PvE round
         const roundType = this.getCurrentRoundType();
         if (roundType === 'pve_intro') {
             this.phaseTimer = GameConstants.Rounds.PVE_INTRO_PLANNING_DURATION;
         } else if (roundType === 'mad_merchant') {
-            // Merchant rounds have longer timer - 45 seconds to allow turn-based picking
-            this.phaseTimer = 45;
+            // Merchant rounds have shorter timer - 30 seconds for turn-based picking
+            this.phaseTimer = 30;
+        } else if (roundType === 'major_crest') {
+            // Major crest rounds have a 15 second timer
+            this.phaseTimer = 15;
         } else {
             this.phaseTimer = GameConstants.Rounds.PLANNING_DURATION;
         }
 
         console.log(`[GameRoom] Starting planning phase for round ${this.round} (${roundType}), timer: ${this.phaseTimer}s`);
         this.phaseStartTime = Date.now();
+
+        // Major crest rounds don't use normal planning phase mechanics
+        if (roundType === 'major_crest') {
+            // Timer is handled in server.js startMajorCrestRound()
+            // Don't give income, refresh shop, or start planning timer
+            return;
+        }
 
         // Check for pending merges (units bought during combat that can now merge with board units)
         for (const player of this.getActivePlayers()) {
@@ -1381,7 +1499,8 @@ class GameRoom {
 
         if (roundType === 'pve_intro' || roundType === 'pve_loot' || roundType === 'pve_boss') {
             // PvE rounds: Generate enemies and run combat for each player
-            console.log(`[GameRoom] PvE round - generating enemies and running combat`);
+            const activePlayers = this.getActivePlayers();
+            console.log(`[GameRoom] PvE round (${roundType}) - ${activePlayers.length} active players: ${activePlayers.map(p => `${p.name}(${p.health}hp)`).join(', ')}`);
             this.combatResults = [];
             this.combatEvents.clear();
             this.matchups = [];
@@ -1391,7 +1510,8 @@ class GameRoom {
             const pveState = this.createPvEPlayerState(pveBoard);
 
             // Run combat for each player against the PvE enemies
-            for (const player of this.getActivePlayers()) {
+            for (const player of activePlayers) {
+                console.log(`[GameRoom] Processing PvE combat for ${player.name} (clientId: ${player.clientId})`);
                 player.calculateTraits();
 
                 // Count units on each board
@@ -1438,16 +1558,31 @@ class GameRoom {
                     myTeam: 'player1',
                     opponentTeam: 'player2'
                 });
+                console.log(`[GameRoom] Stored ${result.events.length} combat events for ${player.name} (clientId: ${player.clientId})`);
 
                 // Extract loot drops from combat events and add to player's pending loot
                 for (const event of result.events) {
-                    if (event.type === CombatEventType.UNIT_DEATH && event.lootType && event.lootId) {
-                        player.pendingLoot.push({
-                            lootId: event.lootId,
-                            lootType: event.lootType,
-                            position: event.lootPosition || { x: 3, y: 2 }
-                        });
-                        console.log(`[GameRoom] Loot drop for ${player.name}: ${event.lootType} (id: ${event.lootId}) at position (${event.lootPosition?.x}, ${event.lootPosition?.y})`);
+                    if (event.type === CombatEventType.UNIT_DEATH) {
+                        // Handle single loot drop (legacy format)
+                        if (event.lootType && event.lootId) {
+                            player.pendingLoot.push({
+                                lootId: event.lootId,
+                                lootType: event.lootType,
+                                position: event.lootPosition || { x: 3, y: 2 }
+                            });
+                            console.log(`[GameRoom] Loot drop for ${player.name}: ${event.lootType} (id: ${event.lootId})`);
+                        }
+                        // Handle multiple loot drops (boss format)
+                        if (event.lootDrops && event.lootDrops.length > 0) {
+                            for (const drop of event.lootDrops) {
+                                player.pendingLoot.push({
+                                    lootId: drop.lootId,
+                                    lootType: drop.lootType,
+                                    position: drop.lootPosition || { x: 3, y: 2 }
+                                });
+                                console.log(`[GameRoom] Loot drop for ${player.name}: ${drop.lootType} (id: ${drop.lootId})`);
+                            }
+                        }
                     }
                 }
 
@@ -1467,6 +1602,8 @@ class GameRoom {
 
                 console.log(`[GameRoom] ${player.name} vs PvE: ${playerWon ? 'WIN' : 'LOSS'}, damage=${result.damage}`);
             }
+
+            console.log(`[GameRoom] PvE combat complete. combatResults: ${this.combatResults.length}, combatEvents stored for: ${[...this.combatEvents.keys()].join(', ')}`);
 
             // Set combat timer based on longest combat
             let maxDuration = 0;
@@ -1742,39 +1879,70 @@ class GameRoom {
                 console.log(`[GameRoom] Generated PvE Intro: Stingray at (2,2) with CrestToken, Cactus at (4,2) with ItemAnvil`);
             }
         } else if (roundType === 'pve_loot') {
-            // Loot wave: 3-4 enemies
-            for (let i = 0; i < 4; i++) {
-                const template = oneCostUnits[Math.floor(Math.random() * oneCostUnits.length)];
-                const unit = new UnitInstance(template, 1);
-                unit.currentStats.health = 200;
-                unit.currentStats.attack = 30;
-                unit.currentHealth = 200;
-                unit.name = 'Critter';
-                // First enemy drops item anvil
-                if (i === 0) {
-                    unit.lootType = LootType.ItemAnvil;
+            // Loot wave: 2 cactus + 1 stingray with specific loot drops
+            const stingrayTemplate = UnitTemplates['stingray'];
+            const cactusTemplate = UnitTemplates['cactus'];
+
+            if (!stingrayTemplate || !cactusTemplate) {
+                console.log('[GameRoom] PvE units not found for loot round, using fallback');
+                // Fallback to random units
+                for (let i = 0; i < 3; i++) {
+                    const template = oneCostUnits[Math.floor(Math.random() * oneCostUnits.length)];
+                    const unit = new UnitInstance(template, 1);
+                    unit.currentStats.health = 300;
+                    unit.currentStats.attack = 40;
+                    unit.currentHealth = 300;
+                    if (i === 0) unit.lootType = LootType.ItemAnvil;
+                    else if (i === 1) unit.lootType = LootType.CrestToken;
+                    else unit.lootType = LootType.MixedLoot;
+                    board[1 + i * 2][2] = unit;
                 }
+            } else {
+                // Cactus 1 - drops Item Anvil
+                const cactus1 = new UnitInstance(cactusTemplate, 1);
+                cactus1.name = 'Cactus';
+                cactus1.currentStats.health = 300;
+                cactus1.currentStats.attack = 40;
+                cactus1.currentHealth = 300;
+                cactus1.lootType = LootType.ItemAnvil;
+                board[1][2] = cactus1;
 
-                const x = 1 + i;
-                board[x][2] = unit;
+                // Cactus 2 - drops Crest Token
+                const cactus2 = new UnitInstance(cactusTemplate, 1);
+                cactus2.name = 'Cactus';
+                cactus2.currentStats.health = 300;
+                cactus2.currentStats.attack = 40;
+                cactus2.currentHealth = 300;
+                cactus2.lootType = LootType.CrestToken;
+                board[3][2] = cactus2;
+
+                // Stingray - drops Loot Choice (4 gold or random 4-cost unit)
+                const stingray = new UnitInstance(stingrayTemplate, 1);
+                stingray.name = 'Stingray';
+                stingray.currentStats.health = 400;
+                stingray.currentStats.attack = 50;
+                stingray.currentHealth = 400;
+                stingray.lootType = LootType.MixedLoot;
+                board[2][3] = stingray;
+
+                console.log(`[GameRoom] Generated PvE Loot: 2 Cactus (ItemAnvil, CrestToken) + 1 Stingray (MixedLoot)`);
             }
-            console.log(`[GameRoom] Generated PvE Loot: 4 critters (first drops ItemAnvil)`);
         } else if (roundType === 'pve_boss') {
-            // Boss wave: 1 strong boss + 2 minions
-            const bossTemplate = oneCostUnits[Math.floor(Math.random() * oneCostUnits.length)];
-            const boss = new UnitInstance(bossTemplate, 3); // 3-star boss
-            boss.name = 'Boss Critter';
-            boss.lootType = LootType.ItemAnvil; // Boss drops item anvil
-            board[3][3] = boss;
+            // Boss wave: Single boss that drops 3 loot orbs
+            const stingrayTemplate = UnitTemplates['stingray'];
+            const bossTemplate = stingrayTemplate || oneCostUnits[Math.floor(Math.random() * oneCostUnits.length)];
 
-            // Add minions
-            for (let i = 0; i < 2; i++) {
-                const minionTemplate = oneCostUnits[Math.floor(Math.random() * oneCostUnits.length)];
-                const minion = new UnitInstance(minionTemplate, 2);
-                minion.name = 'Critter';
-                board[2 + i * 2][2] = minion;
-            }
-            console.log(`[GameRoom] Generated PvE Boss: 1 boss (drops ItemAnvil) + 2 minions`);
+            const boss = new UnitInstance(bossTemplate, 2); // 2-star boss (not too hard)
+            boss.name = 'Boss';
+            // Buff stats slightly for a boss feel
+            boss.currentStats.health = 600;
+            boss.currentStats.attack = 60;
+            boss.currentHealth = 600;
+            // Boss drops 3 loot orbs: ItemAnvil, CrestToken, and LargeMixedLoot
+            boss.lootTypes = [LootType.ItemAnvil, LootType.CrestToken, LootType.LargeMixedLoot];
+            board[3][2] = boss;
+
+            console.log(`[GameRoom] Generated PvE Boss: 1 boss (drops ItemAnvil, CrestToken, LargeMixedLoot)`);
         }
 
         return board;
@@ -1804,19 +1972,15 @@ class GameRoom {
     advanceRound() {
         this.round++;
 
-        // Check for game end
+        // Check for game end - only when 1 or fewer players remain
         const active = this.getActivePlayers();
         if (active.length <= 1) {
             this.endGame(active[0]?.clientId);
             return;
         }
 
-        if (this.round > GameConstants.Rounds.MAX_ROUNDS) {
-            // Highest health wins
-            active.sort((a, b) => b.health - a.health);
-            this.endGame(active[0].clientId);
-            return;
-        }
+        // Game continues with PvP rounds beyond the scheduled rounds until someone wins
+        // (getCurrentRoundType() returns 'pvp' for rounds beyond the schedule)
 
         this.startPlanningPhase();
     }
@@ -1831,6 +1995,12 @@ class GameRoom {
         this.stopPhaseTimer();
 
         this.timerInterval = setInterval(() => {
+            // Don't update timer for major_crest rounds (timer managed in server.js)
+            const roundType = this.getCurrentRoundType();
+            if (roundType === 'major_crest') {
+                return;
+            }
+
             const elapsed = (Date.now() - this.phaseStartTime) / 1000;
             this.phaseTimer = Math.max(0, this.getPhaseMaxTime() - elapsed);
 
@@ -1854,6 +2024,9 @@ class GameRoom {
                 if (roundType === 'pve_intro') {
                     return GameConstants.Rounds.PVE_INTRO_PLANNING_DURATION;
                 }
+                if (roundType === 'major_crest') {
+                    return 20; // 20 second timer for major crest selection
+                }
                 return GameConstants.Rounds.PLANNING_DURATION;
             case 'combat': return GameConstants.Rounds.COMBAT_MAX_DURATION;
             case 'results': return GameConstants.Rounds.RESULTS_DURATION;
@@ -1863,8 +2036,16 @@ class GameRoom {
 
     onPhaseTimerEnd() {
         console.log(`[GameRoom] Phase timer ended for phase: ${this.phase}`);
+        const roundType = this.getCurrentRoundType();
+
         switch (this.phase) {
             case 'planning':
+                // Mad Merchant rounds don't advance on timer - they wait for all picks
+                if (roundType === 'mad_merchant') {
+                    console.log(`[GameRoom] Mad Merchant round - ignoring planning timer, waiting for all picks`);
+                    return;
+                }
+
                 // Call the callback to let server.js handle combat start
                 if (this.onCombatStartCallback) {
                     this.onCombatStartCallback(this);
@@ -1954,6 +2135,8 @@ class GameRoom {
                 return this.selectCrestChoice(player, action.choiceIndex);
             case 'selectItemChoice':
                 return this.selectItemChoice(player, action.choiceIndex);
+            case 'replaceCrest':
+                return this.replaceCrest(player, action.replaceIndex);
             case 'merchantPick':
                 // Merchant pick is allowed during the merchant round
                 if (this.getCurrentRoundType() !== 'mad_merchant') {
@@ -1981,6 +2164,10 @@ class GameRoom {
             case 'selectMinorCrest':
                 return this.selectMinorCrest(player, action.crestId, action.instanceId);
             case 'selectMajorCrest':
+                // Use handleMajorCrestSelect during major_crest rounds for tracking
+                if (this.getCurrentRoundType() === 'major_crest' && this.majorCrestState?.isActive) {
+                    return this.handleMajorCrestSelect(player.clientId, action.crestId);
+                }
                 return this.selectMajorCrest(player, action.crestId);
             default:
                 return { success: false, error: 'Unknown action' };
@@ -2067,6 +2254,23 @@ class GameRoom {
             return { success: false, error: 'Unit not found' };
         }
 
+        // Unequip items and return to inventory
+        const returnedItems = [];
+        const droppedItems = [];
+        if (unit.items && unit.items.length > 0) {
+            for (const item of unit.items) {
+                if (player.itemInventory.length < 10) {
+                    player.itemInventory.push(item);
+                    returnedItems.push(item);
+                    console.log(`[GameRoom] ${player.name} recovered ${item.name} from sold unit`);
+                } else {
+                    // Inventory full - item is lost
+                    droppedItems.push(item);
+                    console.log(`[GameRoom] ${player.name} lost ${item.name} (inventory full)`);
+                }
+            }
+        }
+
         // Calculate sell value
         const sellValue = unit.cost * Math.pow(3, unit.starLevel - 1);
         player.gold += sellValue;
@@ -2082,7 +2286,12 @@ class GameRoom {
         const unitsToReturn = Math.pow(3, unit.starLevel - 1);
         this.unitPool.returnUnit(unit.unitId, unitsToReturn);
 
-        return { success: true, goldGained: sellValue };
+        return {
+            success: true,
+            goldGained: sellValue,
+            returnedItems: returnedItems,
+            droppedItems: droppedItems
+        };
     }
 
     placeUnit(player, instanceId, x, y) {
@@ -2226,6 +2435,16 @@ class GameRoom {
     }
 
     reroll(player) {
+        // Use free rerolls first
+        if (player.freeRerolls > 0) {
+            player.freeRerolls--;
+            player.shopLocked = false;
+            this.refreshShop(player);
+            console.log(`[GameRoom] ${player.name} used free reroll (${player.freeRerolls} remaining)`);
+            return { success: true, shop: player.shop, freeRerolls: player.freeRerolls, usedFreeReroll: true };
+        }
+
+        // Otherwise spend gold
         if (player.gold < GameConstants.Economy.REROLL_COST) {
             return { success: false, error: 'Not enough gold' };
         }
@@ -2234,7 +2453,16 @@ class GameRoom {
         player.shopLocked = false;
         this.refreshShop(player);
 
-        return { success: true, shop: player.shop };
+        return { success: true, shop: player.shop, freeRerolls: player.freeRerolls };
+    }
+
+    /**
+     * Grant free rerolls to a player (from rewards like mixed loot or merchant)
+     */
+    grantFreeRerolls(player, count) {
+        player.freeRerolls += count;
+        console.log(`[GameRoom] ${player.name} gained ${count} free rerolls (total: ${player.freeRerolls})`);
+        return player.freeRerolls;
     }
 
     buyXP(player) {
@@ -2293,6 +2521,149 @@ class GameRoom {
                 isConsumable: true,
                 effect: 'consumable_item_anvil'
             };
+        } else if (loot.lootType === LootType.MixedLoot) {
+            // Random loot orb - 33% gold, 33% unit, 33% free rerolls
+            const roll = Math.random();
+
+            if (roll < 0.33) {
+                // Give 4 gold
+                player.gold += 4;
+                player.pendingLoot.splice(lootIndex, 1);
+                console.log(`[GameRoom] ${player.name} collected random loot: 4 gold`);
+                return {
+                    success: true,
+                    lootId,
+                    rewardType: 'gold',
+                    goldAmount: 4
+                };
+            } else if (roll < 0.66) {
+                // Give a random 4-cost unit
+                const fourCostUnits = getUnitsByCost(4);
+                if (fourCostUnits.length === 0) {
+                    // Fallback to gold if no 4-cost units available
+                    player.gold += 4;
+                    player.pendingLoot.splice(lootIndex, 1);
+                    console.log(`[GameRoom] ${player.name} collected random loot: 4 gold (no 4-cost units available)`);
+                    return {
+                        success: true,
+                        lootId,
+                        rewardType: 'gold',
+                        goldAmount: 4
+                    };
+                }
+
+                const randomUnit = fourCostUnits[Math.floor(Math.random() * fourCostUnits.length)];
+
+                // Find empty bench slot
+                const emptySlot = player.bench.findIndex(u => u === null);
+                if (emptySlot === -1) {
+                    // Bench full - give gold instead
+                    player.gold += 4;
+                    player.pendingLoot.splice(lootIndex, 1);
+                    console.log(`[GameRoom] ${player.name} collected random loot: 4 gold (bench full)`);
+                    return {
+                        success: true,
+                        lootId,
+                        rewardType: 'gold',
+                        goldAmount: 4
+                    };
+                }
+
+                // Create unit and add to bench
+                const newUnit = new UnitInstance(randomUnit, 1);
+                player.bench[emptySlot] = newUnit;
+
+                // Check for merges
+                this.checkAllMerges(player);
+
+                player.pendingLoot.splice(lootIndex, 1);
+                console.log(`[GameRoom] ${player.name} collected random loot: ${randomUnit.name} (4-cost unit)`);
+                return {
+                    success: true,
+                    lootId,
+                    rewardType: 'unit',
+                    unitId: randomUnit.unitId,
+                    unitName: randomUnit.name,
+                    benchSlot: emptySlot
+                };
+            } else {
+                // Give 2 free rerolls
+                this.grantFreeRerolls(player, 2);
+                player.pendingLoot.splice(lootIndex, 1);
+                console.log(`[GameRoom] ${player.name} collected random loot: 2 free rerolls`);
+                return {
+                    success: true,
+                    lootId,
+                    rewardType: 'rerolls',
+                    rerollCount: 2
+                };
+            }
+        } else if (loot.lootType === LootType.LargeMixedLoot) {
+            // Boss loot orb - 50/50 chance of more gold (6) or a 5-cost unit
+            const isGold = Math.random() < 0.5;
+
+            if (isGold) {
+                // Give 6 gold (more than regular mixed loot)
+                player.gold += 6;
+                player.pendingLoot.splice(lootIndex, 1);
+                console.log(`[GameRoom] ${player.name} collected boss loot: 6 gold`);
+                return {
+                    success: true,
+                    lootId,
+                    rewardType: 'gold',
+                    goldAmount: 6
+                };
+            } else {
+                // Give a random 5-cost unit (better than regular mixed loot)
+                const fiveCostUnits = getUnitsByCost(5);
+                if (fiveCostUnits.length === 0) {
+                    // Fallback to gold if no 5-cost units available
+                    player.gold += 6;
+                    player.pendingLoot.splice(lootIndex, 1);
+                    console.log(`[GameRoom] ${player.name} collected boss loot: 6 gold (no 5-cost units available)`);
+                    return {
+                        success: true,
+                        lootId,
+                        rewardType: 'gold',
+                        goldAmount: 6
+                    };
+                }
+
+                const randomUnit = fiveCostUnits[Math.floor(Math.random() * fiveCostUnits.length)];
+
+                // Find empty bench slot
+                const emptySlot = player.bench.findIndex(u => u === null);
+                if (emptySlot === -1) {
+                    // Bench full - give gold instead
+                    player.gold += 6;
+                    player.pendingLoot.splice(lootIndex, 1);
+                    console.log(`[GameRoom] ${player.name} collected boss loot: 6 gold (bench full)`);
+                    return {
+                        success: true,
+                        lootId,
+                        rewardType: 'gold',
+                        goldAmount: 6
+                    };
+                }
+
+                // Create unit and add to bench
+                const newUnit = new UnitInstance(randomUnit, 1);
+                player.bench[emptySlot] = newUnit;
+
+                // Check for merges
+                this.checkAllMerges(player);
+
+                player.pendingLoot.splice(lootIndex, 1);
+                console.log(`[GameRoom] ${player.name} collected boss loot: ${randomUnit.name} (5-cost unit)`);
+                return {
+                    success: true,
+                    lootId,
+                    rewardType: 'unit',
+                    unitId: randomUnit.unitId,
+                    unitName: randomUnit.name,
+                    benchSlot: emptySlot
+                };
+            }
         }
 
         if (!item) {
@@ -2587,8 +2958,13 @@ class GameRoom {
             return { success: false, error: 'Not a minor crest' };
         }
 
-        // Set player's minor crest (team-wide bonus)
-        player.minorCrest = {
+        // Check if player already has max minor crests (3)
+        if (player.minorCrests.length >= 3) {
+            return { success: false, error: 'Already have maximum minor crests (3)' };
+        }
+
+        // Add to player's minor crests (team-wide bonus)
+        const newCrest = {
             crestId: crestId,
             name: crestTemplate.name,
             description: crestTemplate.description,
@@ -2597,8 +2973,9 @@ class GameRoom {
             stats: crestTemplate.stats,
             effect: crestTemplate.effect
         };
+        player.minorCrests.push(newCrest);
 
-        return { success: true, crest: player.minorCrest };
+        return { success: true, crest: newCrest };
     }
 
     selectMajorCrest(player, crestId) {
@@ -2744,20 +3121,101 @@ class GameRoom {
 
         const selectedCrest = player.pendingCrestSelection[choiceIndex];
 
-        // Set as player's minor crest (team-wide stat bonuses)
-        player.minorCrest = {
-            crestId: selectedCrest.crestId,
-            name: selectedCrest.name,
-            description: selectedCrest.description,
-            type: selectedCrest.type,
-            teamBonus: selectedCrest.teamBonus
-        };
+        // Use addOrUpgradeCrest to handle ranking
+        const result = this.addOrUpgradeCrest(player, selectedCrest);
 
         // Clear pending selection
         player.pendingCrestSelection = [];
 
-        console.log(`[GameRoom] Player selected crest: ${selectedCrest.name}`);
-        return { success: true, crest: player.minorCrest };
+        if (result.success) {
+            console.log(`[GameRoom] Player ${result.upgraded ? 'upgraded' : 'selected'} crest: ${result.crest.name} (rank ${result.crest.rank})`);
+            return { success: true, crest: result.crest, upgraded: result.upgraded };
+        }
+
+        if (result.needsReplacement) {
+            // Store the pending crest for replacement selection
+            player.pendingCrestReplacement = { newCrest: result.newCrest };
+            console.log(`[GameRoom] Player needs to choose which crest to replace for ${result.newCrest.name}`);
+            return { success: true, needsReplacement: true, newCrest: result.newCrest };
+        }
+
+        return result;
+    }
+
+    /**
+     * Add a new minor crest or upgrade an existing one
+     * @param {PlayerState} player - The player
+     * @param {Object} crestTemplate - The crest template to add/upgrade
+     * @param {boolean} allowReplacement - If true, returns needsReplacement instead of failing at max
+     * @returns {Object} Result with success, crest, upgraded flag, or needsReplacement
+     */
+    addOrUpgradeCrest(player, crestTemplate, allowReplacement = true) {
+        // Check for existing crest with same ID
+        const existing = player.minorCrests.find(c => c.crestId === crestTemplate.crestId);
+
+        if (existing) {
+            if (existing.rank >= 3) {
+                return { success: false, error: 'Crest already at max rank' };
+            }
+            existing.rank++;
+            console.log(`[GameRoom] ${player.name} upgraded ${existing.name} to rank ${existing.rank}`);
+            return { success: true, upgraded: true, crest: existing };
+        }
+
+        // Check slot limit (max 3 unique crests)
+        if (player.minorCrests.length >= 3) {
+            if (allowReplacement) {
+                // Return special status indicating player needs to choose which crest to replace
+                const newCrest = {
+                    crestId: crestTemplate.crestId,
+                    name: crestTemplate.name,
+                    description: crestTemplate.description,
+                    type: crestTemplate.type || 'minor',
+                    rank: 1,
+                    teamBonus: { ...crestTemplate.teamBonus }
+                };
+                return { success: false, needsReplacement: true, newCrest: newCrest };
+            }
+            return { success: false, error: 'Already have maximum minor crests (3)' };
+        }
+
+        // Add new crest at rank 1
+        const newCrest = {
+            crestId: crestTemplate.crestId,
+            name: crestTemplate.name,
+            description: crestTemplate.description,
+            type: crestTemplate.type || 'minor',
+            rank: 1,
+            teamBonus: { ...crestTemplate.teamBonus }
+        };
+        player.minorCrests.push(newCrest);
+        return { success: true, upgraded: false, crest: newCrest };
+    }
+
+    /**
+     * Replace an existing minor crest with a new one (when at max capacity)
+     * @param {PlayerState} player - The player
+     * @param {number} replaceIndex - Index of the crest to replace (0-2)
+     * @returns {Object} Result with success and the new crest
+     */
+    replaceCrest(player, replaceIndex) {
+        if (!player.pendingCrestReplacement) {
+            return { success: false, error: 'No pending crest replacement' };
+        }
+
+        if (replaceIndex < 0 || replaceIndex >= player.minorCrests.length) {
+            return { success: false, error: 'Invalid crest index' };
+        }
+
+        const oldCrest = player.minorCrests[replaceIndex];
+        const newCrest = player.pendingCrestReplacement.newCrest;
+
+        // Replace the crest
+        player.minorCrests[replaceIndex] = newCrest;
+        player.pendingCrestReplacement = null;
+
+        console.log(`[GameRoom] ${player.name} replaced ${oldCrest.name} with ${newCrest.name}`);
+        return { success: true, oldCrest: oldCrest, newCrest: newCrest };
     }
 
     selectItemChoice(player, choiceIndex) {
@@ -2796,76 +3254,159 @@ class GameRoom {
 
     /**
      * Generate merchant options for the Mad Merchant round
-     * Creates 12 options: 9 random items, 2 crest tokens, 1 gold pile
+     * Creates 6 pairs (4 players pick 1 each, 2 pairs left unpicked)
+     *
+     * Pair Types:
+     * - unit_item: Random unit (2-4 cost) + Random item
+     * - crest_rerolls: Specific minor crest + 3 free rerolls
+     * - gold_item: 5-8 gold + Random item
+     * - double_item: Random item + Random item
+     * - unit_crest: Random unit (2-4 cost) + Specific minor crest
+     * - item_crest: Random item + Specific minor crest
      */
     generateMerchantOptions() {
         const options = [];
 
-        // Generate 9 random items
-        const availableItems = Object.values(ItemTemplates).filter(i => !i.isComponent);
-        const shuffledItems = [...availableItems].sort(() => Math.random() - 0.5);
+        // Define 6 pair types (shuffle to randomize)
+        const pairTypes = ['unit_item', 'crest_rerolls', 'gold_item', 'double_item', 'unit_crest', 'item_crest'];
+        const shuffledTypes = [...pairTypes].sort(() => Math.random() - 0.5);
 
-        for (let i = 0; i < 9 && i < shuffledItems.length; i++) {
-            const item = shuffledItems[i];
-            options.push({
-                optionId: `item_${i}`,
-                optionType: 'item',
-                itemId: item.itemId,
-                goldAmount: 0,
-                name: item.name,
-                description: item.description || '',
-                rarity: item.rarity || 'common',
-                stats: item.stats || {},
-                isPicked: false,
-                pickedBy: null,
-                pickedByName: null
-            });
+        for (let i = 0; i < 6; i++) {
+            const pairType = shuffledTypes[i];
+            const pair = this.generateMerchantPair(pairType, i);
+            options.push(pair);
         }
 
-        // Add 2 crest tokens
-        options.push({
-            optionId: 'crest_1',
-            optionType: 'crest_token',
-            itemId: 'crest_token',
-            goldAmount: 0,
-            name: 'Crest Token',
-            description: 'Use to select a Minor Crest for your team',
-            rarity: 'rare',
+        return options;
+    }
+
+    /**
+     * Generate a single merchant pair with two rewards
+     */
+    generateMerchantPair(pairType, index) {
+        const pair = {
+            optionId: `pair_${index}`,
+            pairType: pairType,
+            rewardA: this.generateMerchantReward(pairType, 'A'),
+            rewardB: this.generateMerchantReward(pairType, 'B'),
             isPicked: false,
             pickedBy: null,
             pickedByName: null
-        });
+        };
+        return pair;
+    }
 
-        options.push({
-            optionId: 'crest_2',
-            optionType: 'crest_token',
-            itemId: 'crest_token',
-            goldAmount: 0,
-            name: 'Crest Token',
-            description: 'Use to select a Minor Crest for your team',
-            rarity: 'rare',
-            isPicked: false,
-            pickedBy: null,
-            pickedByName: null
-        });
+    /**
+     * Generate a single reward based on pair type and slot (A or B)
+     */
+    generateMerchantReward(pairType, slot) {
+        switch (pairType) {
+            case 'unit_item':
+                if (slot === 'A') {
+                    return this.generateUnitReward(2, 4); // 2-4 cost unit
+                } else {
+                    return this.generateItemReward();
+                }
 
-        // Add 1 gold pile (random 3-8 gold)
-        const goldAmount = Math.floor(Math.random() * 6) + 3; // 3-8 gold
-        options.push({
-            optionId: 'gold_1',
-            optionType: 'gold',
-            itemId: null,
-            goldAmount: goldAmount,
-            name: `${goldAmount} Gold`,
-            description: `Gain ${goldAmount} gold immediately`,
-            rarity: 'common',
-            isPicked: false,
-            pickedBy: null,
-            pickedByName: null
-        });
+            case 'crest_rerolls':
+                if (slot === 'A') {
+                    return this.generateCrestReward();
+                } else {
+                    return { type: 'rerolls', rerollCount: 3, name: '3 Free Rerolls', description: 'Gain 3 free shop rerolls' };
+                }
 
-        // Shuffle all options
-        return options.sort(() => Math.random() - 0.5);
+            case 'gold_item':
+                if (slot === 'A') {
+                    const goldAmount = Math.floor(Math.random() * 4) + 5; // 5-8 gold
+                    return { type: 'gold', goldAmount, name: `${goldAmount} Gold`, description: `Gain ${goldAmount} gold` };
+                } else {
+                    return this.generateItemReward();
+                }
+
+            case 'double_item':
+                return this.generateItemReward(); // Both A and B are items
+
+            case 'unit_crest':
+                if (slot === 'A') {
+                    return this.generateUnitReward(2, 4); // 2-4 cost unit
+                } else {
+                    return this.generateCrestReward();
+                }
+
+            case 'item_crest':
+                if (slot === 'A') {
+                    return this.generateItemReward();
+                } else {
+                    return this.generateCrestReward();
+                }
+
+            default:
+                return this.generateItemReward();
+        }
+    }
+
+    /**
+     * Generate a unit reward for merchant
+     */
+    generateUnitReward(minCost, maxCost) {
+        // Get units in cost range
+        const eligibleUnits = [];
+        for (let cost = minCost; cost <= maxCost; cost++) {
+            eligibleUnits.push(...getUnitsByCost(cost));
+        }
+
+        if (eligibleUnits.length === 0) {
+            // Fallback to gold if no units available
+            return { type: 'gold', goldAmount: 4, name: '4 Gold', description: 'Gain 4 gold' };
+        }
+
+        const unit = eligibleUnits[Math.floor(Math.random() * eligibleUnits.length)];
+        return {
+            type: 'unit',
+            unitId: unit.unitId,
+            name: unit.name,
+            cost: unit.cost,
+            description: `${unit.cost}-cost ${unit.traits.join('/')} unit`
+        };
+    }
+
+    /**
+     * Generate an item reward for merchant
+     */
+    generateItemReward() {
+        const availableItems = Object.values(ItemTemplates).filter(i => !i.isComponent);
+        if (availableItems.length === 0) {
+            return { type: 'gold', goldAmount: 3, name: '3 Gold', description: 'Gain 3 gold' };
+        }
+
+        const item = availableItems[Math.floor(Math.random() * availableItems.length)];
+        return {
+            type: 'item',
+            itemId: item.itemId,
+            name: item.name,
+            description: item.description || '',
+            rarity: item.rarity || 'common',
+            stats: item.stats || {}
+        };
+    }
+
+    /**
+     * Generate a crest reward for merchant
+     */
+    generateCrestReward() {
+        const minorCrests = Object.values(CrestTemplates).filter(c => c.type === 'minor');
+        if (minorCrests.length === 0) {
+            return { type: 'rerolls', rerollCount: 2, name: '2 Free Rerolls', description: 'Gain 2 free shop rerolls' };
+        }
+
+        const crest = minorCrests[Math.floor(Math.random() * minorCrests.length)];
+        return {
+            type: 'crest',
+            crestId: crest.crestId,
+            name: crest.name,
+            description: crest.description,
+            teamBonus: crest.teamBonus
+        };
     }
 
     /**
@@ -2919,7 +3460,7 @@ class GameRoom {
     }
 
     /**
-     * Handle a player picking a merchant option
+     * Handle a player picking a merchant pair
      */
     handleMerchantPick(clientId, optionId) {
         if (!this.merchantState || !this.merchantState.isActive) {
@@ -2931,7 +3472,7 @@ class GameRoom {
             return { success: false, error: 'Not your turn to pick' };
         }
 
-        // Find the option
+        // Find the option (pair)
         const option = this.merchantState.options.find(o => o.optionId === optionId);
         if (!option) {
             return { success: false, error: 'Invalid option' };
@@ -2951,39 +3492,18 @@ class GameRoom {
         option.pickedBy = clientId;
         option.pickedByName = player.name;
 
-        // Apply the reward
-        if (option.optionType === 'item') {
-            // Add item to player's inventory
-            const itemTemplate = ItemTemplates[option.itemId];
-            if (itemTemplate && player.itemInventory.length < 10) {
-                player.itemInventory.push({
-                    itemId: itemTemplate.itemId,
-                    name: itemTemplate.name,
-                    description: itemTemplate.description,
-                    rarity: itemTemplate.rarity || 'common',
-                    stats: itemTemplate.stats,
-                    isCombined: !itemTemplate.isComponent
-                });
-                console.log(`[GameRoom] ${player.name} picked item: ${itemTemplate.name}`);
-            }
-        } else if (option.optionType === 'crest_token') {
-            // Add crest token to player's inventory
-            if (player.itemInventory.length < 10) {
-                player.itemInventory.push({
-                    itemId: 'crest_token',
-                    itemName: 'Crest Token',
-                    description: 'Use to select a Minor Crest for your team.',
-                    rarity: 'rare',
-                    isConsumable: true,
-                    effect: 'consumable_crest_token'
-                });
-                console.log(`[GameRoom] ${player.name} picked crest token`);
-            }
-        } else if (option.optionType === 'gold') {
-            // Add gold directly
-            player.gold += option.goldAmount;
-            console.log(`[GameRoom] ${player.name} picked ${option.goldAmount} gold`);
+        // Apply both rewards from the pair
+        const rewardsApplied = [];
+        if (option.rewardA) {
+            const resultA = this.applyMerchantReward(player, option.rewardA);
+            rewardsApplied.push({ reward: option.rewardA, result: resultA });
         }
+        if (option.rewardB) {
+            const resultB = this.applyMerchantReward(player, option.rewardB);
+            rewardsApplied.push({ reward: option.rewardB, result: resultB });
+        }
+
+        console.log(`[GameRoom] ${player.name} picked pair ${option.pairType}: ${option.rewardA?.name || 'N/A'} + ${option.rewardB?.name || 'N/A'}`);
 
         // Return success with pick info for broadcasting
         return {
@@ -2991,8 +3511,107 @@ class GameRoom {
             optionId: optionId,
             pickedById: clientId,
             pickedByName: player.name,
-            optionType: option.optionType
+            pairType: option.pairType,
+            rewardsApplied: rewardsApplied
         };
+    }
+
+    /**
+     * Apply a single merchant reward to a player
+     */
+    applyMerchantReward(player, reward) {
+        if (!reward) return { success: false };
+
+        switch (reward.type) {
+            case 'item':
+                // Add item to player's inventory
+                const itemTemplate = ItemTemplates[reward.itemId];
+                if (itemTemplate && player.itemInventory.length < 10) {
+                    player.itemInventory.push({
+                        itemId: itemTemplate.itemId,
+                        name: itemTemplate.name,
+                        description: itemTemplate.description,
+                        rarity: itemTemplate.rarity || 'common',
+                        stats: itemTemplate.stats,
+                        isCombined: !itemTemplate.isComponent
+                    });
+                    console.log(`[GameRoom] ${player.name} received item: ${itemTemplate.name}`);
+                    return { success: true, type: 'item', name: itemTemplate.name };
+                }
+                return { success: false, error: 'Inventory full' };
+
+            case 'unit':
+                // Add unit to player's bench
+                const unitTemplate = UnitTemplates[reward.unitId];
+                if (!unitTemplate) {
+                    // Fallback: try to find by iterating
+                    for (const [id, template] of Object.entries(UnitTemplates)) {
+                        if (id === reward.unitId || template.unitId === reward.unitId) {
+                            return this.applyUnitReward(player, template);
+                        }
+                    }
+                    return { success: false, error: 'Unit not found' };
+                }
+                return this.applyUnitReward(player, unitTemplate);
+
+            case 'gold':
+                player.gold += reward.goldAmount;
+                console.log(`[GameRoom] ${player.name} received ${reward.goldAmount} gold`);
+                return { success: true, type: 'gold', amount: reward.goldAmount };
+
+            case 'rerolls':
+                this.grantFreeRerolls(player, reward.rerollCount);
+                return { success: true, type: 'rerolls', count: reward.rerollCount };
+
+            case 'crest':
+                // Apply crest directly (uses addOrUpgradeCrest for ranking)
+                const crestTemplate = {
+                    crestId: reward.crestId,
+                    name: reward.name,
+                    description: reward.description,
+                    type: 'minor',
+                    teamBonus: reward.teamBonus
+                };
+                const crestResult = this.addOrUpgradeCrest(player, crestTemplate);
+                if (crestResult.success) {
+                    console.log(`[GameRoom] ${player.name} received crest: ${reward.name} (rank ${crestResult.crest.rank})`);
+                    return { success: true, type: 'crest', crest: crestResult.crest, upgraded: crestResult.upgraded };
+                }
+                if (crestResult.needsReplacement) {
+                    // Store the pending crest for replacement selection
+                    player.pendingCrestReplacement = { newCrest: crestResult.newCrest };
+                    console.log(`[GameRoom] ${player.name} needs to choose which crest to replace for ${reward.name}`);
+                    return { success: true, type: 'crest_pending', needsReplacement: true, newCrest: crestResult.newCrest };
+                }
+                return crestResult;
+
+            default:
+                console.log(`[GameRoom] Unknown reward type: ${reward.type}`);
+                return { success: false, error: 'Unknown reward type' };
+        }
+    }
+
+    /**
+     * Apply a unit reward to a player (helper for merchant)
+     */
+    applyUnitReward(player, unitTemplate) {
+        const emptySlot = player.bench.findIndex(u => u === null);
+        if (emptySlot === -1) {
+            // Bench full - give gold equivalent instead
+            const goldValue = unitTemplate.cost * 2;
+            player.gold += goldValue;
+            console.log(`[GameRoom] ${player.name} received ${goldValue} gold (bench full, couldn't add ${unitTemplate.name})`);
+            return { success: true, type: 'gold', amount: goldValue, reason: 'bench_full' };
+        }
+
+        const newUnit = new UnitInstance(unitTemplate, 1);
+        player.bench[emptySlot] = newUnit;
+
+        // Check for merges
+        this.checkAllMerges(player);
+
+        console.log(`[GameRoom] ${player.name} received unit: ${unitTemplate.name}`);
+        return { success: true, type: 'unit', name: unitTemplate.name, benchSlot: emptySlot };
     }
 
     /**
@@ -3049,16 +3668,171 @@ class GameRoom {
         };
     }
 
+    // ========== MAJOR CREST ROUND ==========
+
+    /**
+     * Start the Major Crest round - each player gets 3 random options
+     */
+    startMajorCrestRound() {
+        console.log(`[GameRoom] Starting Major Crest round`);
+
+        // Get all major crests
+        const majorCrests = Object.values(CrestTemplates).filter(c => c.type === 'major');
+
+        // Generate options for each player
+        const playerOptions = {};
+        for (const player of this.getActivePlayers()) {
+            // Shuffle and pick 3 random major crests for this player
+            const shuffled = [...majorCrests].sort(() => Math.random() - 0.5);
+            const options = shuffled.slice(0, 3).map(c => ({
+                crestId: c.crestId,
+                name: c.name,
+                description: c.description,
+                teamBonus: c.teamBonus
+            }));
+            playerOptions[player.clientId] = options;
+        }
+
+        this.majorCrestState = {
+            isActive: true,
+            playerSelections: new Map(), // Track who has selected
+            playerOptions: playerOptions // Store options for auto-assign
+        };
+
+        console.log(`[GameRoom] Generated major crest options for ${Object.keys(playerOptions).length} players`);
+
+        return {
+            playerOptions: playerOptions
+        };
+    }
+
+    /**
+     * Handle a player selecting their major crest
+     */
+    handleMajorCrestSelect(clientId, crestId) {
+        if (!this.majorCrestState || !this.majorCrestState.isActive) {
+            return { success: false, error: 'Major crest round not active' };
+        }
+
+        // Check if player already selected
+        if (this.majorCrestState.playerSelections.has(clientId)) {
+            return { success: false, error: 'Already selected a crest' };
+        }
+
+        const player = this.getPlayer(clientId);
+        if (!player) {
+            return { success: false, error: 'Player not found' };
+        }
+
+        // Validate crest exists and is major
+        const crestTemplate = CrestTemplates[crestId];
+        if (!crestTemplate || crestTemplate.type !== 'major') {
+            return { success: false, error: 'Invalid major crest' };
+        }
+
+        // Set player's major crest
+        player.majorCrest = {
+            crestId: crestId,
+            name: crestTemplate.name,
+            description: crestTemplate.description,
+            type: crestTemplate.type,
+            teamBonus: crestTemplate.teamBonus
+        };
+
+        // Track selection
+        this.majorCrestState.playerSelections.set(clientId, crestId);
+
+        console.log(`[GameRoom] ${player.name} selected major crest: ${crestTemplate.name}`);
+
+        // Check if all players have selected
+        const activePlayers = this.getActivePlayers();
+        const allSelected = activePlayers.every(p => this.majorCrestState.playerSelections.has(p.clientId));
+
+        return {
+            success: true,
+            crest: player.majorCrest,
+            allSelected: allSelected
+        };
+    }
+
+    /**
+     * Auto-assign random major crests to players who haven't selected
+     * Returns array of auto-assigned players for broadcasting
+     */
+    autoAssignMajorCrests() {
+        if (!this.majorCrestState || !this.majorCrestState.playerOptions) {
+            return [];
+        }
+
+        const autoAssigned = [];
+        for (const player of this.getActivePlayers()) {
+            // Skip players who already selected
+            if (this.majorCrestState.playerSelections.has(player.clientId)) {
+                continue;
+            }
+
+            // Get this player's options
+            const options = this.majorCrestState.playerOptions[player.clientId];
+            if (!options || options.length === 0) {
+                continue;
+            }
+
+            // Pick a random option
+            const randomIndex = Math.floor(Math.random() * options.length);
+            const selectedCrest = options[randomIndex];
+
+            // Assign the crest
+            player.majorCrest = {
+                crestId: selectedCrest.crestId,
+                name: selectedCrest.name,
+                description: selectedCrest.description,
+                type: 'major',
+                teamBonus: selectedCrest.teamBonus
+            };
+
+            this.majorCrestState.playerSelections.set(player.clientId, selectedCrest.crestId);
+
+            console.log(`[GameRoom] Auto-assigned ${selectedCrest.name} to ${player.name}`);
+            autoAssigned.push({
+                playerId: player.clientId,
+                playerName: player.name,
+                crestId: selectedCrest.crestId,
+                crestName: selectedCrest.name
+            });
+        }
+
+        return autoAssigned;
+    }
+
+    /**
+     * End the major crest round
+     */
+    endMajorCrestRound() {
+        if (this.majorCrestState) {
+            this.majorCrestState.isActive = false;
+            console.log(`[GameRoom] Major crest round ended`);
+        }
+        this.majorCrestState = null;
+    }
+
     // ========== SERIALIZATION ==========
 
     getFullState() {
+        // Calculate timer - for major_crest rounds, use majorCrestStartTime
+        let timer = Math.ceil(this.phaseTimer);
+        const roundType = this.getCurrentRoundType();
+        if (roundType === 'major_crest' && this.majorCrestStartTime) {
+            const elapsed = (Date.now() - this.majorCrestStartTime) / 1000;
+            timer = Math.max(0, Math.ceil(20 - elapsed));
+        }
+
         return {
             roomId: this.roomId,
             hostId: this.hostId,
             state: this.state,
             phase: this.phase,
             round: this.round,
-            phaseTimer: Math.ceil(this.phaseTimer),
+            phaseTimer: timer,
             players: this.getAllPlayers().map(p => p.toJSON()),
             matchups: this.matchups
         };

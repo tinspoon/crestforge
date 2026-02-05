@@ -14,9 +14,9 @@ namespace Crestforge.Visuals
         public static MerchantArea3D Instance { get; private set; }
 
         [Header("Layout Settings")]
-        public int columns = 4;
-        public int rows = 3;
-        public float pedestalSpacing = 2.0f; // Increased spacing to prevent overlap
+        public int columns = 3; // 3 columns for 6 pairs (2 rows of 3)
+        public int rows = 2;
+        public float pedestalSpacing = 2.5f; // Increased spacing for paired items
         public Vector3 areaOffset = new Vector3(0, 0, 5f); // Position in front of boards
 
         [Header("Visual Settings")]
@@ -49,27 +49,23 @@ namespace Crestforge.Visuals
         }
 
         private bool eventsSubscribed = false;
-        private bool isHidden = true;
 
         private void Start()
         {
-            // Get local player ID
+            // Get local player ID (may be null on startup, will be set in Update)
             localPlayerId = NetworkManager.Instance?.clientId;
 
-            Debug.Log($"[MerchantArea3D] Start called, NetworkManager.Instance={(NetworkManager.Instance != null ? "exists" : "NULL")}, clientId={localPlayerId}");
-
-            // Subscribe to merchant events
+            // Subscribe to merchant events (will retry in Update if NetworkManager not ready)
             SubscribeToEvents();
 
-            // Start hidden (no visuals created yet, so just mark as hidden)
-            isHidden = true;
+            // Start hidden (no visuals created yet)
         }
 
         private void SubscribeToEvents()
         {
             if (NetworkManager.Instance == null)
             {
-                Debug.LogWarning("[MerchantArea3D] NetworkManager.Instance is null, cannot subscribe to events yet");
+                // Will retry in Update() - this is normal on startup
                 return;
             }
 
@@ -328,8 +324,6 @@ namespace Crestforge.Visuals
         /// </summary>
         public void Show()
         {
-            isHidden = false;
-
             // Transition camera to merchant area
             var camera = IsometricCameraSetup.Instance;
             if (camera != null)
@@ -346,7 +340,6 @@ namespace Crestforge.Visuals
         public void Hide()
         {
             Debug.Log("[MerchantArea3D] Hide() called");
-            isHidden = true;
 
             // Return camera to player board
             var camera = IsometricCameraSetup.Instance;

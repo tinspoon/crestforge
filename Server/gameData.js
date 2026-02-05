@@ -49,7 +49,7 @@ const GameConstants = {
     },
     Rounds: {
         MAX_ROUNDS: 14,
-        PLANNING_DURATION: 30,
+        PLANNING_DURATION: 20,
         PVE_INTRO_PLANNING_DURATION: 5,
         COMBAT_MAX_DURATION: 60,
         RESULTS_DURATION: 3,
@@ -926,31 +926,33 @@ function applyItemBonuses(stats, items) {
 }
 
 // Apply crest bonuses to unit stats
+// Crests can have rank 1-3 with multipliers: 1x, 1.5x, 2x
 function applyCrestBonuses(stats, crests) {
     const modifiedStats = { ...stats };
 
     for (const crest of crests) {
-        if (!crest) continue;
+        if (!crest || !crest.teamBonus) continue;
 
-        // Team bonuses from crests (both minor and major)
-        if (crest.teamBonus) {
-            const bonus = crest.teamBonus;
-            if (bonus.health) modifiedStats.health += bonus.health;
-            if (bonus.attack) modifiedStats.attack += bonus.attack;
-            if (bonus.armor) modifiedStats.armor += bonus.armor;
-            if (bonus.magicResist) modifiedStats.magicResist += bonus.magicResist;
-            if (bonus.attackSpeedPercent) {
-                modifiedStats.attackSpeed *= (1 + bonus.attackSpeedPercent / 100);
-            }
-            if (bonus.critChance) {
-                modifiedStats.critChance = (modifiedStats.critChance || 0) + bonus.critChance;
-            }
-            if (bonus.abilityPower) {
-                modifiedStats.abilityPower = (modifiedStats.abilityPower || 0) + bonus.abilityPower;
-            }
-            if (bonus.lifesteal) {
-                modifiedStats.lifesteal = (modifiedStats.lifesteal || 0) + bonus.lifesteal;
-            }
+        // Rank multiplier: rank 1 = 1x, rank 2 = 1.5x, rank 3 = 2x
+        const rank = crest.rank || 1;
+        const rankMultiplier = rank === 3 ? 2 : (rank === 2 ? 1.5 : 1);
+
+        const bonus = crest.teamBonus;
+        if (bonus.health) modifiedStats.health += Math.round(bonus.health * rankMultiplier);
+        if (bonus.attack) modifiedStats.attack += Math.round(bonus.attack * rankMultiplier);
+        if (bonus.armor) modifiedStats.armor += Math.round(bonus.armor * rankMultiplier);
+        if (bonus.magicResist) modifiedStats.magicResist += Math.round(bonus.magicResist * rankMultiplier);
+        if (bonus.attackSpeedPercent) {
+            modifiedStats.attackSpeed *= (1 + (bonus.attackSpeedPercent * rankMultiplier) / 100);
+        }
+        if (bonus.critChance) {
+            modifiedStats.critChance = (modifiedStats.critChance || 0) + bonus.critChance * rankMultiplier;
+        }
+        if (bonus.abilityPower) {
+            modifiedStats.abilityPower = (modifiedStats.abilityPower || 0) + Math.round(bonus.abilityPower * rankMultiplier);
+        }
+        if (bonus.lifesteal) {
+            modifiedStats.lifesteal = (modifiedStats.lifesteal || 0) + bonus.lifesteal * rankMultiplier;
         }
     }
 

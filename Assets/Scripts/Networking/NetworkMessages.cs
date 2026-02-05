@@ -447,11 +447,13 @@ namespace Crestforge.Networking
         public int y;
         public float duration; // Movement duration in seconds (from server)
 
-        // For unitAttack
+        // For unitAttack and unitAbility
         public string attackerId;
         public string targetId;
         public int damage;
         public int hitTick; // Tick when the attack will land (for animation sync)
+        public string abilityName; // For unitAbility - name of the ability used
+        public float abilityDuration; // For unitAbility - fixed duration in seconds
 
         // For unitDamage
         public int currentHealth;
@@ -459,9 +461,10 @@ namespace Crestforge.Networking
 
         // For unitDeath
         public string killerId;
-        public string lootType; // "crest_token" or "item_anvil" if unit drops loot
+        public string lootType; // "crest_token" or "item_anvil" if unit drops loot (single drop)
         public ServerPosition lootPosition; // Position where loot should spawn
         public string lootId; // Unique ID for collecting this loot
+        public List<LootDropData> lootDrops; // Multiple loot drops (for bosses)
 
         // For combatEnd
         public string winner;
@@ -476,6 +479,15 @@ namespace Crestforge.Networking
     }
 
     [Serializable]
+    public class LootDropData
+    {
+        public string lootType;
+        public ServerPosition lootPosition;
+        public string lootId;
+        public int offsetIndex; // Used by client to offset orb positions
+    }
+
+    [Serializable]
     public class ServerCombatUnit
     {
         public string instanceId;
@@ -486,6 +498,8 @@ namespace Crestforge.Networking
         public int y;
         public int health;
         public int maxHealth;
+        public int mana;
+        public int maxMana;
         public ServerUnitStats stats;
         public List<ServerItemData> items;
     }
@@ -514,7 +528,7 @@ namespace Crestforge.Networking
         {
             var data = new TestTeamConfigData
             {
-                minorCrestId = config.minorCrestId ?? "",
+                minorCrestIds = config.minorCrestIds ?? new List<string>(),
                 majorCrestId = config.majorCrestId ?? "",
                 units = new List<TestUnitConfigData>()
             };
@@ -539,7 +553,7 @@ namespace Crestforge.Networking
     public class TestTeamConfigData
     {
         public List<TestUnitConfigData> units;
-        public string minorCrestId;
+        public List<string> minorCrestIds;
         public string majorCrestId;
     }
 
@@ -598,20 +612,35 @@ namespace Crestforge.Networking
     }
 
     /// <summary>
-    /// Data for a single merchant option (item, crest token, or gold)
+    /// Data for a single merchant option (now a pair of rewards)
     /// </summary>
     [Serializable]
     public class MerchantOptionData
     {
         public string optionId;
-        public string optionType; // "item", "crest_token", "gold"
+        public string pairType; // "unit_item", "crest_rerolls", "gold_item", "double_item", "unit_gold"
+        public MerchantRewardData rewardA;
+        public MerchantRewardData rewardB;
+        public bool isPicked;
+        public string pickedByName;
+    }
+
+    /// <summary>
+    /// Data for a single reward within a merchant pair
+    /// </summary>
+    [Serializable]
+    public class MerchantRewardData
+    {
+        public string type; // "item", "unit", "gold", "rerolls", "crest"
         public string itemId;
+        public string unitId;
+        public string crestId;
         public int goldAmount;
+        public int rerollCount;
         public string name;
         public string description;
         public string rarity;
-        public bool isPicked;
-        public string pickedByName;
+        public int cost; // For units
     }
 
     /// <summary>
@@ -651,6 +680,66 @@ namespace Crestforge.Networking
     /// </summary>
     [Serializable]
     public class MerchantEndMessage : NetworkMessage
+    {
+        // No additional data needed
+    }
+
+    // ============================================
+    // Major Crest Round Messages
+    // ============================================
+
+    /// <summary>
+    /// Action to select a major crest during the major crest round
+    /// </summary>
+    [Serializable]
+    public class SelectMajorCrestAction : GameAction
+    {
+        // crestId is inherited from GameAction
+
+        public SelectMajorCrestAction(string crestId)
+        {
+            this.type = "selectMajorCrest";
+            this.crestId = crestId; // Uses inherited field
+        }
+    }
+
+    /// <summary>
+    /// Message sent when Major Crest round starts with player's options
+    /// </summary>
+    [Serializable]
+    public class MajorCrestStartMessage : NetworkMessage
+    {
+        public List<MajorCrestOptionData> options;
+    }
+
+    /// <summary>
+    /// Data for a major crest option
+    /// </summary>
+    [Serializable]
+    public class MajorCrestOptionData
+    {
+        public string crestId;
+        public string name;
+        public string description;
+    }
+
+    /// <summary>
+    /// Message sent when a player selects their major crest
+    /// </summary>
+    [Serializable]
+    public class MajorCrestSelectMessage : NetworkMessage
+    {
+        public string playerId;
+        public string playerName;
+        public string crestId;
+        public string crestName;
+    }
+
+    /// <summary>
+    /// Message sent when all players have selected and round ends
+    /// </summary>
+    [Serializable]
+    public class MajorCrestEndMessage : NetworkMessage
     {
         // No additional data needed
     }

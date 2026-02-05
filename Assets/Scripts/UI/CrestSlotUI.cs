@@ -36,6 +36,9 @@ namespace Crestforge.UI
 
             if (crest != null)
             {
+                // Show the slot when there's a crest
+                gameObject.SetActive(true);
+
                 Color crestColor = crest.type == CrestType.Minor ? minorCrestColor : majorCrestColor;
 
                 if (iconImage != null)
@@ -69,32 +72,14 @@ namespace Crestforge.UI
             }
             else
             {
-                if (iconImage != null)
-                {
-                    iconImage.enabled = false;
-                }
-
-                if (nameText != null)
-                {
-                    nameText.text = "No Crest";
-                    nameText.color = new Color(0.5f, 0.5f, 0.5f);
-                }
-
-                if (typeText != null)
-                {
-                    typeText.text = "";
-                }
-
-                if (borderImage != null)
-                {
-                    borderImage.color = new Color(0.3f, 0.3f, 0.3f, 0.5f);
-                }
-
-                if (backgroundImage != null)
-                {
-                    backgroundImage.color = emptyColor;
-                }
+                // Hide the entire slot when no crest
+                gameObject.SetActive(false);
             }
+        }
+
+        public bool HasCrest()
+        {
+            return crest != null;
         }
 
         public CrestData GetCrest()
@@ -112,6 +97,9 @@ namespace Crestforge.UI
 
             if (serverCrestData != null)
             {
+                // Show the slot when there's a crest
+                gameObject.SetActive(true);
+
                 bool isMinor = serverCrestData.type == "minor";
                 Color crestColor = isMinor ? minorCrestColor : majorCrestColor;
 
@@ -124,13 +112,29 @@ namespace Crestforge.UI
 
                 if (nameText != null)
                 {
-                    nameText.text = serverCrestData.name ?? serverCrestData.crestId;
+                    // Show rank indicator for minor crests (e.g., "Crest of Might II" or "Crest of Might III")
+                    string displayName = serverCrestData.name ?? serverCrestData.crestId;
+                    if (isMinor && serverCrestData.rank > 1)
+                    {
+                        string rankSuffix = serverCrestData.rank == 2 ? " II" : " III";
+                        displayName += rankSuffix;
+                    }
+                    nameText.text = displayName;
                     nameText.color = crestColor;
                 }
 
                 if (typeText != null)
                 {
-                    typeText.text = isMinor ? "Minor" : "Major";
+                    // Show rank multiplier for minor crests
+                    if (isMinor && serverCrestData.rank > 1)
+                    {
+                        string multiplier = serverCrestData.rank == 2 ? "1.5x" : "2x";
+                        typeText.text = $"Minor ({multiplier})";
+                    }
+                    else
+                    {
+                        typeText.text = isMinor ? "Minor" : "Major";
+                    }
                     typeText.color = new Color(crestColor.r * 0.8f, crestColor.g * 0.8f, crestColor.b * 0.8f);
                 }
 
@@ -146,33 +150,14 @@ namespace Crestforge.UI
             }
             else
             {
-                // No crest
-                if (iconImage != null)
-                {
-                    iconImage.enabled = false;
-                }
-
-                if (nameText != null)
-                {
-                    nameText.text = "No Crest";
-                    nameText.color = new Color(0.5f, 0.5f, 0.5f);
-                }
-
-                if (typeText != null)
-                {
-                    typeText.text = "";
-                }
-
-                if (borderImage != null)
-                {
-                    borderImage.color = new Color(0.3f, 0.3f, 0.3f, 0.5f);
-                }
-
-                if (backgroundImage != null)
-                {
-                    backgroundImage.color = emptyColor;
-                }
+                // Hide the entire slot when no crest
+                gameObject.SetActive(false);
             }
+        }
+
+        public bool HasServerCrest()
+        {
+            return serverCrest != null;
         }
 
         public ServerCrestData GetServerCrest()
@@ -330,6 +315,9 @@ namespace Crestforge.UI
             slot.borderImage = borderImg;
             slot.nameText = nameText;
             slot.typeText = typeText;
+
+            // Start hidden - will be shown when a crest is set
+            slotObj.SetActive(false);
 
             return slot;
         }

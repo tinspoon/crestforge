@@ -370,17 +370,46 @@ function handleGameAction(client, message) {
                     room.endMerchantRound();
                     broadcastMerchantEnd(room);
 
-                    // Merchant rounds skip combat - advance to next round after a short delay
-                    console.log(`[handleGameAction] Merchant round complete, advancing to next round`);
-                    setTimeout(() => {
-                        endResults(room);
-                    }, 2000); // 2 second delay to let clients see the final state
+                    // Use the proper advance function
+                    endMerchantRoundAndAdvance(room);
                 } else {
                     // Notify all players of the new picker
                     broadcastMerchantTurnUpdate(room, {
                         currentPickerId: turnResult.currentPickerId,
                         currentPickerName: turnResult.currentPickerName
                     });
+
+                    // Start timer for next picker
+                    startMerchantTurnTimer(room);
+                }
+            }
+        }
+
+        // Special handling for major crest selection during major_crest round
+        if (message.action.type === 'selectMajorCrest' && room.getCurrentRoundType() === 'major_crest') {
+            const player = room.getPlayer(client.id);
+            console.log(`[handleGameAction] Major crest select: player=${player?.name}, result.success=${result.success}, result.crest=${result.crest?.name}`);
+
+            if (player && result.crest) {
+                // Broadcast the selection to all players
+                broadcastMajorCrestSelect(room, {
+                    playerId: client.id,
+                    playerName: player.name,
+                    crestId: result.crest.crestId,
+                    crestName: result.crest.name
+                });
+
+                // Check if all players have selected
+                const activePlayers = room.getActivePlayers();
+                const selectedCount = activePlayers.filter(p => p.majorCrest != null).length;
+                const allSelected = selectedCount === activePlayers.length;
+
+                console.log(`[handleGameAction] Major crest selection: ${selectedCount}/${activePlayers.length} players selected`);
+
+                if (allSelected) {
+                    // All players have selected - end major crest round early
+                    console.log(`[handleGameAction] All players selected, ending major crest round early`);
+                    endMajorCrestRoundAndAdvance(room);
                 }
             }
         }
@@ -543,7 +572,14 @@ function buildTestPlayerState(teamId, teamConfig, board) {
     const activeTraits = calculateActiveTraits(boardUnits);
 
     // Get crests
-    const minorCrest = teamConfig.minorCrestId ? CrestTemplates[teamConfig.minorCrestId] : null;
+    const minorCrests = [];
+    if (teamConfig.minorCrestIds && teamConfig.minorCrestIds.length > 0) {
+        for (const crestId of teamConfig.minorCrestIds) {
+            if (crestId && CrestTemplates[crestId]) {
+                minorCrests.push(CrestTemplates[crestId]);
+            }
+        }
+    }
     const majorCrest = teamConfig.majorCrestId ? CrestTemplates[teamConfig.majorCrestId] : null;
 
     // Create a minimal PlayerState-like object with the necessary methods
@@ -551,7 +587,7 @@ function buildTestPlayerState(teamId, teamConfig, board) {
         clientId: teamId,
         name: teamId,
         board: board,
-        minorCrest: minorCrest,
+        minorCrests: minorCrests,
         majorCrest: majorCrest,
         activeTraits: activeTraits,
 
@@ -573,7 +609,9 @@ function buildTestPlayerState(teamId, teamConfig, board) {
             // Apply crest bonuses
             const crests = [];
             if (this.majorCrest) crests.push(this.majorCrest);
-            if (this.minorCrest) crests.push(this.minorCrest);
+            if (this.minorCrests && this.minorCrests.length > 0) {
+                crests.push(...this.minorCrests);
+            }
             stats = applyCrestBonuses(stats, crests);
 
             return stats;
@@ -648,11 +686,14 @@ function startGame(room) {
     // Start phase timer updates
     startPhaseUpdates(room);
 
-    // Check if this is a merchant round and start it
+    // Check for special round types
     const roundType = room.getCurrentRoundType();
     if (roundType === 'mad_merchant') {
         console.log(`[startGame] Starting merchant round for round ${room.round}`);
         startMerchantRound(room);
+    } else if (roundType === 'major_crest') {
+        console.log(`[startGame] Starting major crest round for round ${room.round}`);
+        startMajorCrestRound(room);
     }
 }
 
@@ -669,15 +710,19 @@ function checkAllReady(room) {
 
 function startCombat(room) {
     // This runs the combat simulation in gameRoom.startCombatPhase()
+    const roundType = room.getCurrentRoundType();
+    console.log(`[startCombat] Starting combat for round ${room.round} (${roundType}), active players: ${room.getActivePlayers().map(p => p.name).join(', ')}`);
+
     room.startCombatPhase();
 
-    console.log(`Combat started in room ${room.roomId}, round ${room.round}`);
+    console.log(`[startCombat] Combat phase started in room ${room.roomId}, combatResults: ${room.combatResults.length}, combatEvents: ${room.combatEvents.size}`);
 
     // Get all combat events for scouting/spectating
     const allCombatEvents = room.getAllCombatEvents();
 
-    // Send combat events to each player
-    for (const player of room.getActivePlayers()) {
+    // Send combat events to ALL players (including eliminated ones, so they can see their death)
+    // Use getAllPlayers() instead of getActivePlayers() to include recently eliminated players
+    for (const player of room.getAllPlayers()) {
         const client = clients.get(player.clientId);
         if (!client) {
             console.log(`[startCombat] No client found for player ${player.name}`);
@@ -685,7 +730,7 @@ function startCombat(room) {
         }
 
         const combatData = room.getCombatEventsForPlayer(player.clientId);
-        console.log(`[startCombat] Sending combat to ${player.name}: combatData=${combatData ? 'exists' : 'null'}, events=${combatData?.events?.length || 0}`);
+        console.log(`[startCombat] Sending combat to ${player.name} (eliminated=${player.isEliminated}): combatData=${combatData ? 'exists' : 'null'}, events=${combatData?.events?.length || 0}`);
 
         if (combatData) {
             const events = combatData.events || [];
@@ -787,7 +832,18 @@ function startCombat(room) {
 }
 
 function sendCombatResults(room) {
-    console.log(`[sendCombatResults] Sending results for round ${room.round}`);
+    // Guard against room being removed or game ending
+    if (!rooms.has(room.roomId)) {
+        console.log(`[sendCombatResults] Room ${room.roomId} no longer exists, skipping`);
+        return;
+    }
+    if (room.state !== 'playing') {
+        console.log(`[sendCombatResults] Room ${room.roomId} not in playing state (${room.state}), skipping`);
+        return;
+    }
+
+    const roundType = room.getCurrentRoundType();
+    console.log(`[sendCombatResults] Sending results for round ${room.round} (${roundType}), results count: ${room.combatResults.length}`);
 
     broadcastToRoom(room, {
         type: 'combatEnd',
@@ -812,14 +868,29 @@ function sendCombatResults(room) {
 }
 
 function endResults(room) {
+    console.log(`[endResults] Called for room ${room.roomId}, round ${room.round}`);
+
+    // Guard against room being removed or game ending
+    if (!rooms.has(room.roomId)) {
+        console.log(`[endResults] Room ${room.roomId} no longer exists, skipping`);
+        return;
+    }
+    if (room.state !== 'playing') {
+        console.log(`[endResults] Room ${room.roomId} not in playing state (${room.state}), skipping`);
+        return;
+    }
+
     // Check for game end
     const active = room.getActivePlayers();
+    console.log(`[endResults] Active players: ${active.length} - ${active.map(p => `${p.name}(${p.health}hp)`).join(', ')}`);
     if (active.length <= 1) {
+        console.log(`[endResults] Only ${active.length} player(s) left, ending game`);
         endGame(room, active[0]?.clientId);
         return;
     }
 
     room.advanceRound();
+    console.log(`[endResults] Advanced to round ${room.round}`);
 
     broadcastToRoom(room, {
         type: 'roundStart',
@@ -828,26 +899,32 @@ function endResults(room) {
 
     broadcastStateToRoom(room);
 
-    // Check if this is a merchant round and start it
+    // Check for special round types
     const roundType = room.getCurrentRoundType();
     if (roundType === 'mad_merchant') {
         console.log(`[endResults] Starting merchant round for round ${room.round}`);
         startMerchantRound(room);
+    } else if (roundType === 'major_crest') {
+        console.log(`[endResults] Starting major crest round for round ${room.round}`);
+        startMajorCrestRound(room);
     }
 }
 
 function endGame(room, winnerId) {
+    console.log(`[endGame] Ending game in room ${room.roomId}, winner: ${winnerId}`);
     room.endGame(winnerId);
 
     const winner = room.getPlayer(winnerId);
+    const allPlayers = room.getAllPlayers();
 
+    console.log(`[endGame] Broadcasting gameEnd to ${allPlayers.length} players. Winner: ${winner?.name}`);
     broadcastToRoom(room, {
         type: 'gameEnd',
         winnerId: winnerId,
         winnerName: winner?.name || 'Unknown'
     });
 
-    console.log(`Game ended in room ${room.roomId}. Winner: ${winner?.name}`);
+    console.log(`[endGame] Game ended in room ${room.roomId}. Winner: ${winner?.name}`);
 
     // Reset room after delay
     setTimeout(() => {
@@ -871,10 +948,20 @@ function startPhaseUpdates(room) {
             return;
         }
 
+        // For major_crest rounds, calculate timer based on majorCrestTimer
+        const roundType = room.getCurrentRoundType();
+        let timer = Math.ceil(room.phaseTimer);
+
+        if (roundType === 'major_crest' && room.majorCrestStartTime) {
+            // Calculate remaining time from when major crest round started
+            const elapsed = (Date.now() - room.majorCrestStartTime) / 1000;
+            timer = Math.max(0, Math.ceil(20 - elapsed));
+        }
+
         broadcastToRoom(room, {
             type: 'phaseUpdate',
             phase: room.phase,
-            timer: Math.ceil(room.phaseTimer),
+            timer: timer,
             round: room.round
         });
     }, 1000);
@@ -928,7 +1015,224 @@ function startMerchantRound(room) {
     const merchantData = room.startMerchantRound();
     if (merchantData) {
         broadcastMerchantStart(room, merchantData);
+
+        // Start turn timer for the first picker
+        startMerchantTurnTimer(room);
     }
+}
+
+/**
+ * Start a timer for the current merchant picker (15 seconds per pick)
+ */
+function startMerchantTurnTimer(room) {
+    // Clear any existing timer
+    if (room.merchantTurnTimer) {
+        clearTimeout(room.merchantTurnTimer);
+    }
+
+    // Set 15 second timer for current picker
+    room.merchantTurnTimer = setTimeout(() => {
+        autoPickMerchant(room);
+    }, 15000);
+}
+
+/**
+ * Auto-pick for a player who took too long
+ */
+function autoPickMerchant(room) {
+    const merchantState = room.getMerchantState();
+    if (!merchantState || !merchantState.isActive) {
+        return;
+    }
+
+    const currentPicker = room.getPlayer(merchantState.currentPickerId);
+    console.log(`[autoPickMerchant] ${currentPicker?.name || 'Unknown'} took too long, auto-picking`);
+
+    // Find the first unpicked option (prefer gold)
+    const unpicked = merchantState.options.filter(o => !o.isPicked);
+    if (unpicked.length === 0) {
+        console.log(`[autoPickMerchant] No unpicked options left`);
+        return;
+    }
+
+    // Prefer gold options for auto-pick
+    const goldOption = unpicked.find(o => o.optionType === 'gold');
+    const optionToPick = goldOption || unpicked[0];
+
+    // Simulate the pick
+    const result = room.handleMerchantPick(merchantState.currentPickerId, optionToPick.optionId);
+    if (result.success) {
+        broadcastMerchantPick(room, {
+            optionId: result.optionId,
+            pickedById: result.pickedById,
+            pickedByName: result.pickedByName
+        });
+
+        const turnResult = room.advanceMerchantTurn();
+        if (turnResult) {
+            if (turnResult.allPicked) {
+                room.endMerchantRound();
+                broadcastMerchantEnd(room);
+                endMerchantRoundAndAdvance(room);
+            } else {
+                broadcastMerchantTurnUpdate(room, turnResult);
+                startMerchantTurnTimer(room); // Start timer for next picker
+            }
+        }
+
+        broadcastStateToRoom(room);
+    }
+}
+
+/**
+ * End the merchant round and advance to next round
+ */
+function endMerchantRoundAndAdvance(room) {
+    // Clear turn timer
+    if (room.merchantTurnTimer) {
+        clearTimeout(room.merchantTurnTimer);
+        room.merchantTurnTimer = null;
+    }
+
+    console.log(`[endMerchantRoundAndAdvance] Merchant round complete, advancing to next round`);
+
+    setTimeout(() => {
+        room.advanceRound();
+
+        broadcastToRoom(room, {
+            type: 'roundStart',
+            round: room.round
+        });
+
+        broadcastStateToRoom(room);
+
+        // Check for special round types in the new round
+        const roundType = room.getCurrentRoundType();
+        if (roundType === 'mad_merchant') {
+            startMerchantRound(room);
+        } else if (roundType === 'major_crest') {
+            startMajorCrestRound(room);
+        }
+    }, 1000);
+}
+
+// ============================================
+// Major Crest Round
+// ============================================
+
+/**
+ * Start the major crest round - sends each player their crest options
+ * Has a 20 second timer, then advances to next round
+ */
+function startMajorCrestRound(room) {
+    const crestData = room.startMajorCrestRound();
+    if (crestData) {
+        broadcastMajorCrestStart(room, crestData);
+
+        // Track when the round started for timer display
+        room.majorCrestStartTime = Date.now();
+
+        // Set up 20 second timer for major crest round
+        room.majorCrestTimer = setTimeout(() => {
+            console.log(`[startMajorCrestRound] Timer expired, ending major crest round`);
+            endMajorCrestRoundAndAdvance(room);
+        }, 20000);
+    }
+}
+
+/**
+ * End the major crest round and advance to next round's planning phase
+ * Skips combat and results phases entirely
+ */
+function endMajorCrestRoundAndAdvance(room) {
+    // Clear timer if still running
+    if (room.majorCrestTimer) {
+        clearTimeout(room.majorCrestTimer);
+        room.majorCrestTimer = null;
+    }
+
+    // Clear start time
+    room.majorCrestStartTime = null;
+
+    // Check if already ended (avoid double-processing)
+    if (!room.majorCrestState || !room.majorCrestState.isActive) {
+        return;
+    }
+
+    // Auto-assign random crests to players who haven't selected
+    const autoAssigned = room.autoAssignMajorCrests();
+    for (const assignment of autoAssigned) {
+        broadcastMajorCrestSelect(room, assignment);
+    }
+
+    room.endMajorCrestRound();
+    broadcastMajorCrestEnd(room);
+
+    // Short delay then advance directly to next round's planning phase
+    setTimeout(() => {
+        // Check for game end
+        const active = room.getActivePlayers();
+        if (active.length <= 1) {
+            endGame(room, active[0]?.clientId);
+            return;
+        }
+
+        // Advance round and start planning phase directly (skip combat/results)
+        room.advanceRound();
+
+        broadcastToRoom(room, {
+            type: 'roundStart',
+            round: room.round
+        });
+
+        broadcastStateToRoom(room);
+
+        // Check for special round types in the new round
+        const roundType = room.getCurrentRoundType();
+        if (roundType === 'mad_merchant') {
+            console.log(`[endMajorCrestRoundAndAdvance] Starting merchant round for round ${room.round}`);
+            startMerchantRound(room);
+        } else if (roundType === 'major_crest') {
+            console.log(`[endMajorCrestRoundAndAdvance] Starting major crest round for round ${room.round}`);
+            startMajorCrestRound(room);
+        }
+        // For PvP/PvE rounds, the planning phase timer is already started by advanceRound
+    }, 1000);
+}
+
+function broadcastMajorCrestStart(room, crestData) {
+    console.log(`[broadcastMajorCrestStart] Sending crest options to ${room.players.size} players`);
+
+    // Send each player their specific options
+    for (const player of room.getActivePlayers()) {
+        const client = clients.get(player.clientId);
+        if (client) {
+            const options = crestData.playerOptions[player.clientId] || [];
+            send(client.ws, {
+                type: 'majorCrestStart',
+                options: options
+            });
+            console.log(`[broadcastMajorCrestStart] Sent ${options.length} options to ${player.name}`);
+        }
+    }
+}
+
+function broadcastMajorCrestSelect(room, selectData) {
+    console.log(`[broadcastMajorCrestSelect] ${selectData.playerName} selected ${selectData.crestName}`);
+    broadcastToRoom(room, {
+        type: 'majorCrestSelect',
+        playerId: selectData.playerId,
+        playerName: selectData.playerName,
+        crestId: selectData.crestId,
+        crestName: selectData.crestName
+    });
+}
+
+function broadcastMajorCrestEnd(room) {
+    console.log(`[broadcastMajorCrestEnd] Major crest round ended`);
+    broadcastToRoom(room, {
+        type: 'majorCrestEnd'
+    });
 }
 
 // ============================================
