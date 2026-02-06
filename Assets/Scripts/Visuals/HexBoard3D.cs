@@ -229,6 +229,9 @@ namespace Crestforge.Visuals
 
             // Calculate board center (relative to board transform)
             boardCenter = transform.position;
+
+            // Draw unique hex edges (avoiding duplicates where hexes share edges)
+            DrawBoardOutlines();
         }
 
         /// <summary>
@@ -297,7 +300,7 @@ namespace Crestforge.Visuals
                     mat.SetColor("_MainColor", variedColor);
                     mat.SetColor("_EdgeColor", Color.Lerp(variedColor, MedievalVisualConfig.BoardColors.HexOutline, 0.7f));
                     mat.SetColor("_OutlineColor", MedievalVisualConfig.BoardColors.HexOutline);
-                    mat.SetFloat("_OutlineWidth", 0.06f);  // More visible outline
+                    mat.SetFloat("_OutlineWidth", 0f);     // Disabled - using LineRenderer outlines instead
                     mat.SetFloat("_EdgeWidth", 0.15f);     // Wider edge gradient
                     mat.SetFloat("_Brightness", 1.0f);
                 }
@@ -335,43 +338,105 @@ namespace Crestforge.Visuals
             hexTile.baseColor = variedColor;
             hexTile.useMedievalTheme = useMedievalTheme;
 
-            // Add visible outline using LineRenderer
-            AddHexOutline(tile, hexRadius, hexHeight);
+            // Note: Outlines are drawn globally in DrawBoardOutlines() to avoid duplicate edges
 
             return tile;
         }
 
         /// <summary>
-        /// Add a LineRenderer outline to a hex tile
+        /// Draw all hex outlines, avoiding duplicate edges where hexes share borders
         /// </summary>
-        private void AddHexOutline(GameObject tile, float radius, float height)
+        private void DrawBoardOutlines()
         {
-            GameObject outlineObj = new GameObject("Outline");
-            outlineObj.transform.SetParent(tile.transform, false);
+            // Container for all outline segments
+            GameObject outlinesContainer = new GameObject("BoardOutlines");
+            outlinesContainer.transform.SetParent(transform, false);
 
-            LineRenderer lr = outlineObj.AddComponent<LineRenderer>();
-            lr.useWorldSpace = false;
-            lr.loop = true;
-            lr.positionCount = 6;
+            // Track which edges have been drawn using a string key of the two endpoint positions
+            HashSet<string> drawnEdges = new HashSet<string>();
 
-            // Create outline points at hex corners, slightly above the surface
-            float outlineRadius = radius;
-            float outlineY = height + 0.005f;
-            for (int i = 0; i < 6; i++)
+            int width = GameConstants.Grid.WIDTH;
+            int totalRows = GameConstants.Grid.HEIGHT * 2;
+
+            // Calculate board offset (same as in GenerateBoard)
+            float totalWidth = width * HexWidth;
+            float totalHeight = (totalRows - 1) * RowSpacing + HexHeight;
+            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 2f, 0, -totalHeight / 2f + HexHeight / 2f);
+
+            float outlineY = hexHeight + 0.005f;
+            Color outlineColor = new Color(0.2f, 0.15f, 0.1f, 0.35f);  // Dark brown, more transparent
+
+            // Go through all hexes and draw their edges
+            for (int y = 0; y < totalRows; y++)
             {
-                float angle = 60f * i - 30f;
-                float rad = angle * Mathf.Deg2Rad;
-                float x = outlineRadius * Mathf.Cos(rad);
-                float z = outlineRadius * Mathf.Sin(rad);
-                lr.SetPosition(i, new Vector3(x, outlineY, z));
-            }
+                for (int x = 0; x < width; x++)
+                {
+                    Vector3 hexCenter = HexToWorldPosition(x, y) + offset;
 
-            // Style the outline
-            lr.startWidth = 0.02f;
-            lr.endWidth = 0.02f;
+                    // Get the 6 corners of this hex
+                    Vector3[] corners = new Vector3[6];
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float angle = 60f * i - 30f;
+                        float rad = angle * Mathf.Deg2Rad;
+                        corners[i] = hexCenter + new Vector3(
+                            hexRadius * Mathf.Cos(rad),
+                            outlineY,
+                            hexRadius * Mathf.Sin(rad)
+                        );
+                    }
+
+                    // Draw each of the 6 edges if not already drawn
+                    for (int i = 0; i < 6; i++)
+                    {
+                        Vector3 p1 = corners[i];
+                        Vector3 p2 = corners[(i + 1) % 6];
+
+                        // Create a key for this edge (order-independent)
+                        string edgeKey = GetEdgeKey(p1, p2);
+
+                        if (!drawnEdges.Contains(edgeKey))
+                        {
+                            drawnEdges.Add(edgeKey);
+                            CreateEdgeLine(outlinesContainer.transform, p1, p2, outlineColor);
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Create a string key for an edge that is the same regardless of point order
+        /// </summary>
+        private string GetEdgeKey(Vector3 p1, Vector3 p2)
+        {
+            // Round to 2 decimal places to handle floating point precision
+            string key1 = $"{p1.x:F2},{p1.z:F2}";
+            string key2 = $"{p2.x:F2},{p2.z:F2}";
+
+            // Order-independent key
+            return string.Compare(key1, key2) < 0 ? $"{key1}-{key2}" : $"{key2}-{key1}";
+        }
+
+        /// <summary>
+        /// Create a single line segment for an edge
+        /// </summary>
+        private void CreateEdgeLine(Transform parent, Vector3 p1, Vector3 p2, Color color)
+        {
+            GameObject lineObj = new GameObject("Edge");
+            lineObj.transform.SetParent(parent, false);
+
+            LineRenderer lr = lineObj.AddComponent<LineRenderer>();
+            lr.useWorldSpace = false;
+            lr.positionCount = 2;
+            lr.SetPosition(0, p1);
+            lr.SetPosition(1, p2);
+
+            lr.startWidth = 0.03f;
+            lr.endWidth = 0.03f;
             lr.material = new Material(Shader.Find("Sprites/Default"));
-            lr.startColor = new Color(0.2f, 0.15f, 0.1f, 0.6f);  // Dark brown, semi-transparent
-            lr.endColor = new Color(0.2f, 0.15f, 0.1f, 0.6f);
+            lr.startColor = color;
+            lr.endColor = color;
             lr.sortingOrder = 1;
         }
 
