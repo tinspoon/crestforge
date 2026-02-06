@@ -923,57 +923,46 @@ namespace Crestforge.UI
 
         private void CreateItemInventory(Transform parent)
         {
-            // Item inventory panel - positioned to the right of bench
-            GameObject itemObj = CreatePanel("ItemInventoryPanel", parent);
-            itemInventoryPanel = itemObj.GetComponent<RectTransform>();
+            // Item inventory panel - vertical column on right side, no background
+            GameObject itemObj = new GameObject("ItemInventoryPanel");
+            itemObj.transform.SetParent(parent, false);
+            itemInventoryPanel = itemObj.AddComponent<RectTransform>();
+
+            // Anchor to bottom-right, positioned above bench
             itemInventoryPanel.anchorMin = new Vector2(1, 0);
             itemInventoryPanel.anchorMax = new Vector2(1, 0);
             itemInventoryPanel.pivot = new Vector2(1, 0);
-            itemInventoryPanel.sizeDelta = new Vector2(200, 90);
-            itemInventoryPanel.anchoredPosition = new Vector2(-10, 320); // Above the bench
-            itemObj.GetComponent<Image>().color = new Color(0.15f, 0.12f, 0.18f, 0.85f);
+            itemInventoryPanel.sizeDelta = new Vector2(104, 400); // Fixed height for now
+            itemInventoryPanel.anchoredPosition = new Vector2(-4, 375);
 
-            // Title
-            GameObject titleObj = new GameObject("Title");
-            titleObj.transform.SetParent(itemObj.transform, false);
-            RectTransform titleRT = titleObj.AddComponent<RectTransform>();
-            titleRT.anchorMin = new Vector2(0, 1);
-            titleRT.anchorMax = new Vector2(1, 1);
-            titleRT.pivot = new Vector2(0.5f, 1);
-            titleRT.sizeDelta = new Vector2(0, 18);
-            titleRT.anchoredPosition = Vector2.zero;
-            Text titleText = titleObj.AddComponent<Text>();
-            titleText.text = "Items";
-            titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            titleText.fontSize = 12;
-            titleText.fontStyle = FontStyle.Bold;
-            titleText.alignment = TextAnchor.MiddleCenter;
-            titleText.color = new Color(0.8f, 0.7f, 0.9f);
+            // Vertical layout - items stack from bottom
+            VerticalLayoutGroup vlg = itemObj.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 8;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.padding = new RectOffset(0, 0, 0, 0);
+            vlg.childAlignment = TextAnchor.LowerCenter;
 
-            // Item slot container
-            GameObject containerObj = new GameObject("ItemSlotContainer");
-            containerObj.transform.SetParent(itemObj.transform, false);
-            itemSlotContainer = containerObj.AddComponent<RectTransform>();
-            itemSlotContainer.anchorMin = new Vector2(0, 0);
-            itemSlotContainer.anchorMax = new Vector2(1, 1);
-            itemSlotContainer.offsetMin = new Vector2(5, 5);
-            itemSlotContainer.offsetMax = new Vector2(-5, -20);
+            // itemSlotContainer points to the panel directly
+            itemSlotContainer = itemInventoryPanel;
 
-            HorizontalLayoutGroup hlg = containerObj.AddComponent<HorizontalLayoutGroup>();
-            hlg.spacing = 4;
-            hlg.padding = new RectOffset(2, 2, 2, 2);
-            hlg.childAlignment = TextAnchor.MiddleLeft;
-            hlg.childControlWidth = false;
-            hlg.childControlHeight = true;
-            hlg.childForceExpandWidth = false;
-
-            // Create item slots (max 10 items)
+            // Create item slots (max 10 items) - same approach as before
+            float iconSize = 96f;
             for (int i = 0; i < 10; i++)
             {
-                var slot = ItemSlotUI.Create(itemSlotContainer, new Vector2(60, 60));
-                slot.gameObject.AddComponent<LayoutElement>().preferredWidth = 60;
+                var slot = ItemSlotUI.Create(itemSlotContainer, new Vector2(iconSize, iconSize));
+                var le = slot.gameObject.AddComponent<LayoutElement>();
+                le.preferredHeight = iconSize;
+                le.preferredWidth = iconSize;
+                le.minHeight = iconSize;
+                slot.gameObject.SetActive(false); // Start hidden
                 itemSlots.Add(slot);
             }
+
+            // Start with panel hidden
+            itemInventoryPanel.gameObject.SetActive(false);
         }
 
         private void CreateSelectionPanel()
@@ -3141,14 +3130,13 @@ namespace Crestforge.UI
                     bool isPvEIntro = RoundManager.Instance != null && RoundManager.Instance.IsPvEIntroRound();
                     shopPanel.gameObject.SetActive(!isPvEIntro);
                     benchPanel?.gameObject.SetActive(false); // Bench UI disabled - using 3D bench
-                    itemInventoryPanel?.gameObject.SetActive(true);
                     if (!isPvEIntro)
                     {
                         UpdateShop();
                         UpdateShopButtons();
                     }
                     UpdateBench();
-                    UpdateItemInventory();
+                    UpdateItemInventory(); // Handles its own visibility
                     break;
 
                 case GamePhase.Combat:
@@ -3159,7 +3147,7 @@ namespace Crestforge.UI
                     bool isPvEIntroCombat = RoundManager.Instance != null && RoundManager.Instance.IsPvEIntroRound();
                     shopPanel.gameObject.SetActive(!isPvEIntroCombat);
                     benchPanel?.gameObject.SetActive(false); // Bench UI disabled - using 3D bench
-                    itemInventoryPanel?.gameObject.SetActive(true);
+                    UpdateItemInventory(); // Handles its own visibility
                     // Scouting UI now handles its own visibility during combat
                     break;
 
@@ -3250,8 +3238,7 @@ namespace Crestforge.UI
                         UpdateShopButtons();
                     }
                     benchPanel?.gameObject.SetActive(false);
-                    itemInventoryPanel?.gameObject.SetActive(true);
-                    UpdateItemInventory();
+                    UpdateItemInventory(); // Handles its own visibility
                     break;
 
                 case "combat":
@@ -3297,8 +3284,7 @@ namespace Crestforge.UI
                         UpdateShopButtons();
                     }
                     benchPanel?.gameObject.SetActive(false);
-                    itemInventoryPanel?.gameObject.SetActive(true);
-                    UpdateItemInventory();
+                    UpdateItemInventory(); // Handles its own visibility
                     // Scouting UI now handles its own visibility during combat
                     break;
 
@@ -3449,37 +3435,53 @@ namespace Crestforge.UI
         {
             if (itemSlots == null) return;
 
+            int itemCount = 0;
+
             // Multiplayer mode - use server state
             if (IsMultiplayer && serverState != null)
             {
+                itemCount = serverState.itemInventory?.Count ?? 0;
                 for (int i = 0; i < itemSlots.Count; i++)
                 {
-                    if (serverState.itemInventory != null && i < serverState.itemInventory.Count)
+                    // Reverse order so newest items (at end of inventory) appear at top of UI
+                    int inventoryIndex = itemCount - 1 - i;
+                    if (serverState.itemInventory != null && inventoryIndex >= 0)
                     {
-                        itemSlots[i].SetServerItem(serverState.itemInventory[i], i);
+                        itemSlots[i].SetServerItem(serverState.itemInventory[inventoryIndex], inventoryIndex);
+                        itemSlots[i].gameObject.SetActive(true);
                     }
                     else
                     {
                         itemSlots[i].SetServerItem(null, -1);
+                        itemSlots[i].gameObject.SetActive(false);
                     }
                 }
-                return;
             }
-
-            // Single-player mode
-            if (state == null) return;
-
-            for (int i = 0; i < itemSlots.Count; i++)
+            else
             {
-                if (state.itemInventory != null && i < state.itemInventory.Count)
+                // Single-player mode
+                if (state == null) return;
+
+                itemCount = state.itemInventory?.Count ?? 0;
+                for (int i = 0; i < itemSlots.Count; i++)
                 {
-                    itemSlots[i].SetItem(state.itemInventory[i]);
-                }
-                else
-                {
-                    itemSlots[i].SetItem(null);
+                    // Reverse order so newest items (at end of inventory) appear at top of UI
+                    int inventoryIndex = itemCount - 1 - i;
+                    if (state.itemInventory != null && inventoryIndex >= 0)
+                    {
+                        itemSlots[i].SetItem(state.itemInventory[inventoryIndex]);
+                        itemSlots[i].gameObject.SetActive(true);
+                    }
+                    else
+                    {
+                        itemSlots[i].SetItem(null);
+                        itemSlots[i].gameObject.SetActive(false);
+                    }
                 }
             }
+
+            // Hide panel when no items
+            itemInventoryPanel?.gameObject.SetActive(itemCount > 0);
         }
 
         public void RefreshItemInventory()
@@ -5592,6 +5594,22 @@ namespace Crestforge.UI
         private void PopulateServerItemTooltip(ServerItemData serverItem)
         {
             tooltipPanel.gameObject.SetActive(true);
+
+            // Show item icon instead of unit portrait
+            if (tooltipSprite != null)
+            {
+                Sprite itemIcon = ItemIcons.GetItemIcon(serverItem.itemId);
+                if (itemIcon != null)
+                {
+                    tooltipSprite.sprite = itemIcon;
+                    tooltipSprite.enabled = true;
+                }
+                else
+                {
+                    // Hide portrait if no item icon available
+                    tooltipSprite.enabled = false;
+                }
+            }
 
             // Title - show item name with gold color
             tooltipTitle.text = serverItem.name ?? "Item";

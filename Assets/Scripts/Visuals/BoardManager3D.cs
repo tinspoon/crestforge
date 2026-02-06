@@ -1390,20 +1390,29 @@ namespace Crestforge.Visuals
                             // Null out draggedUnit so the restoration code doesn't overwrite our changes
                             draggedUnit = null;
                         }
-                        else if (!isBenchArea && hasHit && isPlanning)
+                        else if (!isBenchArea && isPlanning)
                         {
                             // Not on bench area - check for hex tile placement (bench-to-board)
                             Vector2Int coord = new Vector2Int(-1, -1);
                             bool isEnemy = false;
                             bool foundTile = false;
 
-                            // Try direct tile detection
-                            if (hexBoard != null && hexBoard.TryGetTileCoord(hit.collider.gameObject, out coord, out isEnemy))
+                            // Try direct tile detection via raycast
+                            if (hasHit && hexBoard != null && hexBoard.TryGetTileCoord(hit.collider.gameObject, out coord, out isEnemy))
                             {
                                 foundTile = true;
                             }
+                            // Fallback: find closest tile to drop position (more reliable for flat 2D hexes)
+                            if (!foundTile && hexBoard != null)
+                            {
+                                Vector3 dropPos = draggedUnit.transform.position;
+                                if (hexBoard.TryGetClosestTileCoord(dropPos, hexBoard.TileRadius * 2f, out coord, out isEnemy))
+                                {
+                                    foundTile = true;
+                                }
+                            }
                             // If we hit a board unit, find the tile it's on (for swapping)
-                            else if (hexBoard != null)
+                            if (!foundTile && hasHit && hexBoard != null)
                             {
                                 UnitVisual3D hitUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
                                 if (hitUnit != null && hitUnit != draggedUnit)
@@ -1526,13 +1535,22 @@ namespace Crestforge.Visuals
                         bool isEnemy = false;
                         bool foundTile = false;
 
-                        // First try direct tile detection
+                        // First try direct tile detection via raycast
                         if (isPlanning && hexBoard != null && hexBoard.TryGetTileCoord(hit.collider.gameObject, out coord, out isEnemy))
                         {
                             foundTile = true;
                         }
-                        // If we hit a unit, find the tile it's on
-                        else if (isPlanning && hexBoard != null)
+                        // Fallback: find closest tile to drop position (more reliable for flat 2D hexes)
+                        if (!foundTile && isPlanning && hexBoard != null)
+                        {
+                            Vector3 dropPos = draggedUnit.transform.position;
+                            if (hexBoard.TryGetClosestTileCoord(dropPos, hexBoard.TileRadius * 2f, out coord, out isEnemy))
+                            {
+                                foundTile = true;
+                            }
+                        }
+                        // If we hit a unit, find the tile it's on (for swapping)
+                        if (!foundTile && isPlanning && hexBoard != null)
                         {
                             UnitVisual3D hitUnit = hit.collider.GetComponentInParent<UnitVisual3D>();
                             if (hitUnit != null && hitUnit != draggedUnit)
@@ -1706,9 +1724,66 @@ namespace Crestforge.Visuals
                     }
                     else
                     {
-                        // No raycast hit - but still check if we're over the bench area (for board-to-bench)
-                        bool isBenchAreaMouse = IsBenchDropArea(mouseWorldPos);
-                        if (isBenchAreaMouse && isPlanning)
+                        // No raycast hit - try fallback tile detection first, then check bench
+                        bool foundTileNoHit = false;
+                        Vector2Int coordNoHit = new Vector2Int(-1, -1);
+                        bool isEnemyNoHit = false;
+
+                        // Fallback: find closest tile to drop position (for flat 2D hexes)
+                        if (isPlanning && hexBoard != null)
+                        {
+                            Vector3 dropPos = draggedUnit.transform.position;
+                            if (hexBoard.TryGetClosestTileCoord(dropPos, hexBoard.TileRadius * 2f, out coordNoHit, out isEnemyNoHit))
+                            {
+                                foundTileNoHit = !isEnemyNoHit && coordNoHit.y < 4;
+                            }
+                        }
+
+                        if (foundTileNoHit)
+                        {
+                            // Found a valid player tile via fallback detection
+                            Vector3 targetPos = hexBoard.GetTileWorldPosition(coordNoHit.x, coordNoHit.y);
+                            targetPos.y = unitYOffset;
+
+                            // Check for swap
+                            string targetInstanceId = null;
+                            if (serverState.board[coordNoHit.x, coordNoHit.y] != null)
+                            {
+                                targetInstanceId = serverState.board[coordNoHit.x, coordNoHit.y].instanceId;
+                            }
+
+                            if (!string.IsNullOrEmpty(targetInstanceId) && serverUnitVisuals.TryGetValue(targetInstanceId, out UnitVisual3D targetVisual) && targetVisual != null)
+                            {
+                                // Swap: move target unit to drag start position
+                                targetVisual.SetPositionAndFaceCamera(dragStartPos);
+                                recentlyMovedUnits.Add(targetInstanceId);
+                            }
+
+                            // Move dragged unit to target
+                            draggedUnit.SetPositionAndFaceCamera(targetPos);
+
+                            // Update tracking
+                            if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                            {
+                                serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
+                            }
+
+                            // Re-enable collider
+                            if (draggedCollider != null) draggedCollider.enabled = true;
+
+                            // Send place action to server
+                            serverState.PlaceUnit(draggedServerUnitInstanceId, coordNoHit.x, coordNoHit.y);
+
+                            // Mark as recently moved
+                            if (!string.IsNullOrEmpty(draggedServerUnitInstanceId))
+                            {
+                                recentlyMovedUnits.Add(draggedServerUnitInstanceId);
+                            }
+
+                            draggedUnit = null;
+                        }
+                        // Check if we're over the bench area (for board-to-bench)
+                        else if (IsBenchDropArea(mouseWorldPos) && isPlanning)
                         {
                             int targetSlot = GetBenchSlotAtWorldPosition(mouseWorldPos);
                             if (targetSlot >= 0)
@@ -2707,6 +2782,13 @@ namespace Crestforge.Visuals
         /// </summary>
         private void SelectUnitMultiplayer(UnitVisual3D unitVis)
         {
+            // Skip selection if an item was just equipped (prevents tooltip showing after item drop)
+            if (Crestforge.UI.ItemSlotUI.JustEquippedItem)
+            {
+                Crestforge.UI.ItemSlotUI.JustEquippedItem = false;
+                return;
+            }
+
             // Deselect previous
             if (selectedUnit != null)
             {

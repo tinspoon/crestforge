@@ -40,6 +40,9 @@ namespace Crestforge.UI
         // Static drag tracking
         public static ItemSlotUI DraggedItem { get; private set; }
 
+        // Flag to suppress unit selection after item equip
+        public static bool JustEquippedItem { get; set; }
+
         private void Awake()
         {
             rectTransform = GetComponent<RectTransform>();
@@ -185,9 +188,21 @@ namespace Crestforge.UI
 
             if (iconImage != null)
             {
-                iconImage.enabled = true;
-                iconImage.color = itemColor;
-                iconImage.sprite = null;
+                // Try to get procedural item icon
+                Sprite itemIcon = ItemIcons.GetItemIcon(serverItemData.itemId);
+                if (itemIcon != null)
+                {
+                    iconImage.sprite = itemIcon;
+                    iconImage.enabled = true;
+                    iconImage.color = Color.white;
+                }
+                else
+                {
+                    // Fallback to colored square
+                    iconImage.sprite = null;
+                    iconImage.enabled = true;
+                    iconImage.color = itemColor;
+                }
             }
 
             if (nameText != null)
@@ -224,40 +239,12 @@ namespace Crestforge.UI
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            if (isDragging) return;
-
-            bool hasItem = item != null || serverItem != null;
-            if (hasItem)
-            {
-                if (backgroundImage != null)
-                {
-                    backgroundImage.color = hoverColor;
-                }
-
-                // Show tooltip - prefer single-player item, fall back to server item
-                if (item != null)
-                {
-                    GameUI.Instance?.ShowItemTooltip(item, Vector3.zero);
-                }
-                else if (serverItem != null)
-                {
-                    GameUI.Instance?.ShowServerItemInfoTemporary(serverItem);
-                }
-            }
+            // No hover effects - mobile game
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            if (!isDragging)
-            {
-                bool hasItem = item != null || serverItem != null;
-                if (backgroundImage != null)
-                {
-                    backgroundImage.color = hasItem ? filledColor : emptyColor;
-                }
-
-                GameUI.Instance?.HideItemTooltip();
-            }
+            // Don't hide tooltip on exit - on mobile, tooltips stay until dismissed
         }
 
         public void OnPointerClick(PointerEventData eventData)
@@ -491,6 +478,9 @@ namespace Crestforge.UI
 
                     if (!string.IsNullOrEmpty(instanceId) && itemIndex >= 0)
                     {
+                        // Set flag to suppress unit tooltip from showing
+                        JustEquippedItem = true;
+
                         serverState.EquipItem(itemIndex, instanceId);
                         Debug.Log($"[ItemSlotUI] Equipped item {itemIndex} to unit {instanceId}");
                         return true;
@@ -576,56 +566,67 @@ namespace Crestforge.UI
             RectTransform rt = slotObj.AddComponent<RectTransform>();
             rt.sizeDelta = size;
 
-            // Background
+            // Background with rounded corners
             Image bg = slotObj.AddComponent<Image>();
-            bg.color = new Color(0.2f, 0.2f, 0.2f, 0.5f);
+            Sprite roundedSprite = ItemIcons.GetRoundedSquareSprite();
+            if (roundedSprite != null)
+            {
+                bg.sprite = roundedSprite;
+                bg.type = Image.Type.Simple;
+            }
+            bg.color = new Color(0.25f, 0.22f, 0.3f, 0.9f);
 
-            // Rarity border
+            // Black border (behind everything, slightly larger)
+            GameObject blackBorderObj = new GameObject("BlackBorder");
+            blackBorderObj.transform.SetParent(slotObj.transform, false);
+            RectTransform blackBorderRT = blackBorderObj.AddComponent<RectTransform>();
+            blackBorderRT.anchorMin = Vector2.zero;
+            blackBorderRT.anchorMax = Vector2.one;
+            blackBorderRT.sizeDelta = Vector2.zero;
+            blackBorderRT.offsetMin = new Vector2(-3, -3);
+            blackBorderRT.offsetMax = new Vector2(3, 3);
+            Image blackBorderImg = blackBorderObj.AddComponent<Image>();
+            if (roundedSprite != null) blackBorderImg.sprite = roundedSprite;
+            blackBorderImg.type = Image.Type.Simple;
+            blackBorderImg.color = new Color(0f, 0f, 0f, 0.9f);
+            blackBorderImg.raycastTarget = false;
+            blackBorderObj.transform.SetAsFirstSibling();
+
+            // Rarity border (slightly larger, also rounded)
             GameObject borderObj = new GameObject("RarityBorder");
             borderObj.transform.SetParent(slotObj.transform, false);
             RectTransform borderRT = borderObj.AddComponent<RectTransform>();
             borderRT.anchorMin = Vector2.zero;
             borderRT.anchorMax = Vector2.one;
             borderRT.sizeDelta = Vector2.zero;
-            borderRT.offsetMin = new Vector2(-2, -2);
-            borderRT.offsetMax = new Vector2(2, 2);
+            borderRT.offsetMin = new Vector2(-3, -3);
+            borderRT.offsetMax = new Vector2(3, 3);
             Image borderImg = borderObj.AddComponent<Image>();
+            if (roundedSprite != null) borderImg.sprite = roundedSprite;
+            borderImg.type = Image.Type.Simple;
             borderImg.color = Color.clear;
+            borderImg.raycastTarget = false;
             borderObj.transform.SetAsFirstSibling();
 
-            // Icon
+            // Icon - fills most of the slot (compact style, no name text)
             GameObject iconObj = new GameObject("Icon");
             iconObj.transform.SetParent(slotObj.transform, false);
             RectTransform iconRT = iconObj.AddComponent<RectTransform>();
-            iconRT.anchorMin = new Vector2(0.1f, 0.25f);
-            iconRT.anchorMax = new Vector2(0.9f, 0.95f);
+            iconRT.anchorMin = new Vector2(0.1f, 0.1f);
+            iconRT.anchorMax = new Vector2(0.9f, 0.9f);
             iconRT.sizeDelta = Vector2.zero;
             iconRT.offsetMin = Vector2.zero;
             iconRT.offsetMax = Vector2.zero;
             Image iconImg = iconObj.AddComponent<Image>();
             iconImg.enabled = false;
-
-            // Name text
-            GameObject textObj = new GameObject("Name");
-            textObj.transform.SetParent(slotObj.transform, false);
-            RectTransform textRT = textObj.AddComponent<RectTransform>();
-            textRT.anchorMin = new Vector2(0, 0);
-            textRT.anchorMax = new Vector2(1, 0.25f);
-            textRT.sizeDelta = Vector2.zero;
-            textRT.offsetMin = new Vector2(2, 2);
-            textRT.offsetMax = new Vector2(-2, 0);
-            Text nameText = textObj.AddComponent<Text>();
-            nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            nameText.fontSize = 10;
-            nameText.alignment = TextAnchor.MiddleCenter;
-            nameText.color = Color.white;
+            iconImg.raycastTarget = false;
 
             // Add component
             ItemSlotUI slot = slotObj.AddComponent<ItemSlotUI>();
             slot.backgroundImage = bg;
             slot.iconImage = iconImg;
             slot.rarityBorder = borderImg;
-            slot.nameText = nameText;
+            slot.nameText = null;
 
             return slot;
         }
