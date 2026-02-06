@@ -1835,6 +1835,12 @@ namespace Crestforge.Visuals
 
         private bool IsOverSellZone()
         {
+            // Check if pointer is off the bottom of the screen (mobile drag-off-screen to sell)
+            if (Input.mousePosition.y < 0)
+            {
+                return true;
+            }
+
             // Check if mouse is over the UI sell overlay
             var eventSystem = UnityEngine.EventSystems.EventSystem.current;
             if (eventSystem == null) return false;
@@ -3512,10 +3518,16 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
-        /// Check if pointer is over the sell zone UI
+        /// Check if pointer is over the sell zone UI or off the bottom of screen
         /// </summary>
         private bool IsPointerOverSellZone()
         {
+            // Check if pointer is off the bottom of the screen (mobile drag-off-screen to sell)
+            if (Input.mousePosition.y < 0)
+            {
+                return true;
+            }
+
             var eventSystem = UnityEngine.EventSystems.EventSystem.current;
             if (eventSystem == null) return false;
 

@@ -743,46 +743,82 @@ namespace Crestforge.UI
 
         private void CreateSellOverlay(Transform canvasParent)
         {
-            // Sell overlay is a child of the shop panel, so it fills the exact same area
+            // Sell overlay - extends from top of shop panel to bottom of screen
             sellOverlay = new GameObject("SellOverlay");
-            sellOverlay.transform.SetParent(shopPanel.transform, false);
+            sellOverlay.transform.SetParent(mainCanvas.transform, false);
 
             RectTransform rt = sellOverlay.AddComponent<RectTransform>();
-            // Stretch to fill entire shop panel
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
+            // Anchor to bottom, full width
+            rt.anchorMin = new Vector2(0, 0);
+            rt.anchorMax = new Vector2(1, 0);
+            rt.pivot = new Vector2(0.5f, 0);
+            // Height = shop panel height + shop panel offset from bottom
+            float sellHeight = shopPanel.sizeDelta.y + shopPanel.anchoredPosition.y;
+            rt.sizeDelta = new Vector2(0, sellHeight);
+            rt.anchoredPosition = Vector2.zero; // Sits at bottom of screen
 
-            // Semi-transparent red/gold background
+            // Semi-transparent dark red background
             Image bg = sellOverlay.AddComponent<Image>();
-            bg.color = new Color(0.6f, 0.2f, 0.1f, 0.95f);
+            bg.color = new Color(0.5f, 0.15f, 0.1f, 0.92f);
             bg.raycastTarget = true;
 
             // Add drop handler for selling
             SellDropZone dropZone = sellOverlay.AddComponent<SellDropZone>();
 
-            // Sell text in center
+            // Top border line (gold accent)
+            GameObject topBorder = new GameObject("TopBorder");
+            topBorder.transform.SetParent(sellOverlay.transform, false);
+            RectTransform topBorderRT = topBorder.AddComponent<RectTransform>();
+            topBorderRT.anchorMin = new Vector2(0, 1);
+            topBorderRT.anchorMax = new Vector2(1, 1);
+            topBorderRT.pivot = new Vector2(0.5f, 1);
+            topBorderRT.sizeDelta = new Vector2(0, 4);
+            topBorderRT.anchoredPosition = Vector2.zero;
+            Image topBorderImg = topBorder.AddComponent<Image>();
+            topBorderImg.color = new Color(1f, 0.75f, 0.3f, 1f);
+            topBorderImg.raycastTarget = false;
+
+            // Inner border frame
+            GameObject borderFrame = new GameObject("BorderFrame");
+            borderFrame.transform.SetParent(sellOverlay.transform, false);
+            RectTransform borderRT = borderFrame.AddComponent<RectTransform>();
+            borderRT.anchorMin = Vector2.zero;
+            borderRT.anchorMax = Vector2.one;
+            borderRT.offsetMin = new Vector2(12, 12);
+            borderRT.offsetMax = new Vector2(-12, -12);
+            Image borderImg = borderFrame.AddComponent<Image>();
+            borderImg.color = Color.clear;
+            borderImg.raycastTarget = false;
+            Outline borderOutline = borderFrame.AddComponent<Outline>();
+            borderOutline.effectColor = new Color(1f, 0.7f, 0.3f, 0.6f);
+            borderOutline.effectDistance = new Vector2(2, -2);
+
+            // Sell text - centered in the overlay
             GameObject textObj = new GameObject("SellText");
             textObj.transform.SetParent(sellOverlay.transform, false);
 
             RectTransform textRT = textObj.AddComponent<RectTransform>();
             textRT.anchorMin = Vector2.zero;
             textRT.anchorMax = Vector2.one;
-            textRT.offsetMin = Vector2.zero;
-            textRT.offsetMax = Vector2.zero;
+            textRT.offsetMin = new Vector2(20, 20);
+            textRT.offsetMax = new Vector2(-20, -20);
 
             sellText = textObj.AddComponent<Text>();
-            sellText.text = "Sell Unit for $0";
+            sellText.text = "SELL UNIT\n$0";
             sellText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            sellText.fontSize = 28;
+            sellText.fontSize = 32;
             sellText.fontStyle = FontStyle.Bold;
             sellText.alignment = TextAnchor.MiddleCenter;
             sellText.color = new Color(1f, 0.9f, 0.4f);
 
+            // Add shadow for depth
+            Shadow shadow = textObj.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0, 0, 0, 0.9f);
+            shadow.effectDistance = new Vector2(3, -3);
+
             // Add outline for visibility
             Outline outline = textObj.AddComponent<Outline>();
-            outline.effectColor = new Color(0, 0, 0, 0.8f);
+            outline.effectColor = new Color(0.3f, 0.1f, 0.05f, 1f);
             outline.effectDistance = new Vector2(2, -2);
 
             sellOverlay.SetActive(false);
@@ -3467,9 +3503,9 @@ namespace Crestforge.UI
             isSellModeActive = true;
 
             int sellValue = unit.GetSellValue();
-            sellText.text = $"Sell {unit.template.unitName} for ${sellValue}";
+            sellText.text = $"SELL {unit.template.unitName.ToUpper()}\n<size=40>${sellValue}</size>";
 
-            // Show sell overlay (covers shop cards as a child of shopPanel)
+            // Show sell overlay
             if (shopPanel != null)
             {
                 shopPanel.gameObject.SetActive(true);
@@ -4638,6 +4674,114 @@ namespace Crestforge.UI
         {
             isTooltipPinned = true;
             ShowTooltip(serverUnit);
+        }
+
+        /// <summary>
+        /// Show tooltip for a shop unit (multiplayer mode)
+        /// </summary>
+        public void ShowTooltip(ServerShopUnit shopUnit)
+        {
+            if (shopUnit == null)
+            {
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Get the unit template from ServerGameState
+            var serverState = ServerGameState.Instance;
+            var template = serverState?.GetUnitTemplate(shopUnit.unitId);
+
+            if (template == null)
+            {
+                Debug.LogWarning($"[GameUI] Could not find template for shop unit: {shopUnit.unitId}");
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            tooltipPanel.gameObject.SetActive(true);
+
+            // Set sprite - prefer 3D portrait
+            if (tooltipSprite != null)
+            {
+                tooltipSprite.sprite = UnitPortraitGenerator.GetPortrait(shopUnit.unitId, shopUnit.name ?? template.unitName);
+                tooltipSprite.enabled = true;
+            }
+
+            // Set name with cost color
+            tooltipTitle.text = shopUnit.name ?? template.unitName;
+            tooltipTitle.color = GetCostColor(shopUnit.cost);
+
+            // Set cost (shop units are always 1-star)
+            tooltipCost.text = $"${shopUnit.cost}  ★";
+
+            // Set stats from template base stats
+            string stats = $"HP: {template.baseStats.health}    ATK: {template.baseStats.attack}\n";
+            stats += $"Armor: {template.baseStats.armor}    Magic Resist: {template.baseStats.magicResist}\n";
+            stats += $"Attack Speed: {template.baseStats.attackSpeed:F2}    Range: {template.baseStats.range}";
+            tooltipStats.text = stats;
+
+            // Set traits
+            string traits = "";
+            if (shopUnit.traits != null && shopUnit.traits.Length > 0)
+            {
+                traits = string.Join(", ", shopUnit.traits);
+            }
+            else if (template.traits != null)
+            {
+                foreach (var trait in template.traits)
+                {
+                    if (trait != null)
+                    {
+                        if (traits.Length > 0) traits += ", ";
+                        traits += trait.traitName;
+                    }
+                }
+            }
+            tooltipTraits.text = traits.Length > 0 ? traits : "None";
+
+            // Set ability
+            if (template.ability != null)
+            {
+                tooltipAbility.text = $"<b>{template.ability.abilityName}</b>\n{template.ability.description}";
+            }
+            else
+            {
+                tooltipAbility.text = "No ability";
+            }
+
+            // Clear items (shop units don't have items)
+            tooltipUnit = null;
+            foreach (var slot in tooltipItemSlots)
+            {
+                if (slot != null && slot.gameObject != null)
+                    Destroy(slot.gameObject);
+            }
+            tooltipItemSlots.Clear();
+            if (tooltipItemContainer != null)
+            {
+                foreach (Transform child in tooltipItemContainer)
+                {
+                    Destroy(child.gameObject);
+                }
+                tooltipItemContainer.gameObject.SetActive(false);
+            }
+            if (tooltipItemsLabel != null)
+            {
+                Transform dividerBeforeItems = tooltipItemsLabel.transform.parent.GetChild(
+                    tooltipItemsLabel.transform.GetSiblingIndex() - 1);
+                if (dividerBeforeItems != null)
+                    dividerBeforeItems.gameObject.SetActive(false);
+                tooltipItemsLabel.gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// Show tooltip and keep it pinned for shop units (multiplayer mode)
+        /// </summary>
+        public void ShowTooltipPinned(ServerShopUnit shopUnit)
+        {
+            isTooltipPinned = true;
+            ShowTooltip(shopUnit);
         }
 
         /// <summary>
