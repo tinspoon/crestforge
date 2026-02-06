@@ -34,6 +34,9 @@ namespace Crestforge.Visuals
         // Whether the viewer is on the opposite side (camera at 180°), requiring reversed bench order
         private bool viewFromOppositeSide = false;
 
+        // Pending merge tracking - don't revert star levels for these units until server confirms
+        private HashSet<string> pendingMergeInstanceIds = new HashSet<string>();
+
         /// <summary>
         /// Whether this board's units have been teleported away for combat
         /// </summary>
@@ -128,6 +131,16 @@ namespace Crestforge.Visuals
                 {
                     existing.SetPositionAndFaceCamera(worldPos);
                 }
+                // Update stars if star level changed (e.g. after merge)
+                // Skip if this is a pending merge and we would be downgrading (wait for server confirmation)
+                if (existing.DisplayedStarLevel != serverUnit.starLevel)
+                {
+                    bool wouldDowngrade = serverUnit.starLevel < existing.DisplayedStarLevel;
+                    if (!wouldDowngrade || !IsPendingMerge(serverUnit.instanceId))
+                    {
+                        existing.UpdateStars(serverUnit.starLevel);
+                    }
+                }
                 // Update items
                 existing.SetServerItems(serverUnit.items);
                 return existing;
@@ -198,14 +211,47 @@ namespace Crestforge.Visuals
                         existing.FaceCamera();
                     }
 
+                    // Update stars if star level changed (e.g. after merge)
+                    // Skip if this is a pending merge and we would be downgrading (wait for server confirmation)
+                    if (existing.DisplayedStarLevel != serverUnit.starLevel)
+                    {
+                        bool wouldDowngrade = serverUnit.starLevel < existing.DisplayedStarLevel;
+                        if (!wouldDowngrade || !IsPendingMerge(serverUnit.instanceId))
+                        {
+                            existing.UpdateStars(serverUnit.starLevel);
+                        }
+                    }
                     existing.SetServerItems(serverUnit.items);
                     return existing;
                 }
                 else
                 {
-                    // Different unit - destroy old and create new
-                    Destroy(existing.gameObject);
-                    benchVisuals.Remove(slotIndex);
+                    // Different unit - check if it's a pending purchase being confirmed
+                    bool isPendingVisual = existing.ServerInstanceId != null &&
+                                           existing.ServerInstanceId.StartsWith("pending_");
+                    bool isSameUnitType = existing.UnitId == serverUnit.unitId;
+
+                    if (isPendingVisual && isSameUnitType)
+                    {
+                        // This is a pending purchase being confirmed - just update the instanceId
+                        // Don't destroy/recreate to avoid flicker
+                        existing.ServerInstanceId = serverUnit.instanceId;
+                        existing.gameObject.name = $"BenchUnit_{serverUnit.name}_{slotIndex}";
+
+                        // Update any other data that might have changed
+                        if (existing.DisplayedStarLevel != serverUnit.starLevel)
+                        {
+                            existing.UpdateStars(serverUnit.starLevel);
+                        }
+                        existing.SetServerItems(serverUnit.items);
+                        return existing;
+                    }
+                    else
+                    {
+                        // Actually a different unit - destroy old and create new
+                        Destroy(existing.gameObject);
+                        benchVisuals.Remove(slotIndex);
+                    }
                 }
             }
 
@@ -277,6 +323,32 @@ namespace Crestforge.Visuals
         /// Internal bench visuals dictionary for drag operations (use with caution)
         /// </summary>
         internal Dictionary<int, UnitVisual3D> BenchVisualsInternal => benchVisuals;
+
+        /// <summary>
+        /// Mark a unit as having a pending optimistic merge.
+        /// The star level won't be reverted by sync until server confirms.
+        /// </summary>
+        public void MarkPendingMerge(string instanceId)
+        {
+            if (!string.IsNullOrEmpty(instanceId))
+                pendingMergeInstanceIds.Add(instanceId);
+        }
+
+        /// <summary>
+        /// Clear all pending merges (called when server state is received)
+        /// </summary>
+        public void ClearPendingMerges()
+        {
+            pendingMergeInstanceIds.Clear();
+        }
+
+        /// <summary>
+        /// Check if a unit has a pending merge (don't revert its star level)
+        /// </summary>
+        public bool IsPendingMerge(string instanceId)
+        {
+            return !string.IsNullOrEmpty(instanceId) && pendingMergeInstanceIds.Contains(instanceId);
+        }
 
         /// <summary>
         /// Add or update a board visual (for drag operations)
@@ -659,6 +731,7 @@ namespace Crestforge.Visuals
             visual.Initialize(tempUnit, isEnemy);
             visual.SetPosition(worldPos);
             visual.ServerInstanceId = serverUnit.instanceId;
+            visual.UnitId = serverUnit.unitId;
             visual.SetServerItems(serverUnit.items);
 
             // If viewing from opposite side, rotate unit to face that camera

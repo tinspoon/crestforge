@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 using System.Collections.Generic;
 using Crestforge.Core;
 using Crestforge.Systems;
@@ -114,9 +115,13 @@ namespace Crestforge.UI
         private bool selectionShown = false;
         private bool isInitialized = false;
         private bool isTooltipPinned = false;
-        private bool isCrestTooltipPinned = false;
         private TraitData hoveredTrait = null;
+        private GameObject traitTooltipBlocker = null;
         private List<GameObject> traitTooltipTierEntries = new List<GameObject>();
+        private List<GameObject> crestIconEntries = new List<GameObject>();
+        private GameObject crestTooltipBlocker = null;
+        private bool crestTooltipShowing = false;
+        private GameObject activeCrestIcon = null;
         private UnitInstance tooltipUnit = null;
         private List<TooltipItemSlot> tooltipItemSlots = new List<TooltipItemSlot>();
         private bool showingTemporaryItemInfo = false;
@@ -127,9 +132,29 @@ namespace Crestforge.UI
         private UnitInstance unitBeingDragged;
         private bool isSellModeActive = false;
 
+        // Unit detail panel (mobile bottom sheet)
+        private RectTransform unitDetailPanel;
+        private Image unitDetailSprite;
+        private Text unitDetailName;
+        private Text unitDetailCost;
+        private Text unitDetailStats;
+        private Text unitDetailTraits;
+        private Text unitDetailAbility;
+        private bool unitDetailVisible = false;
+        private int detailPanelShopIndex = -1;
+
         // Multiplayer helper
         private bool IsMultiplayer => ServerGameState.Instance != null && ServerGameState.Instance.IsInGame;
         private ServerGameState serverState => ServerGameState.Instance;
+
+        // Optimistic updates - track pending changes before server confirms
+        private int optimisticGoldDelta = 0;
+        private int optimisticFreeRerollDelta = 0;
+        private HashSet<int> pendingShopPurchases = new HashSet<int>(); // Shop slots with pending purchases
+
+        // Reroll animation state
+        private bool waitingForRerollResponse = false;
+        private Coroutine rerollAnimationCoroutine;
 
         private void Awake()
         {
@@ -165,6 +190,7 @@ namespace Crestforge.UI
             {
                 ServerGameState.Instance.OnActionResult += HandleActionResult;
                 ServerGameState.Instance.OnGameEnded += HandleGameEnded;
+                ServerGameState.Instance.OnStateUpdated += ClearOptimisticGold;
             }
         }
 
@@ -175,7 +201,23 @@ namespace Crestforge.UI
             {
                 ServerGameState.Instance.OnActionResult -= HandleActionResult;
                 ServerGameState.Instance.OnGameEnded -= HandleGameEnded;
+                ServerGameState.Instance.OnStateUpdated -= ClearOptimisticGold;
             }
+        }
+
+        private void ClearOptimisticGold()
+        {
+            optimisticGoldDelta = 0;
+            optimisticFreeRerollDelta = 0;
+            pendingShopPurchases.Clear();
+        }
+
+        /// <summary>
+        /// Apply optimistic gold change for selling a unit (before server confirms)
+        /// </summary>
+        public void ApplyOptimisticSellGold(int sellValue)
+        {
+            optimisticGoldDelta += sellValue;
         }
 
         private void HandleActionResult(string action, bool success)
@@ -274,7 +316,8 @@ namespace Crestforge.UI
             // Hide tooltip when clicking anywhere (except on unit cards, which handle their own clicks)
             bool itemTooltipActive = tooltipPanel != null && tooltipPanel.gameObject.activeSelf;
             bool crestTooltipActive = crestTooltipPanel != null && crestTooltipPanel.gameObject.activeSelf;
-            if (Input.GetMouseButtonDown(0) && (itemTooltipActive || crestTooltipActive))
+            bool detailPanelActive = unitDetailVisible && unitDetailPanel != null && unitDetailPanel.gameObject.activeSelf;
+            if (Input.GetMouseButtonDown(0) && (itemTooltipActive || crestTooltipActive || detailPanelActive))
             {
                 // Check if clicking on a UI element
                 var eventSystem = UnityEngine.EventSystems.EventSystem.current;
@@ -287,8 +330,9 @@ namespace Crestforge.UI
                     var results = new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
                     eventSystem.RaycastAll(pointerData, results);
 
-                    // Check if any hit object is a UnitCardUI, ItemSlotUI, CrestSlotUI, TooltipItemSlot, or the tooltip itself
+                    // Check if any hit object is a UnitCardUI, ItemSlotUI, CrestSlotUI, TooltipItemSlot, or the tooltip/detail panel itself
                     bool clickedOnTooltipSource = false;
+                    bool clickedOnDetailPanel = false;
                     foreach (var result in results)
                     {
                         if (result.gameObject.GetComponentInParent<UnitCardUI>() != null ||
@@ -298,18 +342,27 @@ namespace Crestforge.UI
                             (tooltipPanel != null && result.gameObject.transform.IsChildOf(tooltipPanel.transform)))
                         {
                             clickedOnTooltipSource = true;
-                            break;
+                        }
+                        if (unitDetailPanel != null && result.gameObject.transform.IsChildOf(unitDetailPanel.transform))
+                        {
+                            clickedOnDetailPanel = true;
                         }
                     }
 
                     if (!clickedOnTooltipSource)
                     {
                         isTooltipPinned = false;
-                        isCrestTooltipPinned = false;
+
                         showingTemporaryItemInfo = false;
                         tooltipUnit = null;
                         HideTooltip();
                         HideCrestTooltip();
+                    }
+
+                    // Dismiss detail panel when clicking outside it (but not on shop cards)
+                    if (detailPanelActive && !clickedOnDetailPanel && !clickedOnTooltipSource)
+                    {
+                        HideUnitDetailPanel();
                     }
                 }
             }
@@ -338,8 +391,11 @@ namespace Crestforge.UI
                 GameObject canvasObj = new GameObject("GameCanvas");
                 mainCanvas = canvasObj.AddComponent<Canvas>();
                 mainCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvasObj.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                canvasObj.GetComponent<CanvasScaler>().referenceResolution = new Vector2(1080, 1920);
+                mainCanvas.sortingOrder = 100;
+                CanvasScaler scaler = canvasObj.AddComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1080, 1920);
+                scaler.matchWidthOrHeight = 0.5f;
                 canvasObj.AddComponent<GraphicRaycaster>();
             }
 
@@ -359,6 +415,7 @@ namespace Crestforge.UI
             CreateTraitTooltip();
             CreateCrestPanel();
             CreateGameEndPanel();
+            CreateUnitDetailPanel();
         }
 
         private void CreateTopBar()
@@ -434,6 +491,23 @@ namespace Crestforge.UI
             opponentInfoText.gameObject.SetActive(false);
         }
 
+        /// <summary>
+        /// Offset the top bar downward to make room for other UI (e.g., scout panel).
+        /// </summary>
+        public void SetTopBarOffset(float yOffset)
+        {
+            if (topBar != null)
+            {
+                topBar.anchoredPosition = new Vector2(0, -yOffset);
+            }
+            // Reposition crest panel below top bar (80px) + 5px gap
+            if (crestPanel != null)
+            {
+                float crestY = -(yOffset + 80f + 5f);
+                crestPanel.anchoredPosition = new Vector2(4, crestY);
+            }
+        }
+
         private void CreateBottomPanel()
         {
             // Bench section - now handled by 3D visuals in BoardManager3D
@@ -448,92 +522,237 @@ namespace Crestforge.UI
 
         private void CreateShopSection(Transform parent)
         {
-            // Shop panel at bottom of screen
-            GameObject shopObj = CreatePanel("ShopPanel", parent);
-            shopPanel = shopObj.GetComponent<RectTransform>();
+            // Shop panel at bottom of screen - mobile optimized layout
+            // Layout: [Reroll] [Cards] [XP] in a single row
+            // No background - transparent panel
+            GameObject shopObj = new GameObject("ShopPanel");
+            shopObj.transform.SetParent(parent, false);
+            shopPanel = shopObj.AddComponent<RectTransform>();
             shopPanel.anchorMin = new Vector2(0, 0);
             shopPanel.anchorMax = new Vector2(1, 0);
             shopPanel.pivot = new Vector2(0.5f, 0);
-            shopPanel.sizeDelta = new Vector2(0, 180);
-            shopPanel.anchoredPosition = new Vector2(0, 30); // Safe area offset
-            shopObj.GetComponent<Image>().color = new Color(0.15f, 0.15f, 0.2f, 0.95f);
-            
+            shopPanel.sizeDelta = new Vector2(0, 240); // Height for cards
+            shopPanel.anchoredPosition = new Vector2(0, 120); // Margin from bottom
+            // No Image component = transparent background
+
             // Also assign to bottomPanel for compatibility
             bottomPanel = shopPanel;
 
-            VerticalLayoutGroup vlg = shopObj.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 5;
-            vlg.padding = new RectOffset(10, 10, 8, 8);
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
+            // Calculate dimensions based on screen width
+            float screenWidth = Screen.width;
+            float buttonSize = 105f; // Square buttons
+            float sidePadding = 8f;
+            float cardSpacing = 24f; // Larger gap between cards
 
-            // Shop header with buttons
-            GameObject headerObj = new GameObject("ShopHeader");
-            headerObj.transform.SetParent(shopPanel.transform);
-            RectTransform headerRT = headerObj.AddComponent<RectTransform>();
-            headerRT.sizeDelta = new Vector2(0, 36);
-            LayoutElement headerLE = headerObj.AddComponent<LayoutElement>();
-            headerLE.preferredHeight = 36;
-            
-            HorizontalLayoutGroup headerHLG = headerObj.AddComponent<HorizontalLayoutGroup>();
-            headerHLG.spacing = 10;
-            headerHLG.childAlignment = TextAnchor.MiddleLeft;
-            headerHLG.childControlWidth = false;
-            headerHLG.childControlHeight = true;
+            // Available width for cards = screen - (2 buttons) - (2 side padding)
+            float cardsAreaWidth = screenWidth - (buttonSize * 2) - (sidePadding * 2);
+            float cardWidth = (cardsAreaWidth - (cardSpacing * 3)) / 4f;
+            cardWidth = Mathf.Clamp(cardWidth, 90f, 140f); // Bigger cards
+            float cardHeight = 200f; // Taller cards
 
-            Text shopLabel = CreateText("SHOP", headerRT, 70);
-            shopLabel.fontStyle = FontStyle.Bold;
-            shopLabel.fontSize = 16;
+            // Left button - Buy XP (swapped)
+            buyXPButton = CreateShopSideButton("+4 XP\n$4", shopPanel, buttonSize, buttonSize, OnBuyXPClicked);
+            RectTransform buyXPRT = buyXPButton.GetComponent<RectTransform>();
+            buyXPRT.anchorMin = new Vector2(0, 0f);
+            buyXPRT.anchorMax = new Vector2(0, 0f);
+            buyXPRT.pivot = new Vector2(0, 0f);
+            buyXPRT.anchoredPosition = new Vector2(sidePadding, 20);
 
-            // Spacer
-            GameObject spacer = new GameObject("Spacer");
-            spacer.transform.SetParent(headerRT.transform);
-            spacer.AddComponent<LayoutElement>().flexibleWidth = 1;
+            // Right button - Reroll (swapped)
+            rerollButton = CreateShopSideButton("Reroll\n$2", shopPanel, buttonSize, buttonSize, OnRerollClicked);
+            RectTransform rerollRT = rerollButton.GetComponent<RectTransform>();
+            rerollRT.anchorMin = new Vector2(1, 0f);
+            rerollRT.anchorMax = new Vector2(1, 0f);
+            rerollRT.pivot = new Vector2(1, 0f);
+            rerollRT.anchoredPosition = new Vector2(-sidePadding, 20);
 
-            rerollButton = CreateButton("🔄 $2", headerRT, 75, OnRerollClicked);
-            buyXPButton = CreateButton("📈 $4", headerRT, 75, OnBuyXPClicked);
-            lockButton = CreateButton("🔓", headerRT, 45, OnLockClicked);
-
-            // Shop slots container
+            // Shop slots container - centered horizontally, anchored to bottom
             GameObject slotsObj = new GameObject("ShopSlots");
-            slotsObj.transform.SetParent(shopPanel.transform);
+            slotsObj.transform.SetParent(shopPanel.transform, false);
             shopSlotContainer = slotsObj.AddComponent<RectTransform>();
-            shopSlotContainer.sizeDelta = new Vector2(0, 120);
-            
+            // Anchor to bottom-center of panel
+            shopSlotContainer.anchorMin = new Vector2(0.5f, 0f);
+            shopSlotContainer.anchorMax = new Vector2(0.5f, 0f);
+            shopSlotContainer.pivot = new Vector2(0.5f, 0f);
+            shopSlotContainer.anchoredPosition = new Vector2(0, 20); // 20px up from panel bottom
+
             HorizontalLayoutGroup slotsHLG = slotsObj.AddComponent<HorizontalLayoutGroup>();
-            slotsHLG.spacing = 6;
+            slotsHLG.spacing = cardSpacing;
             slotsHLG.childAlignment = TextAnchor.MiddleCenter;
             slotsHLG.childControlWidth = false;
-            slotsHLG.childControlHeight = true;
+            slotsHLG.childControlHeight = false;
             slotsHLG.childForceExpandWidth = false;
+            slotsHLG.childForceExpandHeight = false;
 
-            LayoutElement slotsLE = slotsObj.AddComponent<LayoutElement>();
-            slotsLE.preferredHeight = 120;
+            // Content size fitter to size container to its children
+            ContentSizeFitter slotsFitter = slotsObj.AddComponent<ContentSizeFitter>();
+            slotsFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            slotsFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Create shop card slots
+            // Create shop card slots (4 cards) with calculated dimensions
             for (int i = 0; i < GameConstants.Economy.SHOP_SIZE; i++)
             {
-                var card = CreateUnitCard(shopSlotContainer, i, true);
+                var card = CreateUnitCard(shopSlotContainer, i, true, cardWidth, cardHeight);
                 shopCards.Add(card);
             }
 
-            // Create sell overlay as sibling (not child) so it's visible even when shop is hidden
-            CreateSellOverlay(mainCanvas.transform);
+            // Lock button - small toggle in corner of reroll button
+            CreateLockToggle(rerollButton.transform);
+
+            // Hide shop initially - will be shown when game starts
+            shopPanel.gameObject.SetActive(false);
+
+            // Create sell overlay as child of shop panel (fills same area)
+            CreateSellOverlay(shopPanel.transform);
+        }
+
+        private Button CreateShopSideButton(string text, Transform parent, float width, float height, UnityEngine.Events.UnityAction onClick)
+        {
+            GameObject btnObj = new GameObject($"Btn_{text.Replace("\n", "")}");
+            btnObj.transform.SetParent(parent, false);
+            RectTransform rt = btnObj.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(width, height);
+
+            Image bg = btnObj.AddComponent<Image>();
+            bg.sprite = CreateRoundedRectSprite(8);
+            bg.type = Image.Type.Sliced;
+            bg.color = new Color(0.2f, 0.2f, 0.25f, 0.95f);
+
+            // Border
+            Outline outline = btnObj.AddComponent<Outline>();
+            outline.effectColor = new Color(0.4f, 0.4f, 0.45f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+
+            LayoutElement le = btnObj.AddComponent<LayoutElement>();
+            le.preferredWidth = width;
+            le.preferredHeight = height;
+            le.minWidth = width;
+
+            // Button text
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(btnObj.transform, false);
+            RectTransform textRT = textObj.AddComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.offsetMin = new Vector2(4, 4);
+            textRT.offsetMax = new Vector2(-4, -4);
+
+            Text btnText = textObj.AddComponent<Text>();
+            btnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            btnText.text = text;
+            btnText.fontSize = 14;
+            btnText.fontStyle = FontStyle.Bold;
+            btnText.alignment = TextAnchor.MiddleCenter;
+            btnText.color = Color.white;
+
+            Button btn = btnObj.AddComponent<Button>();
+            btn.targetGraphic = bg;
+            btn.onClick.AddListener(onClick);
+
+            // Color transitions
+            ColorBlock colors = btn.colors;
+            colors.normalColor = new Color(0.2f, 0.2f, 0.25f, 0.95f);
+            colors.highlightedColor = new Color(0.3f, 0.3f, 0.35f, 0.95f);
+            colors.pressedColor = new Color(0.15f, 0.15f, 0.2f, 0.95f);
+            colors.selectedColor = new Color(0.25f, 0.25f, 0.3f, 0.95f);
+            btn.colors = colors;
+
+            return btn;
+        }
+
+        private void CreateLockToggle(Transform parent)
+        {
+            // Small lock toggle button in top-right corner of reroll button
+            GameObject lockObj = new GameObject("LockToggle");
+            lockObj.transform.SetParent(parent, false);
+            RectTransform rt = lockObj.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(1, 1);
+            rt.anchorMax = new Vector2(1, 1);
+            rt.pivot = new Vector2(1, 1);
+            rt.sizeDelta = new Vector2(28, 28);
+            rt.anchoredPosition = new Vector2(4, 4);
+
+            Image bg = lockObj.AddComponent<Image>();
+            bg.color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
+
+            // Lock icon text
+            GameObject textObj = new GameObject("Icon");
+            textObj.transform.SetParent(lockObj.transform, false);
+            RectTransform textRT = textObj.AddComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.offsetMin = Vector2.zero;
+            textRT.offsetMax = Vector2.zero;
+
+            Text iconText = textObj.AddComponent<Text>();
+            iconText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            iconText.text = "🔓";
+            iconText.fontSize = 14;
+            iconText.alignment = TextAnchor.MiddleCenter;
+
+            lockButton = lockObj.AddComponent<Button>();
+            lockButton.targetGraphic = bg;
+            lockButton.onClick.AddListener(OnLockClicked);
+        }
+
+        private Button CreateShopActionButton(string text, Transform parent, float width, UnityEngine.Events.UnityAction onClick)
+        {
+            GameObject btnObj = CreatePanel($"Btn_{text}", parent);
+            RectTransform rt = btnObj.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(width, 44);
+
+            Image bg = btnObj.GetComponent<Image>();
+            bg.color = new Color(0.25f, 0.25f, 0.32f);
+
+            LayoutElement le = btnObj.AddComponent<LayoutElement>();
+            le.preferredWidth = width;
+            le.preferredHeight = 44;
+            le.minHeight = 44; // Touch target minimum
+
+            // Button text
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(btnObj.transform, false);
+            RectTransform textRT = textObj.AddComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.offsetMin = Vector2.zero;
+            textRT.offsetMax = Vector2.zero;
+
+            Text btnText = textObj.AddComponent<Text>();
+            btnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            btnText.text = text;
+            btnText.fontSize = 14;
+            btnText.fontStyle = FontStyle.Bold;
+            btnText.alignment = TextAnchor.MiddleCenter;
+            btnText.color = Color.white;
+
+            Button btn = btnObj.AddComponent<Button>();
+            btn.targetGraphic = bg;
+            btn.onClick.AddListener(onClick);
+
+            // Color transition for feedback
+            ColorBlock colors = btn.colors;
+            colors.normalColor = new Color(0.25f, 0.25f, 0.32f);
+            colors.highlightedColor = new Color(0.35f, 0.35f, 0.42f);
+            colors.pressedColor = new Color(0.2f, 0.2f, 0.25f);
+            colors.selectedColor = new Color(0.3f, 0.3f, 0.38f);
+            btn.colors = colors;
+
+            return btn;
         }
 
         private void CreateSellOverlay(Transform canvasParent)
         {
-            // Sell overlay is a separate panel at the bottom (same position as shop)
+            // Sell overlay is a child of the shop panel, so it fills the exact same area
             sellOverlay = new GameObject("SellOverlay");
-            sellOverlay.transform.SetParent(canvasParent, false);
+            sellOverlay.transform.SetParent(shopPanel.transform, false);
 
             RectTransform rt = sellOverlay.AddComponent<RectTransform>();
-            // Same anchoring as shop panel - bottom of screen
-            rt.anchorMin = new Vector2(0, 0);
-            rt.anchorMax = new Vector2(1, 0);
-            rt.pivot = new Vector2(0.5f, 0);
-            rt.sizeDelta = new Vector2(0, 180);
-            rt.anchoredPosition = new Vector2(0, 30);
+            // Stretch to fill entire shop panel
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
 
             // Semi-transparent red/gold background
             Image bg = sellOverlay.AddComponent<Image>();
@@ -767,8 +986,8 @@ namespace Crestforge.UI
 
             // Layout group directly on tooltip
             VerticalLayoutGroup vlg = tooltipObj.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(12, 12, 12, 12);
-            vlg.spacing = 6;
+            vlg.padding = new RectOffset(24, 24, 24, 24);
+            vlg.spacing = 12;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandWidth = true;
@@ -779,11 +998,11 @@ namespace Crestforge.UI
             headerRow.transform.SetParent(tooltipObj.transform, false);
             RectTransform headerRT = headerRow.AddComponent<RectTransform>();
             LayoutElement headerLE = headerRow.AddComponent<LayoutElement>();
-            headerLE.minHeight = 60;
-            headerLE.preferredHeight = 60;
-            headerLE.preferredWidth = 250;
+            headerLE.minHeight = 120;
+            headerLE.preferredHeight = 120;
+            headerLE.preferredWidth = 500;
             HorizontalLayoutGroup headerHLG = headerRow.AddComponent<HorizontalLayoutGroup>();
-            headerHLG.spacing = 10;
+            headerHLG.spacing = 20;
             headerHLG.childAlignment = TextAnchor.MiddleLeft;
             headerHLG.childControlWidth = true;
             headerHLG.childControlHeight = true;
@@ -794,18 +1013,18 @@ namespace Crestforge.UI
             GameObject spriteContainer = CreatePanel("SpriteContainer", headerRow.transform);
             spriteContainer.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.25f);
             LayoutElement spriteLE = spriteContainer.AddComponent<LayoutElement>();
-            spriteLE.minWidth = 56;
-            spriteLE.minHeight = 56;
-            spriteLE.preferredWidth = 56;
-            spriteLE.preferredHeight = 56;
-            
+            spriteLE.minWidth = 112;
+            spriteLE.minHeight = 112;
+            spriteLE.preferredWidth = 112;
+            spriteLE.preferredHeight = 112;
+
             tooltipSprite = new GameObject("TooltipSprite").AddComponent<Image>();
             tooltipSprite.transform.SetParent(spriteContainer.transform, false);
             RectTransform spriteRT = tooltipSprite.GetComponent<RectTransform>();
             spriteRT.anchorMin = Vector2.zero;
             spriteRT.anchorMax = Vector2.one;
-            spriteRT.offsetMin = new Vector2(4, 4);
-            spriteRT.offsetMax = new Vector2(-4, -4);
+            spriteRT.offsetMin = new Vector2(8, 8);
+            spriteRT.offsetMax = new Vector2(-8, -8);
             tooltipSprite.preserveAspect = true;
 
             // Name and cost column
@@ -814,68 +1033,68 @@ namespace Crestforge.UI
             RectTransform nameColRT = nameCol.AddComponent<RectTransform>();
             LayoutElement nameColLE = nameCol.AddComponent<LayoutElement>();
             nameColLE.flexibleWidth = 1;
-            nameColLE.minWidth = 150;
+            nameColLE.minWidth = 300;
             VerticalLayoutGroup nameVLG = nameCol.AddComponent<VerticalLayoutGroup>();
-            nameVLG.spacing = 2;
+            nameVLG.spacing = 4;
             nameVLG.childControlWidth = true;
             nameVLG.childControlHeight = true;
             nameVLG.childForceExpandWidth = true;
             nameVLG.childForceExpandHeight = false;
 
             // Title
-            tooltipTitle = CreateTooltipText("Unit Name", nameCol.transform, 18, FontStyle.Bold, Color.white, 24);
+            tooltipTitle = CreateTooltipText("Unit Name", nameCol.transform, 36, FontStyle.Bold, Color.white, 48);
 
             // Cost
-            tooltipCost = CreateTooltipText("$0 ★★★", nameCol.transform, 14, FontStyle.Normal, new Color(1f, 0.85f, 0.3f), 20);
+            tooltipCost = CreateTooltipText("$0 ★★★", nameCol.transform, 28, FontStyle.Normal, new Color(1f, 0.85f, 0.3f), 40);
 
             // Divider 1
             CreateTooltipDivider(tooltipObj.transform);
 
             // Stats label
-            CreateTooltipText("STATS", tooltipObj.transform, 10, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 14);
+            CreateTooltipText("STATS", tooltipObj.transform, 20, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 28);
 
             // Stats text
-            tooltipStats = CreateTooltipText("HP: 0  ATK: 0", tooltipObj.transform, 12, FontStyle.Normal, Color.white, 48);
+            tooltipStats = CreateTooltipText("HP: 0  ATK: 0", tooltipObj.transform, 24, FontStyle.Normal, Color.white, 96);
 
             // Divider 2
             CreateTooltipDivider(tooltipObj.transform);
 
             // Traits label
-            CreateTooltipText("TRAITS", tooltipObj.transform, 10, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 14);
+            CreateTooltipText("TRAITS", tooltipObj.transform, 20, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 28);
 
             // Traits text
-            tooltipTraits = CreateTooltipText("Trait1, Trait2", tooltipObj.transform, 12, FontStyle.Normal, new Color(0.5f, 0.85f, 0.5f), 18);
+            tooltipTraits = CreateTooltipText("Trait1, Trait2", tooltipObj.transform, 24, FontStyle.Normal, new Color(0.5f, 0.85f, 0.5f), 36);
 
             // Divider 3
             CreateTooltipDivider(tooltipObj.transform);
 
             // Ability label
-            CreateTooltipText("ABILITY", tooltipObj.transform, 10, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 14);
+            CreateTooltipText("ABILITY", tooltipObj.transform, 20, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 28);
 
             // Ability text
-            tooltipAbility = CreateTooltipText("Ability Name", tooltipObj.transform, 12, FontStyle.Normal, new Color(0.7f, 0.7f, 0.95f), 40);
+            tooltipAbility = CreateTooltipText("Ability Name", tooltipObj.transform, 24, FontStyle.Normal, new Color(0.7f, 0.7f, 0.95f), 80);
 
             // Items section (hidden when no items)
             CreateTooltipDivider(tooltipObj.transform);
 
             // Items label
-            tooltipItemsLabel = CreateTooltipText("ITEMS", tooltipObj.transform, 10, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 14);
+            tooltipItemsLabel = CreateTooltipText("ITEMS", tooltipObj.transform, 20, FontStyle.Bold, new Color(0.55f, 0.55f, 0.65f), 28);
 
             // Items container - horizontal layout for item slots
             GameObject itemContainer = new GameObject("ItemContainer");
             itemContainer.transform.SetParent(tooltipObj.transform, false);
             tooltipItemContainer = itemContainer.AddComponent<RectTransform>();
             HorizontalLayoutGroup itemHLG = itemContainer.AddComponent<HorizontalLayoutGroup>();
-            itemHLG.spacing = 6;
+            itemHLG.spacing = 12;
             itemHLG.childAlignment = TextAnchor.MiddleLeft;
             itemHLG.childControlWidth = false;
             itemHLG.childControlHeight = false;
             itemHLG.childForceExpandWidth = false;
             itemHLG.childForceExpandHeight = false;
             LayoutElement itemContainerLE = itemContainer.AddComponent<LayoutElement>();
-            itemContainerLE.minHeight = 40;
-            itemContainerLE.preferredHeight = 40;
-            itemContainerLE.preferredWidth = 250;
+            itemContainerLE.minHeight = 80;
+            itemContainerLE.preferredHeight = 80;
+            itemContainerLE.preferredWidth = 500;
 
             tooltipPanel.gameObject.SetActive(false);
         }
@@ -885,8 +1104,8 @@ namespace Crestforge.UI
             GameObject divider = CreatePanel("Divider", parent);
             divider.GetComponent<Image>().color = new Color(0.35f, 0.35f, 0.45f);
             LayoutElement le = divider.AddComponent<LayoutElement>();
-            le.minHeight = 1;
-            le.preferredHeight = 1;
+            le.minHeight = 2;
+            le.preferredHeight = 2;
         }
 
         private Text CreateTooltipText(string content, Transform parent, int fontSize, FontStyle style, Color color, float height)
@@ -905,77 +1124,43 @@ namespace Crestforge.UI
             LayoutElement le = obj.AddComponent<LayoutElement>();
             le.minHeight = height;
             le.preferredHeight = height;
-            le.preferredWidth = 250;
-            
+            le.preferredWidth = 500;
+
             return text;
         }
 
         private void CreateTraitPanel()
         {
-            // Panel on left side of screen - simple design
-            GameObject panelObj = CreatePanel("TraitPanel", mainCanvas.transform);
-            traitPanel = panelObj.GetComponent<RectTransform>();
-            
-            // Position on left side, anchored to top-left below top bar
-            traitPanel.anchorMin = new Vector2(0, 1);
-            traitPanel.anchorMax = new Vector2(0, 1);
-            traitPanel.pivot = new Vector2(0, 1);
-            traitPanel.sizeDelta = new Vector2(120, 300);
-            traitPanel.anchoredPosition = new Vector2(2, -85);
-            
-            Image panelBg = panelObj.GetComponent<Image>();
-            panelBg.color = new Color(0.08f, 0.08f, 0.12f, 0.95f);
+            // Minimal container on left side - no background, no title
+            // Just a vertical column of trait icons that grows upward from above the shop
+            GameObject panelObj = new GameObject("TraitPanel");
+            panelObj.transform.SetParent(mainCanvas.transform, false);
+            traitPanel = panelObj.AddComponent<RectTransform>();
 
-            // Add outline for polish
-            Outline outline = panelObj.AddComponent<Outline>();
-            outline.effectColor = new Color(0.25f, 0.25f, 0.35f);
-            outline.effectDistance = new Vector2(1, 1);
+            // Anchor to bottom-left, positioned just above the shop panel
+            traitPanel.anchorMin = new Vector2(0, 0);
+            traitPanel.anchorMax = new Vector2(0, 0);
+            traitPanel.pivot = new Vector2(0, 0);
+            traitPanel.sizeDelta = new Vector2(104, 0); // Width for icons, height auto-sized
+            traitPanel.anchoredPosition = new Vector2(4, 365); // Above shop (shop top ~360)
 
-            // Header
-            GameObject headerObj = new GameObject("Header");
-            headerObj.transform.SetParent(panelObj.transform, false);
-            RectTransform headerRT = headerObj.AddComponent<RectTransform>();
-            headerRT.anchorMin = new Vector2(0, 1);
-            headerRT.anchorMax = new Vector2(1, 1);
-            headerRT.pivot = new Vector2(0.5f, 1);
-            headerRT.sizeDelta = new Vector2(0, 24);
-            headerRT.anchoredPosition = Vector2.zero;
+            // Content size fitter so height grows with entries
+            ContentSizeFitter csf = panelObj.AddComponent<ContentSizeFitter>();
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            Image headerBg = headerObj.AddComponent<Image>();
-            headerBg.color = new Color(0.15f, 0.12f, 0.08f, 1f);
-
-            GameObject headerTextObj = new GameObject("HeaderText");
-            headerTextObj.transform.SetParent(headerObj.transform, false);
-            RectTransform headerTextRT = headerTextObj.AddComponent<RectTransform>();
-            headerTextRT.anchorMin = Vector2.zero;
-            headerTextRT.anchorMax = Vector2.one;
-            headerTextRT.offsetMin = new Vector2(8, 0);
-            headerTextRT.offsetMax = new Vector2(-8, 0);
-            Text headerText = headerTextObj.AddComponent<Text>();
-            headerText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            headerText.text = "TRAITS";
-            headerText.fontSize = 12;
-            headerText.fontStyle = FontStyle.Bold;
-            headerText.color = new Color(0.9f, 0.8f, 0.5f);
-            headerText.alignment = TextAnchor.MiddleLeft;
-
-            // Content container - simple vertical layout below header
-            GameObject contentObj = new GameObject("TraitContent");
-            contentObj.transform.SetParent(panelObj.transform, false);
-            traitContent = contentObj.AddComponent<RectTransform>();
-            traitContent.anchorMin = new Vector2(0, 0);
-            traitContent.anchorMax = new Vector2(1, 1);
-            traitContent.offsetMin = new Vector2(4, 4);
-            traitContent.offsetMax = new Vector2(-4, -28);
-
-            VerticalLayoutGroup vlg = contentObj.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 2;
+            // Vertical layout - entries stack upward (LowerLeft alignment + pivot at bottom)
+            VerticalLayoutGroup vlg = panelObj.AddComponent<VerticalLayoutGroup>();
+            vlg.spacing = 4;
             vlg.childControlWidth = true;
             vlg.childControlHeight = false;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
             vlg.padding = new RectOffset(0, 0, 0, 0);
-            vlg.childAlignment = TextAnchor.UpperLeft;
+            vlg.childAlignment = TextAnchor.LowerCenter;
+
+            // traitContent points to the same object (entries added directly)
+            traitContent = traitPanel;
 
             // Start hidden - will show when traits are present
             traitPanel.gameObject.SetActive(false);
@@ -983,15 +1168,15 @@ namespace Crestforge.UI
 
         private void CreateTraitTooltip()
         {
-            // Trait tooltip panel - appears when hovering trait entries
+            // Trait tooltip panel - appears when tapping trait icons
             GameObject tooltipObj = CreatePanel("TraitTooltip", mainCanvas.transform);
             traitTooltipPanel = tooltipObj.GetComponent<RectTransform>();
-            
-            // Position to the right of trait panel
-            traitTooltipPanel.anchorMin = new Vector2(0, 1);
-            traitTooltipPanel.anchorMax = new Vector2(0, 1);
-            traitTooltipPanel.pivot = new Vector2(0, 1);
-            traitTooltipPanel.anchoredPosition = new Vector2(118, -85);
+
+            // Position to the right of the trait icon column
+            traitTooltipPanel.anchorMin = new Vector2(0, 0);
+            traitTooltipPanel.anchorMax = new Vector2(0, 0);
+            traitTooltipPanel.pivot = new Vector2(0, 0);
+            traitTooltipPanel.anchoredPosition = new Vector2(64, 365);
             
             Image tooltipBg = tooltipObj.GetComponent<Image>();
             tooltipBg.color = new Color(0.1f, 0.1f, 0.15f, 0.95f);
@@ -1008,92 +1193,103 @@ namespace Crestforge.UI
 
             // Vertical layout
             VerticalLayoutGroup vlg = tooltipObj.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(12, 12, 10, 10);
-            vlg.spacing = 6;
+            vlg.padding = new RectOffset(24, 24, 20, 20);
+            vlg.spacing = 12;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
 
             // Title - larger
-            traitTooltipTitle = CreateTooltipText("Trait Name", tooltipObj.transform, 20, FontStyle.Bold, new Color(1f, 0.9f, 0.5f), 28);
-            traitTooltipTitle.GetComponent<LayoutElement>().preferredWidth = 240;
+            traitTooltipTitle = CreateTooltipText("Trait Name", tooltipObj.transform, 40, FontStyle.Bold, new Color(1f, 0.9f, 0.5f), 56);
+            traitTooltipTitle.GetComponent<LayoutElement>().preferredWidth = 480;
 
             // Description
-            traitTooltipDescription = CreateTooltipText("Description", tooltipObj.transform, 14, FontStyle.Italic, new Color(0.75f, 0.75f, 0.8f), 24);
+            traitTooltipDescription = CreateTooltipText("Description", tooltipObj.transform, 28, FontStyle.Italic, new Color(0.75f, 0.75f, 0.8f), 48);
 
             // Divider
             CreateTooltipDivider(tooltipObj.transform);
 
             // Tier bonuses label
-            CreateTooltipText("TIER BONUSES", tooltipObj.transform, 12, FontStyle.Bold, new Color(0.6f, 0.6f, 0.7f), 18);
+            CreateTooltipText("TIER BONUSES", tooltipObj.transform, 24, FontStyle.Bold, new Color(0.6f, 0.6f, 0.7f), 36);
 
             // Tier container
             GameObject tierContainer = new GameObject("TierContainer");
             tierContainer.transform.SetParent(tooltipObj.transform, false);
             traitTooltipTierContainer = tierContainer.AddComponent<RectTransform>();
             VerticalLayoutGroup tierVlg = tierContainer.AddComponent<VerticalLayoutGroup>();
-            tierVlg.spacing = 4;
+            tierVlg.spacing = 8;
             tierVlg.childControlWidth = true;
             tierVlg.childControlHeight = true;
             tierVlg.childForceExpandWidth = true;
             LayoutElement tierLE = tierContainer.AddComponent<LayoutElement>();
-            tierLE.preferredWidth = 240;
+            tierLE.preferredWidth = 480;
 
             // Divider
             CreateTooltipDivider(tooltipObj.transform);
 
             // Units with this trait label
-            CreateTooltipText("UNITS ON BOARD", tooltipObj.transform, 12, FontStyle.Bold, new Color(0.6f, 0.6f, 0.7f), 18);
+            CreateTooltipText("UNITS ON BOARD", tooltipObj.transform, 24, FontStyle.Bold, new Color(0.6f, 0.6f, 0.7f), 36);
 
             // Units list
-            traitTooltipUnits = CreateTooltipText("None", tooltipObj.transform, 14, FontStyle.Normal, new Color(0.6f, 0.85f, 0.6f), 24);
+            traitTooltipUnits = CreateTooltipText("None", tooltipObj.transform, 28, FontStyle.Normal, new Color(0.6f, 0.85f, 0.6f), 48);
 
             traitTooltipPanel.gameObject.SetActive(false);
+
+            // Full-screen invisible blocker to catch taps outside the tooltip
+            traitTooltipBlocker = new GameObject("TraitTooltipBlocker");
+            traitTooltipBlocker.transform.SetParent(mainCanvas.transform, false);
+            RectTransform blockerRT = traitTooltipBlocker.AddComponent<RectTransform>();
+            blockerRT.anchorMin = Vector2.zero;
+            blockerRT.anchorMax = Vector2.one;
+            blockerRT.offsetMin = Vector2.zero;
+            blockerRT.offsetMax = Vector2.zero;
+
+            Image blockerImg = traitTooltipBlocker.AddComponent<Image>();
+            blockerImg.color = Color.clear; // Invisible
+            blockerImg.raycastTarget = true;
+
+            Button blockerBtn = traitTooltipBlocker.AddComponent<Button>();
+            blockerBtn.transition = Selectable.Transition.None;
+            blockerBtn.onClick.AddListener(() => {
+                TraitEntryUI.DeselectAll();
+                HideTraitTooltip();
+            });
+
+            traitTooltipBlocker.SetActive(false);
         }
 
         private void CreateCrestPanel()
         {
-            // Crest panel - positioned on the left side, below traits panel
-            GameObject crestObj = CreatePanel("CrestPanel", mainCanvas.transform);
-            crestPanel = crestObj.GetComponent<RectTransform>();
+            // Minimal container on top-left - no background, no title
+            // Just a vertical column of crest icons that grows downward
+            GameObject crestObj = new GameObject("CrestPanel");
+            crestObj.transform.SetParent(mainCanvas.transform, false);
+            crestPanel = crestObj.AddComponent<RectTransform>();
 
-            // Position on left side, below trait panel
+            // Anchor to top-left, grows downward
             crestPanel.anchorMin = new Vector2(0, 1);
             crestPanel.anchorMax = new Vector2(0, 1);
             crestPanel.pivot = new Vector2(0, 1);
-            crestPanel.anchoredPosition = new Vector2(10, -400);
-            crestPanel.sizeDelta = new Vector2(105, 250); // Increased height for 1 major + 3 minor slots
+            crestPanel.sizeDelta = new Vector2(104, 0); // Width for icons, height auto-sized
+            crestPanel.anchoredPosition = new Vector2(4, -85); // Below top bar (80px) + 5px gap
 
-            Image panelBg = crestObj.GetComponent<Image>();
-            panelBg.color = new Color(0.12f, 0.12f, 0.18f, 0.9f);
+            // Content size fitter so height grows with entries
+            ContentSizeFitter csf = crestObj.AddComponent<ContentSizeFitter>();
+            csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            // Add vertical layout
+            // Vertical layout - icons stack downward
             VerticalLayoutGroup vlg = crestObj.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(5, 5, 5, 5);
             vlg.spacing = 4;
             vlg.childControlWidth = true;
             vlg.childControlHeight = false;
             vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+            vlg.padding = new RectOffset(0, 0, 0, 0);
+            vlg.childAlignment = TextAnchor.UpperCenter;
 
-            // Header
-            Text header = CreateTooltipText("CRESTS", crestObj.transform, 10, FontStyle.Bold, new Color(0.7f, 0.6f, 0.9f), 14);
-            header.alignment = TextAnchor.MiddleCenter;
-
-            // Major crest slot (on top)
-            majorCrestSlot = CrestSlotUI.Create(crestObj.transform, new Vector2(90, 50), "Major");
-
-            // Minor crest slots (up to 3)
-            for (int i = 0; i < 3; i++)
-            {
-                minorCrestSlots[i] = CrestSlotUI.Create(crestObj.transform, new Vector2(90, 50), "Minor");
-                minorCrestSlots[i].SetCrest(null); // Hide initially
-            }
-
-            // Initialize with no crests - this will hide the slots
-            majorCrestSlot.SetCrest(null);
-
-            // Hide the entire panel initially (will show when a crest is acquired)
+            // Hide initially - will show when crests are present
             crestPanel.gameObject.SetActive(false);
 
             // Create crest tooltip
@@ -1102,15 +1298,15 @@ namespace Crestforge.UI
 
         private void CreateCrestTooltip()
         {
-            // Crest tooltip panel - appears when hovering crest slot
+            // Crest tooltip panel - appears when tapping crest icons
             GameObject tooltipObj = CreatePanel("CrestTooltip", mainCanvas.transform);
             crestTooltipPanel = tooltipObj.GetComponent<RectTransform>();
 
-            // Position to the right of crest panel
+            // Default position (will be set dynamically when shown)
             crestTooltipPanel.anchorMin = new Vector2(0, 1);
             crestTooltipPanel.anchorMax = new Vector2(0, 1);
-            crestTooltipPanel.pivot = new Vector2(0, 1);
-            crestTooltipPanel.anchoredPosition = new Vector2(120, -400);
+            crestTooltipPanel.pivot = new Vector2(0, 0.5f);
+            crestTooltipPanel.anchoredPosition = new Vector2(112, -85);
 
             Image tooltipBg = tooltipObj.GetComponent<Image>();
             tooltipBg.color = new Color(0.1f, 0.1f, 0.15f, 0.95f);
@@ -1127,36 +1323,57 @@ namespace Crestforge.UI
 
             // Vertical layout
             VerticalLayoutGroup vlg = tooltipObj.AddComponent<VerticalLayoutGroup>();
-            vlg.padding = new RectOffset(12, 12, 10, 10);
-            vlg.spacing = 6;
+            vlg.padding = new RectOffset(24, 24, 20, 20);
+            vlg.spacing = 12;
             vlg.childControlWidth = true;
             vlg.childControlHeight = true;
             vlg.childForceExpandWidth = true;
             vlg.childForceExpandHeight = false;
 
             // Title
-            crestTooltipTitle = CreateTooltipText("Crest Name", tooltipObj.transform, 18, FontStyle.Bold, new Color(0.8f, 0.6f, 1f), 26);
-            crestTooltipTitle.GetComponent<LayoutElement>().preferredWidth = 220;
+            crestTooltipTitle = CreateTooltipText("Crest Name", tooltipObj.transform, 36, FontStyle.Bold, new Color(0.8f, 0.6f, 1f), 52);
+            crestTooltipTitle.GetComponent<LayoutElement>().preferredWidth = 440;
 
             // Type
-            crestTooltipType = CreateTooltipText("Minor Crest", tooltipObj.transform, 12, FontStyle.Italic, new Color(0.6f, 0.6f, 0.7f), 18);
+            crestTooltipType = CreateTooltipText("Minor Crest", tooltipObj.transform, 24, FontStyle.Italic, new Color(0.6f, 0.6f, 0.7f), 36);
 
             // Divider
             CreateTooltipDivider(tooltipObj.transform);
 
             // Description
-            crestTooltipDescription = CreateTooltipText("Description", tooltipObj.transform, 14, FontStyle.Normal, new Color(0.85f, 0.85f, 0.9f), 24);
+            crestTooltipDescription = CreateTooltipText("Description", tooltipObj.transform, 28, FontStyle.Normal, new Color(0.85f, 0.85f, 0.9f), 48);
 
             // Divider
             CreateTooltipDivider(tooltipObj.transform);
 
             // Bonus label
-            CreateTooltipText("BONUS", tooltipObj.transform, 11, FontStyle.Bold, new Color(0.6f, 0.6f, 0.7f), 16);
+            CreateTooltipText("BONUS", tooltipObj.transform, 22, FontStyle.Bold, new Color(0.6f, 0.6f, 0.7f), 32);
 
             // Bonus text
-            crestTooltipBonus = CreateTooltipText("Bonus effect", tooltipObj.transform, 13, FontStyle.Normal, new Color(0.7f, 0.9f, 0.7f), 20);
+            crestTooltipBonus = CreateTooltipText("Bonus effect", tooltipObj.transform, 26, FontStyle.Normal, new Color(0.7f, 0.9f, 0.7f), 40);
 
             crestTooltipPanel.gameObject.SetActive(false);
+
+            // Full-screen invisible blocker to catch taps outside the tooltip
+            crestTooltipBlocker = new GameObject("CrestTooltipBlocker");
+            crestTooltipBlocker.transform.SetParent(mainCanvas.transform, false);
+            RectTransform blockerRT = crestTooltipBlocker.AddComponent<RectTransform>();
+            blockerRT.anchorMin = Vector2.zero;
+            blockerRT.anchorMax = Vector2.one;
+            blockerRT.offsetMin = Vector2.zero;
+            blockerRT.offsetMax = Vector2.zero;
+
+            Image blockerImg = crestTooltipBlocker.AddComponent<Image>();
+            blockerImg.color = Color.clear;
+            blockerImg.raycastTarget = true;
+
+            Button blockerBtn = crestTooltipBlocker.AddComponent<Button>();
+            blockerBtn.transition = Selectable.Transition.None;
+            blockerBtn.onClick.AddListener(() => {
+                DismissCrestTooltip();
+            });
+
+            crestTooltipBlocker.SetActive(false);
         }
 
         private void CreateGameEndPanel()
@@ -1335,6 +1552,334 @@ namespace Crestforge.UI
             }
         }
 
+        private void CreateUnitDetailPanel()
+        {
+            // Full-width bottom sheet for unit details (mobile-friendly)
+            GameObject panelObj = CreatePanel("UnitDetailPanel", mainCanvas.transform);
+            unitDetailPanel = panelObj.GetComponent<RectTransform>();
+
+            // Anchor to bottom, full width
+            unitDetailPanel.anchorMin = new Vector2(0, 0);
+            unitDetailPanel.anchorMax = new Vector2(1, 0);
+            unitDetailPanel.pivot = new Vector2(0.5f, 0);
+            unitDetailPanel.sizeDelta = new Vector2(0, 280);
+            unitDetailPanel.anchoredPosition = new Vector2(0, 0);
+
+            // Dark semi-transparent background
+            Image panelBg = panelObj.GetComponent<Image>();
+            panelBg.color = new Color(0.1f, 0.1f, 0.15f, 0.98f);
+
+            // Add outline
+            Outline outline = panelObj.AddComponent<Outline>();
+            outline.effectColor = new Color(0.4f, 0.4f, 0.5f);
+            outline.effectDistance = new Vector2(0, 2);
+
+            // Main content layout
+            VerticalLayoutGroup vlg = panelObj.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(16, 16, 12, 16);
+            vlg.spacing = 8;
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = false;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            // Header row (sprite + name/cost)
+            GameObject headerRow = new GameObject("HeaderRow");
+            headerRow.transform.SetParent(panelObj.transform, false);
+            RectTransform headerRT = headerRow.AddComponent<RectTransform>();
+            LayoutElement headerLE = headerRow.AddComponent<LayoutElement>();
+            headerLE.minHeight = 70;
+            headerLE.preferredHeight = 70;
+            HorizontalLayoutGroup headerHLG = headerRow.AddComponent<HorizontalLayoutGroup>();
+            headerHLG.spacing = 12;
+            headerHLG.childAlignment = TextAnchor.MiddleLeft;
+            headerHLG.childControlWidth = true;
+            headerHLG.childControlHeight = true;
+            headerHLG.childForceExpandWidth = false;
+            headerHLG.childForceExpandHeight = true;
+
+            // Unit sprite container
+            GameObject spriteContainer = CreatePanel("SpriteContainer", headerRow.transform);
+            spriteContainer.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.25f);
+            LayoutElement spriteLE = spriteContainer.AddComponent<LayoutElement>();
+            spriteLE.minWidth = 64;
+            spriteLE.minHeight = 64;
+            spriteLE.preferredWidth = 64;
+            spriteLE.preferredHeight = 64;
+
+            unitDetailSprite = new GameObject("DetailSprite").AddComponent<Image>();
+            unitDetailSprite.transform.SetParent(spriteContainer.transform, false);
+            RectTransform spriteRT = unitDetailSprite.GetComponent<RectTransform>();
+            spriteRT.anchorMin = Vector2.zero;
+            spriteRT.anchorMax = Vector2.one;
+            spriteRT.offsetMin = new Vector2(4, 4);
+            spriteRT.offsetMax = new Vector2(-4, -4);
+            unitDetailSprite.preserveAspect = true;
+
+            // Name and cost column
+            GameObject nameCol = new GameObject("NameCol");
+            nameCol.transform.SetParent(headerRow.transform, false);
+            RectTransform nameColRT = nameCol.AddComponent<RectTransform>();
+            LayoutElement nameColLE = nameCol.AddComponent<LayoutElement>();
+            nameColLE.flexibleWidth = 1;
+            nameColLE.minWidth = 150;
+            VerticalLayoutGroup nameVLG = nameCol.AddComponent<VerticalLayoutGroup>();
+            nameVLG.spacing = 4;
+            nameVLG.childControlWidth = true;
+            nameVLG.childControlHeight = true;
+            nameVLG.childForceExpandWidth = true;
+            nameVLG.childForceExpandHeight = false;
+
+            // Name
+            unitDetailName = CreateDetailText("Unit Name", nameCol.transform, 20, FontStyle.Bold, Color.white, 28);
+
+            // Cost and stars
+            unitDetailCost = CreateDetailText("$0 ★★★", nameCol.transform, 16, FontStyle.Normal, new Color(1f, 0.85f, 0.3f), 22);
+
+            // Divider 1
+            CreateDetailDivider(panelObj.transform);
+
+            // Stats row
+            GameObject statsRow = new GameObject("StatsRow");
+            statsRow.transform.SetParent(panelObj.transform, false);
+            LayoutElement statsLE = statsRow.AddComponent<LayoutElement>();
+            statsLE.minHeight = 24;
+            statsLE.preferredHeight = 24;
+            HorizontalLayoutGroup statsHLG = statsRow.AddComponent<HorizontalLayoutGroup>();
+            statsHLG.spacing = 20;
+            statsHLG.childAlignment = TextAnchor.MiddleLeft;
+            statsHLG.childControlWidth = false;
+            statsHLG.childControlHeight = true;
+            statsHLG.childForceExpandWidth = false;
+
+            unitDetailStats = CreateDetailText("HP: 0  ATK: 0  DEF: 0  SPD: 0.0", statsRow.transform, 14, FontStyle.Normal, Color.white, 24);
+            unitDetailStats.GetComponent<LayoutElement>().flexibleWidth = 1;
+
+            // Divider 2
+            CreateDetailDivider(panelObj.transform);
+
+            // Traits row
+            unitDetailTraits = CreateDetailText("Traits: None", panelObj.transform, 14, FontStyle.Normal, new Color(0.5f, 0.85f, 0.5f), 22);
+
+            // Divider 3
+            CreateDetailDivider(panelObj.transform);
+
+            // Ability section
+            GameObject abilityLabel = new GameObject("AbilityLabel");
+            abilityLabel.transform.SetParent(panelObj.transform, false);
+            Text abilityLabelText = abilityLabel.AddComponent<Text>();
+            abilityLabelText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            abilityLabelText.text = "ABILITY";
+            abilityLabelText.fontSize = 11;
+            abilityLabelText.fontStyle = FontStyle.Bold;
+            abilityLabelText.color = new Color(0.55f, 0.55f, 0.65f);
+            LayoutElement labelLE = abilityLabel.AddComponent<LayoutElement>();
+            labelLE.minHeight = 16;
+            labelLE.preferredHeight = 16;
+
+            unitDetailAbility = CreateDetailText("Ability Name\nDescription", panelObj.transform, 13, FontStyle.Normal, new Color(0.7f, 0.7f, 0.95f), 50);
+
+            // Dismiss hint at bottom
+            Text dismissHint = CreateDetailText("Tap anywhere to dismiss", panelObj.transform, 11, FontStyle.Italic, new Color(0.5f, 0.5f, 0.55f), 20);
+            dismissHint.alignment = TextAnchor.MiddleCenter;
+
+            // Add click handler to dismiss panel
+            Button dismissBtn = panelObj.AddComponent<Button>();
+            dismissBtn.transition = Selectable.Transition.None;
+            dismissBtn.onClick.AddListener(HideUnitDetailPanel);
+
+            // Start hidden
+            unitDetailPanel.gameObject.SetActive(false);
+        }
+
+        private Text CreateDetailText(string content, Transform parent, int fontSize, FontStyle style, Color color, float height)
+        {
+            GameObject obj = new GameObject("Text");
+            obj.transform.SetParent(parent, false);
+
+            Text text = obj.AddComponent<Text>();
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.text = content;
+            text.fontSize = fontSize;
+            text.fontStyle = style;
+            text.color = color;
+            text.alignment = TextAnchor.UpperLeft;
+
+            LayoutElement le = obj.AddComponent<LayoutElement>();
+            le.minHeight = height;
+            le.preferredHeight = height;
+
+            return text;
+        }
+
+        private void CreateDetailDivider(Transform parent)
+        {
+            GameObject divider = CreatePanel("Divider", parent);
+            divider.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.4f);
+            LayoutElement le = divider.AddComponent<LayoutElement>();
+            le.minHeight = 1;
+            le.preferredHeight = 1;
+        }
+
+        /// <summary>
+        /// Show unit detail panel for a server shop unit (multiplayer mode)
+        /// </summary>
+        public void ShowUnitDetailPanel(ServerShopUnit serverUnit, int shopIndex)
+        {
+            if (serverUnit == null || unitDetailPanel == null) return;
+
+            detailPanelShopIndex = shopIndex;
+
+            // Get the unit template for additional info
+            var template = serverState?.GetUnitTemplate(serverUnit.unitId);
+
+            // Set sprite - prefer 3D portrait
+            if (unitDetailSprite != null)
+            {
+                unitDetailSprite.sprite = UnitPortraitGenerator.GetPortrait(serverUnit.unitId, serverUnit.name);
+                unitDetailSprite.enabled = true;
+            }
+
+            // Set name with cost color
+            unitDetailName.text = serverUnit.name;
+            unitDetailName.color = GetCostColor(serverUnit.cost);
+
+            // Set cost
+            unitDetailCost.text = $"${serverUnit.cost}";
+
+            // Set stats from template
+            if (template != null)
+            {
+                var stats = template.baseStats;
+                unitDetailStats.text = $"HP: {stats.health}   ATK: {stats.attack}   DEF: {stats.armor}   SPD: {stats.attackSpeed:F1}";
+
+                // Set traits
+                if (serverUnit.traits != null && serverUnit.traits.Length > 0)
+                {
+                    unitDetailTraits.text = string.Join("  •  ", serverUnit.traits);
+                }
+                else if (template.traits != null)
+                {
+                    var traitNames = new List<string>();
+                    foreach (var trait in template.traits)
+                    {
+                        if (trait != null) traitNames.Add(trait.traitName);
+                    }
+                    unitDetailTraits.text = traitNames.Count > 0 ? string.Join("  •  ", traitNames) : "None";
+                }
+                else
+                {
+                    unitDetailTraits.text = "None";
+                }
+
+                // Set ability
+                if (template.ability != null)
+                {
+                    string abilityText = template.ability.abilityName;
+                    if (!string.IsNullOrEmpty(template.ability.description))
+                        abilityText += $"\n{template.ability.description}";
+                    if (template.ability.baseDamage > 0)
+                        abilityText += $"\nDamage: {template.ability.baseDamage}";
+                    if (template.ability.baseHealing > 0)
+                        abilityText += $"\nHealing: {template.ability.baseHealing}";
+                    unitDetailAbility.text = abilityText;
+                }
+                else
+                {
+                    unitDetailAbility.text = "None";
+                }
+            }
+            else
+            {
+                unitDetailStats.text = "Stats unavailable";
+                unitDetailTraits.text = serverUnit.traits != null ? string.Join("  •  ", serverUnit.traits) : "None";
+                unitDetailAbility.text = "Ability info unavailable";
+            }
+
+            // Show panel
+            unitDetailPanel.gameObject.SetActive(true);
+            unitDetailVisible = true;
+        }
+
+        /// <summary>
+        /// Show unit detail panel for a local unit instance
+        /// </summary>
+        public void ShowUnitDetailPanel(UnitInstance unit, int shopIndex)
+        {
+            if (unit == null || unit.template == null || unitDetailPanel == null) return;
+
+            detailPanelShopIndex = shopIndex;
+            var t = unit.template;
+
+            // Set sprite - prefer 3D portrait
+            if (unitDetailSprite != null)
+            {
+                unitDetailSprite.sprite = UnitPortraitGenerator.GetPortrait(t.unitId, t.unitName);
+                unitDetailSprite.enabled = true;
+            }
+
+            // Set name with cost color
+            unitDetailName.text = t.unitName;
+            unitDetailName.color = GetCostColor(t.cost);
+
+            // Set cost and stars
+            unitDetailCost.text = $"${t.cost}  " + new string('★', unit.starLevel);
+
+            // Set stats
+            var stats = unit.currentStats ?? t.baseStats;
+            unitDetailStats.text = $"HP: {stats.health}   ATK: {stats.attack}   DEF: {stats.armor}   SPD: {stats.attackSpeed:F1}";
+
+            // Set traits
+            if (t.traits != null && t.traits.Length > 0)
+            {
+                var traitNames = new List<string>();
+                foreach (var trait in t.traits)
+                {
+                    if (trait != null) traitNames.Add(trait.traitName);
+                }
+                unitDetailTraits.text = traitNames.Count > 0 ? string.Join("  •  ", traitNames) : "None";
+            }
+            else
+            {
+                unitDetailTraits.text = "None";
+            }
+
+            // Set ability
+            if (t.ability != null)
+            {
+                string abilityText = t.ability.abilityName;
+                if (!string.IsNullOrEmpty(t.ability.description))
+                    abilityText += $"\n{t.ability.description}";
+                abilityText += $"\nMana: {t.baseStats.maxMana}";
+                if (t.ability.baseDamage > 0)
+                    abilityText += $"  |  Damage: {t.ability.baseDamage}";
+                if (t.ability.baseHealing > 0)
+                    abilityText += $"  |  Heal: {t.ability.baseHealing}";
+                unitDetailAbility.text = abilityText;
+            }
+            else
+            {
+                unitDetailAbility.text = "None";
+            }
+
+            // Show panel
+            unitDetailPanel.gameObject.SetActive(true);
+            unitDetailVisible = true;
+        }
+
+        /// <summary>
+        /// Hide the unit detail panel
+        /// </summary>
+        public void HideUnitDetailPanel()
+        {
+            if (unitDetailPanel != null)
+            {
+                unitDetailPanel.gameObject.SetActive(false);
+            }
+            unitDetailVisible = false;
+            detailPanelShopIndex = -1;
+        }
+
         private int lastTraitHash = 0;
 
         private void UpdateTraitPanel()
@@ -1437,12 +1982,16 @@ namespace Crestforge.UI
             traitEntries.Clear();
             traitEntryComponents.Clear();
 
-            // Sort traits: active traits first (by tier, descending), then inactive by count
+            // Sort traits: inactive first (top of column), active last (bottom, closest to shop)
+            // Within active: highest tier at the very bottom
             traitsToDisplay.Sort((a, b) => {
                 int tierA = a.Key != null ? a.Key.GetActiveTier(a.Value) : -1;
                 int tierB = b.Key != null ? b.Key.GetActiveTier(b.Value) : -1;
-                if (tierA != tierB) return tierB.CompareTo(tierA); // Higher tier first
-                return b.Value.CompareTo(a.Value); // Then by count
+                bool activeA = tierA >= 0;
+                bool activeB = tierB >= 0;
+                if (activeA != activeB) return activeA.CompareTo(activeB); // Inactive first (top), active last (bottom)
+                if (activeA && activeB) return tierA.CompareTo(tierB); // Lower tier higher up, highest tier at bottom
+                return b.Value.CompareTo(a.Value); // Inactive: higher count first
             });
 
             foreach (var kvp in traitsToDisplay)
@@ -1530,111 +2079,77 @@ namespace Crestforge.UI
 
         private void CreateTraitEntry(TraitData trait, int count)
         {
-            // Create entry container
+            int activeTier = trait.GetActiveTier(count);
+            bool isActive = activeTier >= 0;
+            Color traitColor = GetTraitPanelColor(trait.traitId);
+
+            // Entry is just a circle icon, same style as shop card trait icons
+            float iconSize = 96f; // Large, easy to tap on mobile
+
             GameObject entryObj = new GameObject("TraitEntry_" + trait.traitName);
             entryObj.transform.SetParent(traitContent, false);
             traitEntries.Add(entryObj);
-            
-            RectTransform rt = entryObj.AddComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(0, 34);
-            
-            Image bg = entryObj.AddComponent<Image>();
-            
-            LayoutElement le = entryObj.AddComponent<LayoutElement>();
-            le.preferredHeight = 34;
-            le.minHeight = 34;
 
-            int activeTier = trait.GetActiveTier(count);
-            bool isActive = activeTier >= 0;
-            Color categoryColor = trait.GetTraitColor();
-            
-            // Background color
+            RectTransform rt = entryObj.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(iconSize, iconSize);
+
+            LayoutElement le = entryObj.AddComponent<LayoutElement>();
+            le.preferredHeight = iconSize;
+            le.preferredWidth = iconSize;
+            le.minHeight = iconSize;
+
+            // Circle background - same procedural circle as shop card icons
+            Image bg = entryObj.AddComponent<Image>();
+            bg.sprite = GetTraitPanelIconSprite();
             if (isActive)
             {
-                float tierIntensity = 0.3f + (activeTier * 0.15f);
-                bg.color = new Color(
-                    Mathf.Lerp(0.2f, categoryColor.r * 0.4f, 0.4f) + tierIntensity * 0.1f,
-                    Mathf.Lerp(0.18f, categoryColor.g * 0.35f, 0.4f) + tierIntensity * 0.08f,
-                    Mathf.Lerp(0.12f, categoryColor.b * 0.3f, 0.4f),
-                    1f
-                );
+                bg.color = traitColor;
             }
             else
             {
-                bg.color = new Color(0.18f, 0.18f, 0.22f, 1f);
+                // Dim inactive traits
+                bg.color = new Color(traitColor.r * 0.35f, traitColor.g * 0.35f, traitColor.b * 0.35f, 0.7f);
             }
 
-            // Add button for hover
+            // Button for tap detection
             Button entryBtn = entryObj.AddComponent<Button>();
             entryBtn.transition = Selectable.Transition.None;
             entryBtn.targetGraphic = bg;
-            
-            // Add TraitEntryUI for hover detection
+
+            // TraitEntryUI for hover/tap detection
             TraitEntryUI entryUI = entryObj.AddComponent<TraitEntryUI>();
             entryUI.trait = trait;
             entryUI.count = count;
             traitEntryComponents.Add(entryUI);
 
-            // === ICON (colored square with tier number) ===
-            GameObject iconObj = new GameObject("Icon");
-            iconObj.transform.SetParent(entryObj.transform, false);
-            RectTransform iconRT = iconObj.AddComponent<RectTransform>();
-            iconRT.anchorMin = new Vector2(0, 0);
-            iconRT.anchorMax = new Vector2(0, 1);
-            iconRT.pivot = new Vector2(0, 0.5f);
-            iconRT.offsetMin = new Vector2(4, 4);
-            iconRT.offsetMax = new Vector2(30, -4);
-            
-            Image iconImg = iconObj.AddComponent<Image>();
-            if (isActive)
-            {
-                iconImg.color = new Color(
-                    Mathf.Min(1f, categoryColor.r * 1.4f),
-                    Mathf.Min(1f, categoryColor.g * 1.4f),
-                    Mathf.Min(1f, categoryColor.b * 1.4f),
-                    1f);
-            }
-            else
-            {
-                iconImg.color = new Color(0.4f, 0.4f, 0.45f, 1f);
-            }
+            // Abbreviation text (first 2 chars, same as shop cards)
+            string abbrev = trait.traitName.Length >= 2
+                ? trait.traitName.Substring(0, 2).ToUpper()
+                : trait.traitName.ToUpper();
 
-            // Tier number text inside icon
-            GameObject tierObj = new GameObject("Tier");
-            tierObj.transform.SetParent(iconObj.transform, false);
-            RectTransform tierRT = tierObj.AddComponent<RectTransform>();
-            tierRT.anchorMin = Vector2.zero;
-            tierRT.anchorMax = Vector2.one;
-            tierRT.offsetMin = Vector2.zero;
-            tierRT.offsetMax = Vector2.zero;
-            
-            Text tierText = tierObj.AddComponent<Text>();
-            tierText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            tierText.text = isActive ? (activeTier + 1).ToString() : "-";
-            tierText.fontSize = 14;
-            tierText.fontStyle = FontStyle.Bold;
-            tierText.alignment = TextAnchor.MiddleCenter;
-            tierText.color = isActive ? Color.white : new Color(0.65f, 0.65f, 0.7f);
+            GameObject textObj = new GameObject("Label");
+            textObj.transform.SetParent(entryObj.transform, false);
+            RectTransform textRT = textObj.AddComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.offsetMin = Vector2.zero;
+            textRT.offsetMax = Vector2.zero;
 
-            // === TRAIT NAME ===
-            GameObject nameObj = new GameObject("Name");
-            nameObj.transform.SetParent(entryObj.transform, false);
-            RectTransform nameRT = nameObj.AddComponent<RectTransform>();
-            nameRT.anchorMin = new Vector2(0, 0.5f);
-            nameRT.anchorMax = new Vector2(1, 1);
-            nameRT.pivot = new Vector2(0, 0.5f);
-            nameRT.offsetMin = new Vector2(34, 0);
-            nameRT.offsetMax = new Vector2(-4, -2);
-            
-            Text nameText = nameObj.AddComponent<Text>();
-            nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            nameText.text = trait.traitName;
-            nameText.fontSize = 11;
-            nameText.fontStyle = isActive ? FontStyle.Bold : FontStyle.Normal;
-            nameText.alignment = TextAnchor.MiddleLeft;
-            nameText.color = isActive ? new Color(1f, 0.95f, 0.7f) : new Color(0.7f, 0.7f, 0.75f);
+            Text label = textObj.AddComponent<Text>();
+            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            label.text = abbrev;
+            label.fontSize = 32;
+            label.fontStyle = FontStyle.Bold;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = isActive ? Color.white : new Color(0.6f, 0.6f, 0.65f);
+            label.raycastTarget = false;
 
-            // === PROGRESS TEXT ===
+            // Shadow for readability
+            Shadow shadow = textObj.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0, 0, 0, 0.7f);
+            shadow.effectDistance = new Vector2(1, -1);
+
+            // Progress text below abbreviation (small count indicator)
             string progressStr = "";
             if (trait.tierThresholds != null && trait.tierThresholds.Length > 0)
             {
@@ -1647,34 +2162,111 @@ namespace Crestforge.UI
                         break;
                     }
                 }
-                progressStr = nextThreshold > 0 ? $"{count}/{nextThreshold}" : $"{count} MAX";
+                progressStr = nextThreshold > 0 ? $"{count}/{nextThreshold}" : $"{count}";
             }
 
-            GameObject progressObj = new GameObject("Progress");
-            progressObj.transform.SetParent(entryObj.transform, false);
-            RectTransform progressRT = progressObj.AddComponent<RectTransform>();
-            progressRT.anchorMin = new Vector2(0, 0);
-            progressRT.anchorMax = new Vector2(1, 0.5f);
-            progressRT.pivot = new Vector2(0, 0.5f);
-            progressRT.offsetMin = new Vector2(34, 2);
-            progressRT.offsetMax = new Vector2(-4, 0);
-            
-            Text progressText = progressObj.AddComponent<Text>();
-            progressText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            progressText.text = progressStr;
-            progressText.fontSize = 10;
-            progressText.alignment = TextAnchor.MiddleLeft;
-            progressText.color = isActive ? new Color(0.9f, 0.8f, 0.4f) : new Color(0.55f, 0.55f, 0.6f);
+            if (!string.IsNullOrEmpty(progressStr))
+            {
+                GameObject progressObj = new GameObject("Progress");
+                progressObj.transform.SetParent(entryObj.transform, false);
+                RectTransform progressRT = progressObj.AddComponent<RectTransform>();
+                progressRT.anchorMin = new Vector2(0, 0);
+                progressRT.anchorMax = new Vector2(1, 0.3f);
+                progressRT.offsetMin = Vector2.zero;
+                progressRT.offsetMax = Vector2.zero;
+
+                Text progressText = progressObj.AddComponent<Text>();
+                progressText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+                progressText.text = progressStr;
+                progressText.fontSize = 20;
+                progressText.fontStyle = FontStyle.Bold;
+                progressText.alignment = TextAnchor.MiddleCenter;
+                progressText.color = isActive ? new Color(1f, 0.95f, 0.7f) : new Color(0.5f, 0.5f, 0.55f);
+                progressText.raycastTarget = false;
+
+                Shadow progressShadow = progressObj.AddComponent<Shadow>();
+                progressShadow.effectColor = new Color(0, 0, 0, 0.8f);
+                progressShadow.effectDistance = new Vector2(1, -1);
+            }
+        }
+
+        // Trait color mapping for the panel icons (same as UnitCardUI)
+        private static Color GetTraitPanelColor(string traitId)
+        {
+            if (string.IsNullOrEmpty(traitId)) return Color.gray;
+            string id = traitId.ToLower();
+            return id switch
+            {
+                "attuned"      => new Color(0.4f, 0.7f, 0.9f),
+                "forged"       => new Color(0.85f, 0.5f, 0.2f),
+                "scavenger"    => new Color(0.6f, 0.5f, 0.3f),
+                "invigorating" => new Color(0.3f, 0.8f, 0.4f),
+                "reflective"   => new Color(0.7f, 0.7f, 0.85f),
+                "mitigation"   => new Color(0.5f, 0.5f, 0.7f),
+                "bruiser"      => new Color(0.8f, 0.3f, 0.3f),
+                "overkill"     => new Color(0.9f, 0.2f, 0.2f),
+                "gigamega"     => new Color(0.6f, 0.3f, 0.8f),
+                "firstblood"   => new Color(0.9f, 0.3f, 0.4f),
+                "momentum"     => new Color(0.2f, 0.7f, 0.7f),
+                "cleave"       => new Color(0.7f, 0.4f, 0.2f),
+                "fury"         => new Color(0.9f, 0.4f, 0.1f),
+                "volatile"     => new Color(0.8f, 0.8f, 0.2f),
+                "treasure"     => new Color(0.95f, 0.75f, 0.25f),
+                "crestmaker"   => new Color(0.3f, 0.5f, 0.9f),
+                _              => new Color(0.5f, 0.5f, 0.55f)
+            };
+        }
+
+        // Cached circle sprite for trait panel icons
+        private static Sprite _traitPanelIconSprite;
+        private static Sprite GetTraitPanelIconSprite()
+        {
+            if (_traitPanelIconSprite != null) return _traitPanelIconSprite;
+
+            int size = 64;
+            Texture2D tex = new Texture2D(size, size);
+            tex.filterMode = FilterMode.Bilinear;
+
+            Color[] pixels = new Color[size * size];
+            float center = size / 2f;
+            float radius = center - 1f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dx = x - center + 0.5f;
+                    float dy = y - center + 0.5f;
+                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
+
+                    if (dist <= radius)
+                    {
+                        float edge = Mathf.Clamp01((radius - dist) * 2f);
+                        pixels[y * size + x] = new Color(1f, 1f, 1f, edge);
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = Color.clear;
+                    }
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            _traitPanelIconSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+            return _traitPanelIconSprite;
         }
 
         private void UpdateTraitTooltip()
         {
             if (traitTooltipPanel == null) return;
 
-            // Check if mouse is over a trait entry
+            // Check if mouse/touch is over a trait entry
             bool isOverTrait = false;
             TraitData currentTrait = null;
             int currentCount = 0;
+            RectTransform hoveredEntryRT = null;
 
             foreach (var entry in traitEntryComponents)
             {
@@ -1683,6 +2275,7 @@ namespace Crestforge.UI
                     isOverTrait = true;
                     currentTrait = entry.trait;
                     currentCount = entry.count;
+                    hoveredEntryRT = entry.GetComponent<RectTransform>();
                     break;
                 }
             }
@@ -1690,13 +2283,51 @@ namespace Crestforge.UI
             if (!isOverTrait || currentTrait == null)
             {
                 traitTooltipPanel.gameObject.SetActive(false);
+                if (traitTooltipBlocker != null) traitTooltipBlocker.SetActive(false);
                 hoveredTrait = null;
                 return;
             }
 
+            // Show blocker behind tooltip (catches taps outside to dismiss)
+            if (traitTooltipBlocker != null)
+            {
+                traitTooltipBlocker.SetActive(true);
+                // Ensure blocker is behind trait panel and tooltip but in front of other UI
+                traitTooltipBlocker.transform.SetSiblingIndex(traitPanel.transform.GetSiblingIndex());
+                traitPanel.transform.SetAsLastSibling();
+                traitTooltipPanel.transform.SetAsLastSibling();
+            }
+
             // Show and update tooltip
             traitTooltipPanel.gameObject.SetActive(true);
-            
+
+            // Position tooltip to the right of the hovered icon
+            if (hoveredEntryRT != null)
+            {
+                Vector3[] corners = new Vector3[4];
+                hoveredEntryRT.GetWorldCorners(corners);
+                // corners[0] = bottom-left, corners[2] = top-right (in screen pixels for overlay canvas)
+                float iconRight = corners[2].x;
+                float iconCenterY = (corners[0].y + corners[2].y) * 0.5f;
+
+                // Convert screen-pixel position to canvas local coordinates
+                RectTransform canvasRT = mainCanvas.GetComponent<RectTransform>();
+                Vector2 localPos;
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvasRT, new Vector2(iconRight + 8, iconCenterY),
+                    null, out localPos);
+
+                // localPos is relative to canvas pivot (center). Convert to bottom-left for anchors at (0,0).
+                Vector2 anchoredPos = localPos + new Vector2(
+                    canvasRT.rect.width * canvasRT.pivot.x,
+                    canvasRT.rect.height * canvasRT.pivot.y);
+
+                traitTooltipPanel.anchorMin = new Vector2(0, 0);
+                traitTooltipPanel.anchorMax = new Vector2(0, 0);
+                traitTooltipPanel.pivot = new Vector2(0, 0.5f);
+                traitTooltipPanel.anchoredPosition = anchoredPos;
+            }
+
             // Only rebuild if trait changed
             if (hoveredTrait != currentTrait)
             {
@@ -1743,24 +2374,24 @@ namespace Crestforge.UI
 
                     RectTransform entryRT = tierEntry.AddComponent<RectTransform>();
                     HorizontalLayoutGroup entryHlg = tierEntry.AddComponent<HorizontalLayoutGroup>();
-                    entryHlg.spacing = 10;
+                    entryHlg.spacing = 20;
                     entryHlg.childControlWidth = false;
                     entryHlg.childControlHeight = true;
                     entryHlg.childForceExpandWidth = false;
                     entryHlg.childAlignment = TextAnchor.MiddleLeft;
                     LayoutElement entryLE = tierEntry.AddComponent<LayoutElement>();
-                    entryLE.preferredHeight = 28;
+                    entryLE.preferredHeight = 56;
 
                     // Threshold indicator
                     Text thresholdText = new GameObject("Threshold").AddComponent<Text>();
                     thresholdText.transform.SetParent(tierEntry.transform, false);
                     thresholdText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                     thresholdText.text = $"({threshold})";
-                    thresholdText.fontSize = 16;
+                    thresholdText.fontSize = 32;
                     thresholdText.fontStyle = isCurrent ? FontStyle.Bold : FontStyle.Normal;
                     thresholdText.alignment = TextAnchor.MiddleLeft;
                     LayoutElement threshLE = thresholdText.gameObject.AddComponent<LayoutElement>();
-                    threshLE.preferredWidth = 42;
+                    threshLE.preferredWidth = 84;
 
                     if (isReached)
                     {
@@ -1776,11 +2407,11 @@ namespace Crestforge.UI
                     bonusText.transform.SetParent(tierEntry.transform, false);
                     bonusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
                     bonusText.text = bonus?.bonusDescription ?? "Bonus";
-                    bonusText.fontSize = 14;
+                    bonusText.fontSize = 28;
                     bonusText.alignment = TextAnchor.MiddleLeft;
                     LayoutElement bonusLE = bonusText.gameObject.AddComponent<LayoutElement>();
                     bonusLE.flexibleWidth = 1;
-                    bonusLE.preferredWidth = 220;
+                    bonusLE.preferredWidth = 440;
 
                     if (isReached)
                     {
@@ -1861,77 +2492,168 @@ namespace Crestforge.UI
             {
                 traitTooltipPanel.gameObject.SetActive(false);
             }
+            if (traitTooltipBlocker != null)
+            {
+                traitTooltipBlocker.SetActive(false);
+            }
             hoveredTrait = null;
         }
 
-        private UnitCardUI CreateUnitCard(Transform parent, int index, bool isShopCard)
+        private UnitCardUI CreateUnitCard(Transform parent, int index, bool isShopCard, float cardWidth = 0, float cardHeight = 0)
         {
-            GameObject cardObj = CreatePanel($"Card_{index}", parent);
-            RectTransform rt = cardObj.GetComponent<RectTransform>();
-            rt.sizeDelta = new Vector2(65, 110);
-            
-            Image bg = cardObj.GetComponent<Image>();
-            bg.color = new Color(0.25f, 0.25f, 0.3f);
+            // Use provided dimensions or calculate defaults
+            if (cardWidth <= 0 || cardHeight <= 0)
+            {
+                // Default calculation for non-shop cards (bench, etc.)
+                cardWidth = 80f;
+                cardHeight = 100f;
+            }
+
+            GameObject cardObj = new GameObject($"Card_{index}");
+            cardObj.transform.SetParent(parent, false);
+            RectTransform rt = cardObj.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(cardWidth, cardHeight);
 
             LayoutElement le = cardObj.AddComponent<LayoutElement>();
-            le.preferredWidth = 65;
-            le.preferredHeight = 110;
+            le.preferredWidth = cardWidth;
+            le.preferredHeight = cardHeight;
 
-            // Unit sprite
+            // Background with rounded corners - use gradient image
+            Image bg = cardObj.AddComponent<Image>();
+            bg.sprite = CreateRoundedRectSprite(10); // 10px corner radius (more rounded for border)
+            bg.type = Image.Type.Sliced;
+            bg.color = new Color(0.22f, 0.22f, 0.28f); // Neutral base color
+
+            // Black border outline
+            Outline borderOutline = cardObj.AddComponent<Outline>();
+            borderOutline.effectColor = Color.black;
+            borderOutline.effectDistance = new Vector2(2, -2);
+
+            // Second outline for thicker border effect
+            Outline borderOutline2 = cardObj.AddComponent<Outline>();
+            borderOutline2.effectColor = Color.black;
+            borderOutline2.effectDistance = new Vector2(-2, 2);
+
+            // Bevel shine overlay - diagonal gradient bright at top-left, fading to bottom-right
+            // Creates a 3D raised look like light hitting a beveled edge
+            GameObject shineObj = new GameObject("BevelShine");
+            shineObj.transform.SetParent(cardObj.transform, false);
+            RectTransform shineRT = shineObj.AddComponent<RectTransform>();
+            shineRT.anchorMin = Vector2.zero;
+            shineRT.anchorMax = Vector2.one;
+            shineRT.offsetMin = new Vector2(2, 2);
+            shineRT.offsetMax = new Vector2(-2, -2);
+            Image shineImg = shineObj.AddComponent<Image>();
+            shineImg.sprite = CreateBevelShineSprite(8);
+            shineImg.type = Image.Type.Sliced;
+            shineImg.color = Color.white;
+            shineImg.raycastTarget = false;
+
+            // Gradient overlay for rarity color (top = rarity, bottom = neutral)
+            GameObject gradientObj = new GameObject("GradientOverlay");
+            gradientObj.transform.SetParent(cardObj.transform, false);
+            RectTransform gradientRT = gradientObj.AddComponent<RectTransform>();
+            gradientRT.anchorMin = Vector2.zero;
+            gradientRT.anchorMax = Vector2.one;
+            gradientRT.offsetMin = new Vector2(3, 3);
+            gradientRT.offsetMax = new Vector2(-3, -3);
+            Image gradientImg = gradientObj.AddComponent<Image>();
+            gradientImg.sprite = CreateVerticalGradientSprite();
+            gradientImg.type = Image.Type.Sliced;
+            gradientImg.color = new Color(0.5f, 0.5f, 0.55f, 0.6f); // Default gray, semi-transparent
+            gradientImg.raycastTarget = false;
+
+            // Unit sprite - anchored to top area, leaving room for trait icons at bottom
             GameObject spriteObj = new GameObject("Sprite");
             spriteObj.transform.SetParent(cardObj.transform, false);
             RectTransform spriteRT = spriteObj.AddComponent<RectTransform>();
-            spriteRT.localScale = Vector3.one;
-            spriteRT.anchorMin = new Vector2(0.5f, 0.5f);
-            spriteRT.anchorMax = new Vector2(0.5f, 0.5f);
-            spriteRT.pivot = new Vector2(0.5f, 0.5f);
-            spriteRT.sizeDelta = new Vector2(48, 48);
-            spriteRT.anchoredPosition = new Vector2(0, 5);
+            // Anchor to top-center
+            spriteRT.anchorMin = new Vector2(0.5f, 1f);
+            spriteRT.anchorMax = new Vector2(0.5f, 1f);
+            spriteRT.pivot = new Vector2(0.5f, 1f);
+            float spriteSize = Mathf.Min(cardWidth - 12, cardHeight - 50); // Leave room for traits
+            spriteRT.sizeDelta = new Vector2(spriteSize, spriteSize);
+            spriteRT.anchoredPosition = new Vector2(0, -6); // 6px from top
             Image spriteImg = spriteObj.AddComponent<Image>();
             spriteImg.preserveAspect = true;
-            spriteImg.enabled = false; // Start disabled until a unit is set
-            spriteImg.raycastTarget = false; // Don't block clicks
+            spriteImg.enabled = false;
+            spriteImg.raycastTarget = false;
 
-            // Cost/Stars text
-            GameObject costObj = new GameObject("Cost");
-            costObj.transform.SetParent(cardObj.transform, false);
-            RectTransform costRT = costObj.AddComponent<RectTransform>();
-            costRT.localScale = Vector3.one;
-            costRT.anchorMin = new Vector2(0, 0);
-            costRT.anchorMax = new Vector2(1, 0);
-            costRT.pivot = new Vector2(0.5f, 0);
-            costRT.sizeDelta = new Vector2(0, 18);
-            costRT.anchoredPosition = new Vector2(0, 3);
-            Text costText = costObj.AddComponent<Text>();
+            // Cost badge overlapping top-left corner (sits on top of the border)
+            GameObject costBadge = new GameObject("CostBadge");
+            costBadge.transform.SetParent(cardObj.transform, false);
+            RectTransform costBadgeRT = costBadge.AddComponent<RectTransform>();
+            costBadgeRT.anchorMin = new Vector2(0, 1);
+            costBadgeRT.anchorMax = new Vector2(0, 1);
+            costBadgeRT.pivot = new Vector2(0.5f, 0.5f);
+            costBadgeRT.sizeDelta = new Vector2(28, 28);
+            costBadgeRT.anchoredPosition = new Vector2(2, 2); // Straddle the corner
+
+            // Coin background
+            Image coinBg = costBadge.AddComponent<Image>();
+            coinBg.sprite = CreateCoinSprite();
+            coinBg.color = new Color(1f, 0.85f, 0.3f); // Gold color
+            coinBg.raycastTarget = false;
+
+            // Cost number on coin
+            GameObject costNumObj = new GameObject("CostNum");
+            costNumObj.transform.SetParent(costBadge.transform, false);
+            RectTransform costNumRT = costNumObj.AddComponent<RectTransform>();
+            costNumRT.anchorMin = Vector2.zero;
+            costNumRT.anchorMax = Vector2.one;
+            costNumRT.offsetMin = Vector2.zero;
+            costNumRT.offsetMax = Vector2.zero;
+            Text costText = costNumObj.AddComponent<Text>();
             costText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            costText.fontSize = 12;
+            costText.fontSize = 14;
+            costText.fontStyle = FontStyle.Bold;
             costText.alignment = TextAnchor.MiddleCenter;
-            costText.color = Color.white;
+            costText.color = new Color(0.3f, 0.2f, 0.1f); // Dark brown for contrast
 
-            // Name text
-            GameObject nameObj = new GameObject("Name");
-            nameObj.transform.SetParent(cardObj.transform, false);
-            RectTransform nameRT = nameObj.AddComponent<RectTransform>();
-            nameRT.localScale = Vector3.one;
-            nameRT.anchorMin = new Vector2(0, 1);
-            nameRT.anchorMax = new Vector2(1, 1);
-            nameRT.pivot = new Vector2(0.5f, 1);
-            nameRT.sizeDelta = new Vector2(0, 18);
-            nameRT.anchoredPosition = new Vector2(0, -2);
-            Text nameText = nameObj.AddComponent<Text>();
-            nameText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            nameText.fontSize = 11;
-            nameText.alignment = TextAnchor.MiddleCenter;
-            nameText.color = Color.white;
+            // Outline on cost text for readability
+            Outline costOutline = costNumObj.AddComponent<Outline>();
+            costOutline.effectColor = new Color(1f, 0.95f, 0.7f);
+            costOutline.effectDistance = new Vector2(1, -1);
 
-            // Button
+            // Star indicator at bottom
+            GameObject starsObj = new GameObject("Stars");
+            starsObj.transform.SetParent(cardObj.transform, false);
+            RectTransform starsRT = starsObj.AddComponent<RectTransform>();
+            starsRT.anchorMin = new Vector2(0.5f, 0);
+            starsRT.anchorMax = new Vector2(0.5f, 0);
+            starsRT.pivot = new Vector2(0.5f, 0);
+            starsRT.sizeDelta = new Vector2(cardWidth, 24);
+            starsRT.anchoredPosition = new Vector2(0, 6);
+            Text starsText = starsObj.AddComponent<Text>();
+            starsText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            starsText.fontSize = 16;
+            starsText.alignment = TextAnchor.MiddleCenter;
+            starsText.color = new Color(1f, 0.9f, 0.4f); // Gold stars
+
+            // No name text - removed per request
+
+            // Trait icons container - fills gap between sprite bottom and card bottom
+            // Sprite bottom is at: cardHeight - 6 (top pad) - spriteSize from top of card
+            float spriteBottom = cardHeight - 6f - spriteSize; // distance from card bottom
+            float traitAreaHeight = spriteBottom; // from card bottom to sprite bottom
+            GameObject traitContainer = new GameObject("TraitIcons");
+            traitContainer.transform.SetParent(cardObj.transform, false);
+            RectTransform traitContainerRT = traitContainer.AddComponent<RectTransform>();
+            // Stretch full width, positioned to fill gap below sprite
+            traitContainerRT.anchorMin = new Vector2(0, 0);
+            traitContainerRT.anchorMax = new Vector2(1, 0);
+            traitContainerRT.pivot = new Vector2(0.5f, 0);
+            traitContainerRT.sizeDelta = new Vector2(0, traitAreaHeight);
+            traitContainerRT.anchoredPosition = new Vector2(0, 0);
+
+            // No layout group - icons will be positioned manually by UnitCardUI
+            // for equidistant spacing from each other and edges
+
+            // Button - don't use onClick for shop cards (handled by UnitCardUI for tap vs long-press)
             Button btn = cardObj.AddComponent<Button>();
+            btn.targetGraphic = bg;
             int capturedIndex = index;
-            if (isShopCard)
-            {
-                btn.onClick.AddListener(() => OnShopCardClicked(capturedIndex));
-            }
-            else
+            if (!isShopCard)
             {
                 btn.onClick.AddListener(() => OnBenchCardClicked(capturedIndex));
             }
@@ -1940,12 +2662,258 @@ namespace Crestforge.UI
             card.background = bg;
             card.spriteImage = spriteImg;
             card.costText = costText;
-            card.nameText = nameText;
+            card.starsText = starsText;
+            card.gradientOverlay = gradientImg;
+            card.nameText = null; // No name text
+            card.traitIconContainer = traitContainerRT;
             card.button = btn;
             card.index = index;
-            // isBenchSlot defaults to false, which is correct for shop cards
+            card.isShopCard = isShopCard;
 
             return card;
+        }
+
+        // Cached sprites for card UI
+        private static Sprite cachedRoundedRectSprite;
+        private static Sprite cachedGradientSprite;
+        private static Sprite cachedCoinSprite;
+
+        private Sprite CreateRoundedRectSprite(int cornerRadius)
+        {
+            if (cachedRoundedRectSprite != null)
+                return cachedRoundedRectSprite;
+
+            int size = 32;
+            int r = Mathf.Min(cornerRadius, size / 2);
+            Texture2D tex = new Texture2D(size, size);
+            tex.filterMode = FilterMode.Bilinear;
+
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    // Check if in corner regions
+                    bool inCorner = false;
+                    float dist = 0;
+
+                    // Bottom-left corner
+                    if (x < r && y < r)
+                    {
+                        dist = Vector2.Distance(new Vector2(x, y), new Vector2(r, r));
+                        inCorner = true;
+                    }
+                    // Bottom-right corner
+                    else if (x >= size - r && y < r)
+                    {
+                        dist = Vector2.Distance(new Vector2(x, y), new Vector2(size - r - 1, r));
+                        inCorner = true;
+                    }
+                    // Top-left corner
+                    else if (x < r && y >= size - r)
+                    {
+                        dist = Vector2.Distance(new Vector2(x, y), new Vector2(r, size - r - 1));
+                        inCorner = true;
+                    }
+                    // Top-right corner
+                    else if (x >= size - r && y >= size - r)
+                    {
+                        dist = Vector2.Distance(new Vector2(x, y), new Vector2(size - r - 1, size - r - 1));
+                        inCorner = true;
+                    }
+
+                    if (inCorner && dist > r)
+                        pixels[y * size + x] = Color.clear;
+                    else
+                        pixels[y * size + x] = Color.white;
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            // Create sliced sprite with proper border
+            cachedRoundedRectSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100,
+                0, SpriteMeshType.FullRect, new Vector4(r, r, r, r));
+
+            return cachedRoundedRectSprite;
+        }
+
+        private static Sprite cachedBevelShineSprite;
+
+        /// <summary>
+        /// Creates a rounded rect with a diagonal gradient shine effect.
+        /// Bright white border at top-left edges, fading to transparent at bottom-right.
+        /// The center is transparent so only the border ring shows.
+        /// </summary>
+        private Sprite CreateBevelShineSprite(int cornerRadius)
+        {
+            if (cachedBevelShineSprite != null)
+                return cachedBevelShineSprite;
+
+            int size = 64; // Higher res for smoother gradient
+            int r = Mathf.Min(cornerRadius, size / 2); // Corner radius in texture pixels
+            int borderWidth = 6; // Width of the shine border in texture pixels
+
+            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            Color[] pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    // Rounded rect mask - check if pixel is inside the rounded rect
+                    bool inside = true;
+                    float cornerDist = 0;
+
+                    // Bottom-left
+                    if (x < r && y < r)
+                    {
+                        cornerDist = Vector2.Distance(new Vector2(x, y), new Vector2(r, r));
+                        if (cornerDist > r) inside = false;
+                    }
+                    // Bottom-right
+                    else if (x >= size - r && y < r)
+                    {
+                        cornerDist = Vector2.Distance(new Vector2(x, y), new Vector2(size - r - 1, r));
+                        if (cornerDist > r) inside = false;
+                    }
+                    // Top-left
+                    else if (x < r && y >= size - r)
+                    {
+                        cornerDist = Vector2.Distance(new Vector2(x, y), new Vector2(r, size - r - 1));
+                        if (cornerDist > r) inside = false;
+                    }
+                    // Top-right
+                    else if (x >= size - r && y >= size - r)
+                    {
+                        cornerDist = Vector2.Distance(new Vector2(x, y), new Vector2(size - r - 1, size - r - 1));
+                        if (cornerDist > r) inside = false;
+                    }
+
+                    if (!inside)
+                    {
+                        pixels[y * size + x] = Color.clear;
+                        continue;
+                    }
+
+                    // Calculate distance from edge (how deep inside the border we are)
+                    float edgeDist = Mathf.Min(
+                        Mathf.Min(x, size - 1 - x),
+                        Mathf.Min(y, size - 1 - y)
+                    );
+
+                    // In corner regions, use distance from corner arc
+                    if (x < r && y < r)
+                        edgeDist = Mathf.Min(edgeDist, r - Vector2.Distance(new Vector2(x, y), new Vector2(r, r)));
+                    else if (x >= size - r && y < r)
+                        edgeDist = Mathf.Min(edgeDist, r - Vector2.Distance(new Vector2(x, y), new Vector2(size - r - 1, r)));
+                    else if (x < r && y >= size - r)
+                        edgeDist = Mathf.Min(edgeDist, r - Vector2.Distance(new Vector2(x, y), new Vector2(r, size - r - 1)));
+                    else if (x >= size - r && y >= size - r)
+                        edgeDist = Mathf.Min(edgeDist, r - Vector2.Distance(new Vector2(x, y), new Vector2(size - r - 1, size - r - 1)));
+
+                    // Border falloff - only visible within borderWidth pixels of edge
+                    float borderAlpha = 1f - Mathf.Clamp01(edgeDist / borderWidth);
+
+                    // Diagonal gradient - bright at top-left (high x inverted + high y), dim at bottom-right
+                    float nx = 1f - (float)x / (size - 1); // 1 at left, 0 at right
+                    float ny = (float)y / (size - 1);       // 1 at top, 0 at bottom
+                    float shine = (nx + ny) * 0.5f;         // Average: brightest at top-left
+                    shine = Mathf.Pow(shine, 0.7f);          // Boost the bright end slightly
+
+                    float finalAlpha = borderAlpha * shine * 0.5f;
+                    pixels[y * size + x] = new Color(1f, 1f, 1f, finalAlpha);
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            // Use 9-slice borders so corners maintain shape when stretched on rectangular cards
+            int border = r + borderWidth;
+            cachedBevelShineSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100,
+                0, SpriteMeshType.FullRect, new Vector4(border, border, border, border));
+            return cachedBevelShineSprite;
+        }
+
+        private Sprite CreateVerticalGradientSprite()
+        {
+            if (cachedGradientSprite != null)
+                return cachedGradientSprite;
+
+            int width = 4;
+            int height = 32;
+            Texture2D tex = new Texture2D(width, height);
+            tex.filterMode = FilterMode.Bilinear;
+            tex.wrapMode = TextureWrapMode.Clamp;
+
+            Color[] pixels = new Color[width * height];
+            for (int y = 0; y < height; y++)
+            {
+                float t = (float)y / (height - 1);
+                // Gradient from full opacity at top to transparent at bottom
+                Color c = new Color(1f, 1f, 1f, 1f - t * 0.7f);
+                for (int x = 0; x < width; x++)
+                {
+                    pixels[y * width + x] = c;
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            cachedGradientSprite = Sprite.Create(tex, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100,
+                0, SpriteMeshType.FullRect, new Vector4(1, 1, 1, 1));
+
+            return cachedGradientSprite;
+        }
+
+        private Sprite CreateCoinSprite()
+        {
+            if (cachedCoinSprite != null)
+                return cachedCoinSprite;
+
+            int size = 24;
+            Texture2D tex = new Texture2D(size, size);
+            tex.filterMode = FilterMode.Bilinear;
+
+            Color[] pixels = new Color[size * size];
+            Vector2 center = new Vector2(size / 2f, size / 2f);
+            float radius = size / 2f - 1;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dist = Vector2.Distance(new Vector2(x, y), center);
+                    if (dist <= radius)
+                    {
+                        // Inner coin - slight 3D effect
+                        float shade = 1f - (dist / radius) * 0.2f;
+                        pixels[y * size + x] = new Color(shade, shade, shade, 1f);
+                    }
+                    else if (dist <= radius + 1)
+                    {
+                        // Anti-aliased edge
+                        float alpha = 1f - (dist - radius);
+                        pixels[y * size + x] = new Color(0.8f, 0.8f, 0.8f, alpha);
+                    }
+                    else
+                    {
+                        pixels[y * size + x] = Color.clear;
+                    }
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+
+            cachedCoinSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100);
+
+            return cachedCoinSprite;
         }
 
         // ========== UI Updates ==========
@@ -1993,10 +2961,10 @@ namespace Crestforge.UI
                 fightButton.gameObject.SetActive(false);
             }
 
-            // PvP mode specific UI
+            // Scout button no longer needed - scout panel is always visible at top
             if (scoutButton != null)
             {
-                scoutButton.gameObject.SetActive(isPvPMode && isPlanning);
+                scoutButton.gameObject.SetActive(false);
             }
             if (progressButton != null)
             {
@@ -2026,7 +2994,9 @@ namespace Crestforge.UI
 
             roundText.text = $"R{ss.round}";
             healthText.text = $"❤ {ss.health}";
-            goldText.text = $"💰 {ss.gold}";
+            // Include optimistic gold changes (pending purchases/sales before server confirms)
+            int displayGold = ss.gold + optimisticGoldDelta;
+            goldText.text = $"💰 {displayGold}";
             levelText.text = $"Lv{ss.level}";
 
             bool isPlanning = ss.phase == "planning";
@@ -2050,10 +3020,10 @@ namespace Crestforge.UI
                 fightButton.gameObject.SetActive(false);
             }
 
-            // Multiplayer always shows scout/progress buttons
+            // Scout button no longer needed - scout panel is always visible at top
             if (scoutButton != null)
             {
-                scoutButton.gameObject.SetActive(isPlanning);
+                scoutButton.gameObject.SetActive(false);
             }
             if (progressButton != null)
             {
@@ -2376,21 +3346,47 @@ namespace Crestforge.UI
             var ss = serverState;
             if (ss.shop == null) return;
 
+            // Check if this is a reroll response (we were waiting for new shop data)
+            bool isRerollResponse = waitingForRerollResponse;
+            if (isRerollResponse)
+            {
+                waitingForRerollResponse = false;
+            }
+
             for (int i = 0; i < shopCards.Count; i++)
             {
-                if (i < ss.shop.Length && ss.shop[i] != null)
+                // Skip slots with pending purchases (server hasn't confirmed yet)
+                if (pendingShopPurchases.Contains(i))
+                {
+                    // Check if server has confirmed (slot is now null)
+                    if (i < ss.shop.Length && ss.shop[i] == null)
+                    {
+                        pendingShopPurchases.Remove(i); // Purchase confirmed
+                    }
+                    continue; // Don't restore the card
+                }
+
+                if (i < ss.shop.Length && ss.shop[i] != null
+                    && !string.IsNullOrEmpty(ss.shop[i].unitId))
                 {
                     var serverUnit = ss.shop[i];
                     shopCards[i].SetServerUnit(serverUnit);
 
-                    // Grey out if can't afford
-                    bool canAfford = ss.gold >= serverUnit.cost;
+                    // Grey out if can't afford (including optimistic gold changes)
+                    int effectiveGold = ss.gold + optimisticGoldDelta;
+                    bool canAfford = effectiveGold >= serverUnit.cost;
                     shopCards[i].SetInteractable(canAfford);
                 }
                 else
                 {
                     shopCards[i].SetServerUnit(null);
                 }
+            }
+
+            // Start grow animation if this was a reroll response
+            if (isRerollResponse)
+            {
+                StartRerollGrowAnimation();
             }
         }
 
@@ -2473,10 +3469,10 @@ namespace Crestforge.UI
             int sellValue = unit.GetSellValue();
             sellText.text = $"Sell {unit.template.unitName} for ${sellValue}";
 
-            // Hide shop and show sell overlay
+            // Show sell overlay (covers shop cards as a child of shopPanel)
             if (shopPanel != null)
             {
-                shopPanel.gameObject.SetActive(false);
+                shopPanel.gameObject.SetActive(true);
             }
             sellOverlay.SetActive(true);
         }
@@ -2651,9 +3647,7 @@ namespace Crestforge.UI
         public void ShowCrestTooltip(CrestData crest)
         {
             if (crest == null || crestTooltipPanel == null) return;
-
-            // Don't override pinned tooltip on hover
-            if (isCrestTooltipPinned) return;
+            if (crestTooltipShowing) return;
 
             crestTooltipPanel.gameObject.SetActive(true);
             PopulateCrestTooltip(crest);
@@ -2661,28 +3655,21 @@ namespace Crestforge.UI
 
         public void HideCrestTooltip()
         {
-            if (!isCrestTooltipPinned && crestTooltipPanel != null)
-            {
-                crestTooltipPanel.gameObject.SetActive(false);
-            }
+            DismissCrestTooltip();
         }
 
         public void ShowCrestTooltipPinned(CrestData crest)
         {
             if (crest == null || crestTooltipPanel == null) return;
+            crestTooltipShowing = true;
 
-            isCrestTooltipPinned = true;
             crestTooltipPanel.gameObject.SetActive(true);
             PopulateCrestTooltip(crest);
         }
 
         public void UnpinCrestTooltip()
         {
-            isCrestTooltipPinned = false;
-            if (crestTooltipPanel != null)
-            {
-                crestTooltipPanel.gameObject.SetActive(false);
-            }
+            DismissCrestTooltip();
         }
 
         private void PopulateCrestTooltip(CrestData crest)
@@ -2756,22 +3743,17 @@ namespace Crestforge.UI
         public void ShowServerCrestTooltip(ServerCrestData serverCrest)
         {
             if (serverCrest == null || crestTooltipPanel == null) return;
-
-            // Don't override pinned tooltip on hover
-            if (isCrestTooltipPinned) return;
+            if (crestTooltipShowing) return;
 
             crestTooltipPanel.gameObject.SetActive(true);
             PopulateServerCrestTooltip(serverCrest);
         }
 
-        /// <summary>
-        /// Show pinned crest tooltip for server crest (multiplayer mode)
-        /// </summary>
         public void ShowServerCrestTooltipPinned(ServerCrestData serverCrest)
         {
             if (serverCrest == null || crestTooltipPanel == null) return;
+            crestTooltipShowing = true;
 
-            isCrestTooltipPinned = true;
             crestTooltipPanel.gameObject.SetActive(true);
             PopulateServerCrestTooltip(serverCrest);
         }
@@ -2833,70 +3815,230 @@ namespace Crestforge.UI
 
         public void UpdateCrestDisplay()
         {
-            bool hasAnyCrest = false;
+            if (crestPanel == null) return;
 
-            // Multiplayer mode - use server crest data
+            // Collect active crests
+            var activeCrestList = new List<(Sprite icon, CrestData crestData, ServerCrestData serverCrestData, bool isMinor, string displayName)>();
+
             if (IsMultiplayer && serverState != null)
             {
-                // Check major crest
-                bool hasMajorCrest = serverState.majorCrest != null && !string.IsNullOrEmpty(serverState.majorCrest.crestId);
-                if (majorCrestSlot != null)
+                // Major crest
+                if (serverState.majorCrest != null && !string.IsNullOrEmpty(serverState.majorCrest.crestId))
                 {
-                    majorCrestSlot.SetServerCrest(hasMajorCrest ? serverState.majorCrest : null);
-                    if (hasMajorCrest) hasAnyCrest = true;
+                    activeCrestList.Add((
+                        CrestIcons.GetMajorCrestIcon(),
+                        null,
+                        serverState.majorCrest,
+                        false,
+                        serverState.majorCrest.name ?? serverState.majorCrest.crestId
+                    ));
                 }
 
-                // Update minor crest slots (up to 3)
-                for (int i = 0; i < minorCrestSlots.Length; i++)
+                // Minor crests
+                if (serverState.minorCrests != null)
                 {
-                    if (minorCrestSlots[i] != null)
+                    foreach (var minorCrest in serverState.minorCrests)
                     {
-                        ServerCrestData minorCrest = (serverState.minorCrests != null && i < serverState.minorCrests.Count)
-                            ? serverState.minorCrests[i]
-                            : null;
-                        bool hasValidCrest = minorCrest != null && !string.IsNullOrEmpty(minorCrest.crestId);
-                        minorCrestSlots[i].SetServerCrest(hasValidCrest ? minorCrest : null);
-                        if (hasValidCrest) hasAnyCrest = true;
+                        if (minorCrest != null && !string.IsNullOrEmpty(minorCrest.crestId))
+                        {
+                            activeCrestList.Add((
+                                CrestIcons.GetMinorCrestIcon(),
+                                null,
+                                minorCrest,
+                                true,
+                                minorCrest.name ?? minorCrest.crestId
+                            ));
+                        }
+                    }
+                }
+            }
+            else if (state != null)
+            {
+                // Major crests
+                if (state.majorCrests != null)
+                {
+                    foreach (var crest in state.majorCrests)
+                    {
+                        if (crest != null)
+                        {
+                            activeCrestList.Add((
+                                CrestIcons.GetMajorCrestIcon(),
+                                crest,
+                                null,
+                                false,
+                                crest.crestName
+                            ));
+                        }
                     }
                 }
 
-                // Hide entire crest panel if no crests are active
-                if (crestPanel != null)
+                // Minor crests
+                if (state.minorCrests != null)
                 {
-                    crestPanel.gameObject.SetActive(hasAnyCrest);
+                    foreach (var crest in state.minorCrests)
+                    {
+                        if (crest != null)
+                        {
+                            activeCrestList.Add((
+                                CrestIcons.GetMinorCrestIcon(),
+                                crest,
+                                null,
+                                true,
+                                crest.crestName
+                            ));
+                        }
+                    }
                 }
+            }
+
+            // Hide if no crests
+            if (activeCrestList.Count == 0)
+            {
+                crestPanel.gameObject.SetActive(false);
                 return;
             }
 
-            if (state == null) return;
+            // Check if display changed (simple count + name hash)
+            int newHash = activeCrestList.Count;
+            foreach (var c in activeCrestList)
+                newHash = newHash * 31 + (c.displayName?.GetHashCode() ?? 0);
 
-            // Update major crest slot with the first major crest (if any)
-            if (majorCrestSlot != null)
+            if (newHash == lastCrestHash && crestIconEntries.Count > 0)
             {
-                CrestData activeMajorCrest = (state.majorCrests != null && state.majorCrests.Count > 0)
-                    ? state.majorCrests[0]
-                    : null;
-                majorCrestSlot.SetCrest(activeMajorCrest);
-                if (activeMajorCrest != null) hasAnyCrest = true;
+                crestPanel.gameObject.SetActive(true);
+                return;
+            }
+            lastCrestHash = newHash;
+
+            // Clear old entries
+            foreach (var entry in crestIconEntries)
+            {
+                if (entry != null) Destroy(entry);
+            }
+            crestIconEntries.Clear();
+
+            // Create icon entries
+            foreach (var crestInfo in activeCrestList)
+            {
+                CreateCrestIconEntry(crestInfo.icon, crestInfo.crestData, crestInfo.serverCrestData, crestInfo.isMinor);
             }
 
-            // Update minor crest slots (up to 3)
-            for (int i = 0; i < minorCrestSlots.Length; i++)
+            crestPanel.gameObject.SetActive(true);
+        }
+
+        private int lastCrestHash = 0;
+
+        private void CreateCrestIconEntry(Sprite icon, CrestData crestData, ServerCrestData serverCrestData, bool isMinor)
+        {
+            float iconSize = 96f;
+
+            GameObject entryObj = new GameObject("CrestIcon");
+            entryObj.transform.SetParent(crestPanel, false);
+            crestIconEntries.Add(entryObj);
+
+            RectTransform rt = entryObj.AddComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(iconSize, iconSize);
+
+            LayoutElement le = entryObj.AddComponent<LayoutElement>();
+            le.preferredHeight = iconSize;
+            le.preferredWidth = iconSize;
+            le.minHeight = iconSize;
+
+            // Shield icon
+            Image img = entryObj.AddComponent<Image>();
+            img.sprite = icon;
+            img.preserveAspect = true;
+            img.raycastTarget = true;
+
+            // Button for tap
+            Button btn = entryObj.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.targetGraphic = img;
+
+            // Capture references for click handler
+            CrestData cd = crestData;
+            ServerCrestData scd = serverCrestData;
+            GameObject thisEntry = entryObj;
+
+            btn.onClick.AddListener(() => {
+                OnCrestIconClicked(thisEntry, cd, scd);
+            });
+        }
+
+        private void OnCrestIconClicked(GameObject iconObj, CrestData crestData, ServerCrestData serverCrestData)
+        {
+            // Toggle: if this icon's tooltip is already showing, dismiss it
+            if (crestTooltipShowing && activeCrestIcon == iconObj)
             {
-                if (minorCrestSlots[i] != null)
-                {
-                    CrestData activeMinorCrest = (state.minorCrests != null && i < state.minorCrests.Count)
-                        ? state.minorCrests[i]
-                        : null;
-                    minorCrestSlots[i].SetCrest(activeMinorCrest);
-                    if (activeMinorCrest != null) hasAnyCrest = true;
-                }
+                DismissCrestTooltip();
+                return;
             }
 
-            // Hide entire crest panel if no crests are active
-            if (crestPanel != null)
+            // Show tooltip for this crest
+
+            crestTooltipShowing = true;
+            activeCrestIcon = iconObj;
+
+            if (crestData != null)
             {
-                crestPanel.gameObject.SetActive(hasAnyCrest);
+                crestTooltipPanel.gameObject.SetActive(true);
+                PopulateCrestTooltip(crestData);
+            }
+            else if (serverCrestData != null)
+            {
+                crestTooltipPanel.gameObject.SetActive(true);
+                PopulateServerCrestTooltip(serverCrestData);
+            }
+
+            // Position tooltip to the right of the tapped icon
+            RectTransform iconRT = iconObj.GetComponent<RectTransform>();
+            if (iconRT != null)
+            {
+                Vector3[] corners = new Vector3[4];
+                iconRT.GetWorldCorners(corners);
+                float iconRight = corners[2].x;
+                float iconCenterY = (corners[0].y + corners[2].y) * 0.5f;
+
+                RectTransform canvasRT = mainCanvas.GetComponent<RectTransform>();
+                Vector2 localPos;
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvasRT, new Vector2(iconRight + 8, iconCenterY),
+                    null, out localPos);
+
+                // Convert pivot-relative to top-left anchor relative
+                Vector2 anchoredPos = localPos + new Vector2(
+                    canvasRT.rect.width * canvasRT.pivot.x,
+                    -(canvasRT.rect.height * (1f - canvasRT.pivot.y)));
+
+                crestTooltipPanel.anchorMin = new Vector2(0, 1);
+                crestTooltipPanel.anchorMax = new Vector2(0, 1);
+                crestTooltipPanel.pivot = new Vector2(0, 0.5f);
+                crestTooltipPanel.anchoredPosition = anchoredPos;
+            }
+
+            // Show blocker
+            if (crestTooltipBlocker != null)
+            {
+                crestTooltipBlocker.SetActive(true);
+                crestTooltipBlocker.transform.SetSiblingIndex(crestPanel.transform.GetSiblingIndex());
+                crestPanel.transform.SetAsLastSibling();
+                crestTooltipPanel.transform.SetAsLastSibling();
+            }
+        }
+
+        private void DismissCrestTooltip()
+        {
+            crestTooltipShowing = false;
+            activeCrestIcon = null;
+
+
+            if (crestTooltipPanel != null)
+            {
+                crestTooltipPanel.gameObject.SetActive(false);
+            }
+            if (crestTooltipBlocker != null)
+            {
+                crestTooltipBlocker.SetActive(false);
             }
         }
 
@@ -2906,29 +4048,33 @@ namespace Crestforge.UI
             if (IsMultiplayer)
             {
                 var ss = serverState;
+                // Use optimistic values for button interactability
+                int effectiveGold = ss.gold + optimisticGoldDelta;
+                int effectiveFreeRerolls = ss.freeRerolls + optimisticFreeRerollDelta;
+
                 // Can reroll if have free rerolls OR enough gold
-                bool mpCanReroll = ss.freeRerolls > 0 || ss.gold >= 2; // REROLL_COST
-                bool mpCanBuyXP = ss.gold >= 4 && ss.level < 9; // XP_COST, MAX_LEVEL
+                bool mpCanReroll = effectiveFreeRerolls > 0 || effectiveGold >= 2; // REROLL_COST
+                bool mpCanBuyXP = effectiveGold >= 4 && ss.level < 9; // XP_COST, MAX_LEVEL
 
                 rerollButton.interactable = mpCanReroll;
                 buyXPButton.interactable = mpCanBuyXP;
 
-                // Update reroll button text to show free rerolls
+                // Update reroll button text to show free rerolls (including optimistic changes)
                 var rerollText = rerollButton.GetComponentInChildren<Text>();
                 if (rerollText != null)
                 {
-                    if (ss.freeRerolls > 0)
+                    if (effectiveFreeRerolls > 0)
                     {
-                        rerollText.text = $"🔄 0 ({ss.freeRerolls})";
+                        rerollText.text = $"Reroll ({effectiveFreeRerolls})";
                     }
                     else
                     {
-                        rerollText.text = "🔄 $2";
+                        rerollText.text = "Reroll $2";
                     }
                 }
 
-                string mpLockIcon = ss.shopLocked ? "🔒" : "🔓";
-                lockButton.GetComponentInChildren<Text>().text = mpLockIcon;
+                string mpLockText = ss.shopLocked ? "Locked" : "Lock";
+                lockButton.GetComponentInChildren<Text>().text = mpLockText;
                 return;
             }
 
@@ -2939,8 +4085,8 @@ namespace Crestforge.UI
             rerollButton.interactable = canReroll;
             buyXPButton.interactable = canBuyXP;
 
-            string lockIcon = state.shop.isLocked ? "🔒" : "🔓";
-            lockButton.GetComponentInChildren<Text>().text = lockIcon;
+            string lockText = state.shop.isLocked ? "Locked" : "Lock";
+            lockButton.GetComponentInChildren<Text>().text = lockText;
         }
 
         private void ShowCrestSelection()
@@ -3320,14 +4466,14 @@ namespace Crestforge.UI
             tooltipPanel.gameObject.SetActive(true);
 
             var t = unit.template;
-            
-            // Set sprite
+
+            // Set sprite - prefer 3D portrait
             if (tooltipSprite != null)
             {
-                tooltipSprite.sprite = UnitSpriteGenerator.GetSprite(t.unitId);
+                tooltipSprite.sprite = UnitPortraitGenerator.GetPortrait(t.unitId, t.unitName);
                 tooltipSprite.enabled = true;
             }
-            
+
             // Set name with cost color
             tooltipTitle.text = t.unitName;
             tooltipTitle.color = GetCostColor(t.cost);
@@ -3413,10 +4559,10 @@ namespace Crestforge.UI
 
             tooltipPanel.gameObject.SetActive(true);
 
-            // Set sprite
+            // Set sprite - prefer 3D portrait
             if (tooltipSprite != null)
             {
-                tooltipSprite.sprite = UnitSpriteGenerator.GetSprite(serverUnit.unitId);
+                tooltipSprite.sprite = UnitPortraitGenerator.GetPortrait(serverUnit.unitId, serverUnit.name ?? template.unitName);
                 tooltipSprite.enabled = true;
             }
 
@@ -3518,10 +4664,10 @@ namespace Crestforge.UI
 
             tooltipPanel.gameObject.SetActive(true);
 
-            // Set sprite
+            // Set sprite - prefer 3D portrait
             if (tooltipSprite != null)
             {
-                tooltipSprite.sprite = UnitSpriteGenerator.GetSprite(combatUnit.unitId);
+                tooltipSprite.sprite = UnitPortraitGenerator.GetPortrait(combatUnit.unitId, combatUnit.name ?? template.unitName);
                 tooltipSprite.enabled = true;
             }
 
@@ -3643,7 +4789,7 @@ namespace Crestforge.UI
                 if (serverItem == null) continue;
 
                 // Use combat unit's instance ID; pass -1 for index to disable unequip
-                ServerTooltipItemSlot.Create(tooltipItemContainer, new Vector2(36, 36), serverItem, combatUnit.instanceId, -1);
+                ServerTooltipItemSlot.Create(tooltipItemContainer, new Vector2(72, 72), serverItem, combatUnit.instanceId, -1);
             }
         }
 
@@ -3691,7 +4837,7 @@ namespace Crestforge.UI
                 var item = unit.equippedItems[i];
                 if (item == null) continue;
 
-                var slot = TooltipItemSlot.Create(tooltipItemContainer, new Vector2(36, 36), item, unit, i);
+                var slot = TooltipItemSlot.Create(tooltipItemContainer, new Vector2(72, 72), item, unit, i);
                 tooltipItemSlots.Add(slot);
             }
         }
@@ -3742,7 +4888,7 @@ namespace Crestforge.UI
             {
                 var serverItem = serverUnit.items[i];
                 if (serverItem == null) continue;
-                ServerTooltipItemSlot.Create(tooltipItemContainer, new Vector2(36, 36), serverItem, serverUnit.instanceId, i);
+                ServerTooltipItemSlot.Create(tooltipItemContainer, new Vector2(72, 72), serverItem, serverUnit.instanceId, i);
             }
         }
 
@@ -3810,18 +4956,14 @@ namespace Crestforge.UI
                     benchPanel.anchoredPosition = new Vector2(0, 220); // Bench above shop
                 }
                 
-                // Trait panel - compact, doesn't overlap battlefield
+                // Trait icon column - positioned above shop, height auto-sized
                 if (traitPanel != null)
                 {
-                    traitPanel.sizeDelta = new Vector2(110, 280);
-                    traitPanel.anchoredPosition = new Vector2(2, -85);
+                    traitPanel.sizeDelta = new Vector2(104, 0);
+                    traitPanel.anchoredPosition = new Vector2(4, 365);
                 }
-                
-                // Trait tooltip - position to the right of trait panel
-                if (traitTooltipPanel != null)
-                {
-                    traitTooltipPanel.anchoredPosition = new Vector2(118, -85);
-                }
+
+                // Trait tooltip - position is set dynamically in UpdateTraitTooltip
             }
             else
             {
@@ -3834,24 +4976,20 @@ namespace Crestforge.UI
                     benchPanel.anchoredPosition = new Vector2(0, 190);
                 }
                 
-                // Trait panel - slightly larger for landscape but still compact
+                // Trait icon column - positioned above shop, height auto-sized
                 if (traitPanel != null)
                 {
-                    traitPanel.sizeDelta = new Vector2(120, 320);
-                    traitPanel.anchoredPosition = new Vector2(2, -85);
+                    traitPanel.sizeDelta = new Vector2(104, 0);
+                    traitPanel.anchoredPosition = new Vector2(4, 190);
                 }
-                
-                // Trait tooltip - position to the right of trait panel
-                if (traitTooltipPanel != null)
-                {
-                    traitTooltipPanel.anchoredPosition = new Vector2(128, -85);
-                }
+
+                // Trait tooltip - position is set dynamically in UpdateTraitTooltip
             }
         }
 
         // ========== Click Handlers ==========
 
-        private void OnShopCardClicked(int index)
+        public void OnShopCardClicked(int index)
         {
             // Play UI click sound immediately
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
@@ -3859,6 +4997,32 @@ namespace Crestforge.UI
             // Multiplayer mode - send to server
             if (IsMultiplayer)
             {
+                // Check if we can afford it and have bench space (basic validation)
+                var shopUnit = serverState.shop != null && index < serverState.shop.Length ? serverState.shop[index] : null;
+                if (shopUnit != null && serverState.gold + optimisticGoldDelta >= shopUnit.cost)
+                {
+                    // Apply optimistic gold change immediately
+                    optimisticGoldDelta -= shopUnit.cost;
+
+                    // Create optimistic visual immediately (before server confirms)
+                    if (Crestforge.Visuals.BoardManager3D.Instance != null)
+                    {
+                        int slot = Crestforge.Visuals.BoardManager3D.Instance.CreateOptimisticPurchaseVisual(shopUnit);
+                        Debug.Log($"[GameUI] CreateOptimisticPurchaseVisual returned slot: {slot}");
+                    }
+                    else
+                    {
+                        Debug.Log("[GameUI] BoardManager3D.Instance is null!");
+                    }
+
+                    // Clear the shop card immediately for instant feedback
+                    if (index < shopCards.Count && shopCards[index] != null)
+                    {
+                        shopCards[index].SetServerUnit(null);
+                        pendingShopPurchases.Add(index); // Protect from sync restoring it
+                    }
+                }
+
                 serverState.BuyUnit(index);
                 Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
                 return;
@@ -3887,6 +5051,27 @@ namespace Crestforge.UI
             // Multiplayer mode - send to server
             if (IsMultiplayer)
             {
+                // Apply optimistic changes immediately
+                int effectiveFreeRerolls = serverState.freeRerolls + optimisticFreeRerollDelta;
+                if (effectiveFreeRerolls > 0)
+                {
+                    // Use a free reroll
+                    optimisticFreeRerollDelta--;
+                }
+                else
+                {
+                    // Pay gold for reroll
+                    int rerollCost = 2; // GameConstants.Economy.REROLL_COST
+                    if (serverState.gold + optimisticGoldDelta >= rerollCost)
+                    {
+                        optimisticGoldDelta -= rerollCost;
+                    }
+                }
+
+                // Start shrink animation and mark waiting for response
+                StartRerollShrinkAnimation();
+                waitingForRerollResponse = true;
+
                 serverState.Reroll();
                 Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
                 return;
@@ -3898,6 +5083,123 @@ namespace Crestforge.UI
             };
         }
 
+        /// <summary>
+        /// Start the shrink animation for all shop cards during reroll
+        /// </summary>
+        private void StartRerollShrinkAnimation()
+        {
+            if (rerollAnimationCoroutine != null)
+            {
+                StopCoroutine(rerollAnimationCoroutine);
+            }
+            rerollAnimationCoroutine = StartCoroutine(AnimateShopCardsShrink());
+        }
+
+        /// <summary>
+        /// Start the grow animation for all shop cards after reroll response
+        /// </summary>
+        private void StartRerollGrowAnimation()
+        {
+            if (rerollAnimationCoroutine != null)
+            {
+                StopCoroutine(rerollAnimationCoroutine);
+            }
+            rerollAnimationCoroutine = StartCoroutine(AnimateShopCardsGrow());
+        }
+
+        private IEnumerator AnimateShopCardsShrink()
+        {
+            float duration = 0.15f;
+            float elapsed = 0f;
+
+            // Store original scales and animate to minimum
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                float scale = Mathf.Lerp(1f, 0.1f, t);
+
+                foreach (var card in shopCards)
+                {
+                    if (card != null)
+                    {
+                        card.transform.localScale = Vector3.one * scale;
+                    }
+                }
+
+                yield return null;
+            }
+
+            // Ensure final scale is set
+            foreach (var card in shopCards)
+            {
+                if (card != null)
+                {
+                    card.transform.localScale = Vector3.one * 0.1f;
+                }
+            }
+        }
+
+        private IEnumerator AnimateShopCardsGrow()
+        {
+            float duration = 0.15f;
+            float elapsed = 0f;
+
+            // Get starting scale (might be mid-shrink)
+            float startScale = shopCards.Count > 0 && shopCards[0] != null
+                ? shopCards[0].transform.localScale.x
+                : 0.1f;
+
+            // Animate to full size with slight overshoot for juicy feel
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / duration;
+                // Ease out with slight overshoot
+                float eased = 1f - Mathf.Pow(1f - t, 3f);
+                float scale = Mathf.Lerp(startScale, 1.05f, eased);
+
+                foreach (var card in shopCards)
+                {
+                    if (card != null)
+                    {
+                        card.transform.localScale = Vector3.one * scale;
+                    }
+                }
+
+                yield return null;
+            }
+
+            // Settle back to exactly 1.0
+            float settleDuration = 0.05f;
+            elapsed = 0f;
+            while (elapsed < settleDuration)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / settleDuration;
+                float scale = Mathf.Lerp(1.05f, 1f, t);
+
+                foreach (var card in shopCards)
+                {
+                    if (card != null)
+                    {
+                        card.transform.localScale = Vector3.one * scale;
+                    }
+                }
+
+                yield return null;
+            }
+
+            // Ensure final scale
+            foreach (var card in shopCards)
+            {
+                if (card != null)
+                {
+                    card.transform.localScale = Vector3.one;
+                }
+            }
+        }
+
         private void OnBuyXPClicked()
         {
             Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
@@ -3905,6 +5207,13 @@ namespace Crestforge.UI
             // Multiplayer mode - send to server
             if (IsMultiplayer)
             {
+                // Apply optimistic gold change immediately
+                int xpCost = 4; // GameConstants.Economy.XP_COST
+                if (serverState.gold + optimisticGoldDelta >= xpCost)
+                {
+                    optimisticGoldDelta -= xpCost;
+                }
+
                 serverState.BuyXP();
                 Crestforge.Visuals.AudioManager.Instance?.PlayPurchase();
                 return;

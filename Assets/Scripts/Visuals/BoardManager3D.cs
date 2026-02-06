@@ -8,6 +8,7 @@ using Crestforge.Data;
 using Crestforge.Combat;
 using Crestforge.Networking;
 using Crestforge.UI;
+using Crestforge.Utilities;
 
 namespace Crestforge.Visuals
 {
@@ -50,6 +51,10 @@ namespace Crestforge.Visuals
         private GameObject hoveredTile;
         private UnitVisual3D hoveredUnit;
 
+        // Haptic feedback tracking during drag
+        private Vector2Int lastHapticHexCoord = new Vector2Int(-999, -999);
+        private int lastHapticBenchSlot = -999;
+
         // Bench visuals (slots are created by Game3DSetup)
         private Dictionary<int, UnitVisual3D> benchVisuals = new Dictionary<int, UnitVisual3D>();
 
@@ -58,6 +63,9 @@ namespace Crestforge.Visuals
         private ServerGameState serverState => ServerGameState.Instance;
         private HashSet<string> recentlyMovedUnits = new HashSet<string>(); // Units moved by drag, skip sync until server confirms
         private HashSet<string> recentlySoldUnits = new HashSet<string>(); // Units sold, skip sync until server confirms
+        private HashSet<int> recentlyVacatedBenchSlots = new HashSet<int>(); // Bench slots that had units moved out, skip sync
+        private HashSet<Vector2Int> recentlyVacatedBoardPositions = new HashSet<Vector2Int>(); // Board positions that had units moved out
+        private HashSet<int> pendingPurchaseSlots = new HashSet<int>(); // Bench slots with optimistic purchase visuals
 
         /// <summary>
         /// Get the visual registry for the player's board
@@ -174,6 +182,170 @@ namespace Crestforge.Visuals
         {
             recentlyMovedUnits.Clear();
             recentlySoldUnits.Clear();
+            recentlyVacatedBenchSlots.Clear();
+            recentlyVacatedBoardPositions.Clear();
+            pendingPurchaseSlots.Clear();
+            Registry?.ClearPendingMerges();
+        }
+
+        /// <summary>
+        /// Create an optimistic visual for a purchased unit before server confirms.
+        /// Returns -2 if unit was merged, -1 if failed, or bench slot index if new visual created.
+        /// </summary>
+        public int CreateOptimisticPurchaseVisual(ServerShopUnit shopUnit)
+        {
+            if (shopUnit == null || string.IsNullOrEmpty(shopUnit.unitId))
+            {
+                Debug.Log($"[OptimisticPurchase] Failed: shopUnit null or no unitId");
+                return -1;
+            }
+            if (Registry == null)
+            {
+                Debug.Log($"[OptimisticPurchase] Failed: Registry is null");
+                return -1;
+            }
+            if (serverState == null)
+            {
+                Debug.Log($"[OptimisticPurchase] Failed: serverState is null");
+                return -1;
+            }
+
+            // Check for optimistic merge first
+            bool isPlanning = serverState.phase == "planning";
+            if (TryOptimisticMerge(shopUnit.unitId, 1, isPlanning))
+            {
+                Debug.Log($"[OptimisticPurchase] Optimistic merge for {shopUnit.name}");
+                return -2; // Special value indicating merge happened
+            }
+
+            // Find first empty bench slot
+            int targetSlot = -1;
+            for (int i = 0; i < GameConstants.Player.BENCH_SIZE; i++)
+            {
+                bool serverEmpty = serverState.bench[i] == null;
+                bool visualEmpty = !serverBenchVisuals.ContainsKey(i);
+                if (serverEmpty && visualEmpty)
+                {
+                    targetSlot = i;
+                    break;
+                }
+            }
+
+            if (targetSlot < 0)
+            {
+                // Debug: show what's in each bench slot
+                for (int i = 0; i < GameConstants.Player.BENCH_SIZE; i++)
+                {
+                    var benchUnit = serverState.bench[i];
+                    bool hasVisual = serverBenchVisuals.ContainsKey(i);
+                    if (benchUnit != null)
+                    {
+                        Debug.Log($"[OptimisticPurchase] Slot {i}: unitId={benchUnit.unitId ?? "null"}, instanceId={benchUnit.instanceId ?? "null"}, hasVisual={hasVisual}");
+                    }
+                    else
+                    {
+                        Debug.Log($"[OptimisticPurchase] Slot {i}: null, hasVisual={hasVisual}");
+                    }
+                }
+                Debug.Log($"[OptimisticPurchase] Failed: No empty bench slot found. Bench size: {GameConstants.Player.BENCH_SIZE}, serverBenchVisuals count: {serverBenchVisuals.Count}");
+                return -1;
+            }
+
+            Debug.Log($"[OptimisticPurchase] Creating visual for {shopUnit.name} at slot {targetSlot}");
+
+            // Create temporary ServerUnitData for the visual
+            var tempUnitData = new ServerUnitData
+            {
+                unitId = shopUnit.unitId,
+                name = shopUnit.name,
+                instanceId = $"pending_{System.Guid.NewGuid()}", // Temporary ID
+                starLevel = 1,
+                items = new System.Collections.Generic.List<ServerItemData>()
+            };
+
+            // Create the visual immediately
+            UnitVisual3D visual = Registry.GetOrCreateBenchVisual(tempUnitData, targetSlot);
+            if (visual != null)
+            {
+                Debug.Log($"[OptimisticPurchase] Visual created successfully at slot {targetSlot}");
+                // Mark this slot as having a pending purchase (protect from sync)
+                pendingPurchaseSlots.Add(targetSlot);
+            }
+            else
+            {
+                Debug.Log($"[OptimisticPurchase] Registry.GetOrCreateBenchVisual returned null");
+            }
+
+            return targetSlot;
+        }
+
+        /// <summary>
+        /// Try to perform an optimistic merge for a unit being purchased.
+        /// Returns true if merge happened, false otherwise.
+        /// </summary>
+        private bool TryOptimisticMerge(string unitId, int starLevel, bool includeBoard)
+        {
+            if (starLevel >= GameConstants.Units.MAX_STAR_LEVEL)
+                return false;
+
+            // Find a matching unit on bench
+            UnitVisual3D matchVisual = null;
+            string matchInstanceId = null;
+            int matchBenchSlot = -1;
+
+            // Check bench first
+            for (int i = 0; i < GameConstants.Player.BENCH_SIZE; i++)
+            {
+                var benchUnit = serverState.bench[i];
+                if (benchUnit != null && benchUnit.unitId == unitId && benchUnit.starLevel == starLevel)
+                {
+                    // Found match on bench, get its visual
+                    if (serverBenchVisuals.TryGetValue(i, out UnitVisual3D visual) && visual != null)
+                    {
+                        matchVisual = visual;
+                        matchInstanceId = benchUnit.instanceId;
+                        matchBenchSlot = i;
+                        break;
+                    }
+                }
+            }
+
+            // Check board during planning phase if no bench match
+            if (matchVisual == null && includeBoard && serverState.board != null)
+            {
+                for (int x = 0; x < GameConstants.Grid.WIDTH; x++)
+                {
+                    for (int y = 0; y < GameConstants.Grid.HEIGHT; y++)
+                    {
+                        var boardUnit = serverState.board[x, y];
+                        if (boardUnit != null && boardUnit.unitId == unitId && boardUnit.starLevel == starLevel)
+                        {
+                            // Found match on board, get its visual
+                            if (Registry.BoardVisuals.TryGetValue(boardUnit.instanceId, out UnitVisual3D visual) && visual != null)
+                            {
+                                matchVisual = visual;
+                                matchInstanceId = boardUnit.instanceId;
+                                break;
+                            }
+                        }
+                    }
+                    if (matchVisual != null) break;
+                }
+            }
+
+            if (matchVisual == null)
+                return false;
+
+            // Found a match - upgrade it!
+            int newStarLevel = starLevel + 1;
+            matchVisual.UpdateStars(newStarLevel);
+            Registry?.MarkPendingMerge(matchInstanceId);
+            Debug.Log($"[OptimisticMerge] Upgraded {unitId} from {starLevel} to {newStarLevel} star (instanceId: {matchInstanceId})");
+
+            // Check for chain merge (e.g., buying a 1-star that creates a 2-star that merges with another 2-star)
+            TryOptimisticMerge(unitId, newStarLevel, includeBoard);
+
+            return true;
         }
 
         /// <summary>
@@ -724,6 +896,11 @@ namespace Crestforge.Visuals
                             {
                                 continue;
                             }
+                            // Skip if this position was recently vacated (unit dragged away but server hasn't confirmed)
+                            if (recentlyVacatedBoardPositions.Contains(new Vector2Int(x, y)))
+                            {
+                                continue;
+                            }
 
                             // Use registry to get or create visual
                             Registry.GetOrCreateBoardVisual(serverUnit, x, y, false);
@@ -731,6 +908,17 @@ namespace Crestforge.Visuals
                     }
                 }
 
+            }
+
+            // Also mark units as present if they were recently moved
+            // (prevents deletion of visuals moved locally before server confirms)
+            foreach (var kvp in serverUnitVisuals)
+            {
+                if (kvp.Value != null && !string.IsNullOrEmpty(kvp.Key) &&
+                    recentlyMovedUnits.Contains(kvp.Key))
+                {
+                    currentUnitIds.Add(kvp.Key);
+                }
             }
 
             // Remove visuals for units no longer on board (via registry)
@@ -776,10 +964,33 @@ namespace Crestforge.Visuals
                     {
                         continue;
                     }
+                    // Skip if this bench slot was recently vacated (unit dragged away but server hasn't confirmed)
+                    if (recentlyVacatedBenchSlots.Contains(i))
+                    {
+                        continue;
+                    }
 
                     // Use registry to get or create visual
                     Registry.GetOrCreateBenchVisual(serverUnit, i);
                 }
+            }
+
+            // Also mark slots as occupied if they contain a recently-moved unit
+            // (prevents deletion of visuals moved locally before server confirms)
+            foreach (var kvp in serverBenchVisuals)
+            {
+                if (kvp.Value != null && kvp.Value.ServerInstanceId != null &&
+                    recentlyMovedUnits.Contains(kvp.Value.ServerInstanceId))
+                {
+                    occupiedSlots.Add(kvp.Key);
+                }
+            }
+
+            // Also mark slots with pending purchases as occupied
+            // (prevents deletion of optimistic visuals before server confirms)
+            foreach (int slot in pendingPurchaseSlots)
+            {
+                occupiedSlots.Add(slot);
             }
 
             // Remove visuals for empty bench slots (via registry)
@@ -830,6 +1041,18 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
+        /// Cancel any in-progress drag and clean up state.
+        /// Public wrapper for external callers (e.g., combat visualizer).
+        /// </summary>
+        public void CancelDrag()
+        {
+            if (isDragging || isPendingDrag)
+            {
+                CancelDragMultiplayer();
+            }
+        }
+
+        /// <summary>
         /// Cancel any in-progress drag and clean up state
         /// </summary>
         private void CancelDragMultiplayer()
@@ -849,10 +1072,17 @@ namespace Crestforge.Visuals
                     if (isDraggingFromBench && benchDragIndex >= 0)
                     {
                         serverBenchVisuals[benchDragIndex] = draggedUnit;
+                        // Clear the vacated slot tracking since visual is returning
+                        recentlyVacatedBenchSlots.Remove(benchDragIndex);
                     }
                     else
                     {
                         serverUnitVisuals[draggedServerUnitInstanceId] = draggedUnit;
+                        // Clear the vacated position tracking since visual is returning
+                        if (dragStartCoord.x >= 0 && dragStartCoord.y >= 0)
+                        {
+                            recentlyVacatedBoardPositions.Remove(dragStartCoord);
+                        }
                     }
                 }
             }
@@ -1041,13 +1271,22 @@ namespace Crestforge.Visuals
                 Collider draggedCollider = draggedUnit.GetComponent<Collider>();
                 if (draggedCollider != null) draggedCollider.enabled = false;
 
-                // Check if dropped on UI sell zone first (only during planning)
-                if (isPlanning && IsOverSellZone())
+                // Check if dropped on UI sell zone
+                // Bench units can be sold any time, board units only during planning
+                bool canSell = IsOverSellZone() && (isDraggingFromBench || isPlanning);
+                if (canSell)
                 {
                     if (draggedCollider != null) draggedCollider.enabled = true;
 
                     // Track as sold to prevent flicker from sync
                     recentlySoldUnits.Add(draggedServerUnitInstanceId);
+
+                    // Apply optimistic gold change (before server confirms)
+                    if (draggedUnit != null && draggedUnit.unit != null)
+                    {
+                        int sellValue = draggedUnit.unit.GetSellValue();
+                        GameUI.Instance?.ApplyOptimisticSellGold(sellValue);
+                    }
 
                     // Remove from tracking and destroy visual immediately
                     if (isDraggingFromBench && benchDragIndex >= 0)
@@ -1120,6 +1359,12 @@ namespace Crestforge.Visuals
                             {
                                 targetVisual.SetPositionAndFaceCamera(sourcePos);
                                 serverBenchVisuals[benchDragIndex] = targetVisual;
+
+                                // Mark swapped unit as recently moved too
+                                if (!string.IsNullOrEmpty(targetVisual.ServerInstanceId))
+                                {
+                                    recentlyMovedUnits.Add(targetVisual.ServerInstanceId);
+                                }
                             }
                             else
                             {
@@ -1213,6 +1458,14 @@ namespace Crestforge.Visuals
                                         targetVisual.SetPositionAndFaceCamera(benchPos);
                                         serverBenchVisuals[benchDragIndex] = targetVisual;
                                         serverUnitVisuals.Remove(targetInstanceId);
+
+                                        // Mark swapped unit as recently moved too
+                                        if (!string.IsNullOrEmpty(targetVisual.ServerInstanceId))
+                                        {
+                                            recentlyMovedUnits.Add(targetVisual.ServerInstanceId);
+                                        }
+                                        // Mark the board position as vacated (swapped unit moved out)
+                                        recentlyVacatedBoardPositions.Add(coord);
                                     }
                                     else
                                     {
@@ -1320,6 +1573,9 @@ namespace Crestforge.Visuals
                                 {
                                     // Swap: move target unit to drag start position
                                     targetVisual.SetPositionAndFaceCamera(dragStartPos);
+
+                                    // Mark swapped unit as recently moved too
+                                    recentlyMovedUnits.Add(targetInstanceId);
                                 }
 
                                 // Move dragged unit to target
@@ -1400,6 +1656,14 @@ namespace Crestforge.Visuals
                                         targetBenchVisual.SetPositionAndFaceCamera(dragStartPos);
                                         serverUnitVisuals[targetBenchVisual.ServerInstanceId] = targetBenchVisual;
                                         serverBenchVisuals.Remove(targetSlot);
+
+                                        // Mark swapped unit as recently moved too
+                                        if (!string.IsNullOrEmpty(targetBenchVisual.ServerInstanceId))
+                                        {
+                                            recentlyMovedUnits.Add(targetBenchVisual.ServerInstanceId);
+                                        }
+                                        // Mark the bench slot as vacated (swapped unit moved out)
+                                        recentlyVacatedBenchSlots.Add(targetSlot);
                                     }
 
                                     // Move dragged board unit to bench
@@ -1460,6 +1724,14 @@ namespace Crestforge.Visuals
                                     targetBenchVisual.SetPositionAndFaceCamera(dragStartPos);
                                     serverUnitVisuals[targetBenchVisual.ServerInstanceId] = targetBenchVisual;
                                     serverBenchVisuals.Remove(targetSlot);
+
+                                    // Mark swapped unit as recently moved too
+                                    if (!string.IsNullOrEmpty(targetBenchVisual.ServerInstanceId))
+                                    {
+                                        recentlyMovedUnits.Add(targetBenchVisual.ServerInstanceId);
+                                    }
+                                    // Mark the bench slot as vacated (swapped unit moved out)
+                                    recentlyVacatedBenchSlots.Add(targetSlot);
                                 }
 
                                 // Move dragged board unit to bench
@@ -2047,6 +2319,19 @@ namespace Crestforge.Visuals
             isPendingDrag = false;
             isDragging = true;
 
+            // Initialize haptic tracking to current position so pickup doesn't trigger feedback
+            // Only trigger when moving to a NEW slot/hex
+            if (isDraggingFromBench)
+            {
+                lastHapticBenchSlot = benchDragIndex;
+                lastHapticHexCoord = new Vector2Int(-999, -999);
+            }
+            else
+            {
+                lastHapticHexCoord = dragStartCoord;
+                lastHapticBenchSlot = -999;
+            }
+
             // Block camera input
             if (cameraSetup != null)
             {
@@ -2065,6 +2350,8 @@ namespace Crestforge.Visuals
                 if (IsMultiplayer)
                 {
                     serverBenchVisuals.Remove(benchDragIndex);
+                    // Mark bench slot as vacated to prevent sync from creating a new visual there
+                    recentlyVacatedBenchSlots.Add(benchDragIndex);
                 }
                 else
                 {
@@ -2078,6 +2365,11 @@ namespace Crestforge.Visuals
                 {
                     dragPlaceholder.transform.position = dragStartPos;
                     dragPlaceholder.SetActive(true);
+                }
+                // Mark board position as vacated (for multiplayer)
+                if (IsMultiplayer && dragStartCoord.x >= 0 && dragStartCoord.y >= 0)
+                {
+                    recentlyVacatedBoardPositions.Add(dragStartCoord);
                 }
             }
 
@@ -2127,6 +2419,19 @@ namespace Crestforge.Visuals
                 // Use SetPosition to update both position and targetPosition
                 // This prevents the visual from trying to animate back if destroyed with delay
                 draggedUnit.SetPosition(worldPos);
+
+                // Check for bench slot hover and trigger haptic
+                if (IsBenchDropArea(worldPos))
+                {
+                    int benchSlot = GetBenchSlotAtWorldPosition(worldPos);
+                    if (benchSlot >= 0 && benchSlot != lastHapticBenchSlot)
+                    {
+                        lastHapticBenchSlot = benchSlot;
+                        // Don't reset lastHapticHexCoord here - causes infinite loops
+                        // when position flickers between bench area and hex area boundaries
+                        HapticFeedback.LightTap();
+                    }
+                }
             }
 
             // Update hover preview
@@ -2781,6 +3086,7 @@ namespace Crestforge.Visuals
             {
                 if (dragPlaceholder != null)
                     dragPlaceholder.SetActive(false);
+                lastHapticHexCoord = new Vector2Int(-999, -999);
                 return;
             }
 
@@ -2788,17 +3094,80 @@ namespace Crestforge.Visuals
             {
                 if (dragPlaceholder != null)
                     dragPlaceholder.SetActive(false);
+                lastHapticHexCoord = new Vector2Int(-999, -999);
                 return;
+            }
+
+            // Temporarily disable ALL unit colliders so raycast can hit hex tiles underneath
+            // This includes the dragged unit AND any fielded units on the board
+            var disabledColliders = new System.Collections.Generic.List<Collider>();
+
+            // Disable dragged unit's collider
+            Collider draggedCollider = draggedUnit.GetComponent<Collider>();
+            if (draggedCollider != null && draggedCollider.enabled)
+            {
+                draggedCollider.enabled = false;
+                disabledColliders.Add(draggedCollider);
+            }
+
+            // Disable all board unit colliders
+            if (Registry != null)
+            {
+                foreach (var kvp in Registry.BoardVisuals)
+                {
+                    if (kvp.Value != null && kvp.Value != draggedUnit)
+                    {
+                        Collider col = kvp.Value.GetComponent<Collider>();
+                        if (col != null && col.enabled)
+                        {
+                            col.enabled = false;
+                            disabledColliders.Add(col);
+                        }
+                    }
+                }
             }
 
             // Find hex under cursor
             GameObject targetTile = hexBoard.GetTileAtScreenPosition(Input.mousePosition);
 
-            if (targetTile != null && hexBoard.TryGetTileCoord(targetTile, out Vector2Int coord, out bool isEnemy))
+            // Re-enable all the colliders we disabled
+            foreach (var col in disabledColliders)
             {
-                // Only show preview on valid player tiles
+                if (col != null) col.enabled = true;
+            }
+
+            // Try raycast first, then fall back to closest tile by position
+            Vector2Int coord = new Vector2Int(-1, -1);
+            bool isEnemy = false;
+            bool foundTile = false;
+
+            if (targetTile != null && hexBoard.TryGetTileCoord(targetTile, out coord, out isEnemy))
+            {
+                foundTile = true;
+            }
+            else
+            {
+                // Fallback: find closest tile to dragged unit's current position
+                Vector3 dragPos = draggedUnit.transform.position;
+                if (hexBoard.TryGetClosestTileCoord(dragPos, hexBoard.TileRadius * 1.5f, out coord, out isEnemy))
+                {
+                    foundTile = true;
+                }
+            }
+
+            if (foundTile)
+            {
+                // Only interact with valid player tiles
                 if (coord.y < hexBoard.playerRows)
                 {
+                    // Haptic feedback when hovering a new player hex (even occupied - swap is allowed)
+                    if (coord != lastHapticHexCoord)
+                    {
+                        lastHapticHexCoord = coord;
+                        lastHapticBenchSlot = -999;
+                        HapticFeedback.LightTap();
+                    }
+
                     // Check if tile is empty (or is our original position for board drags)
                     bool isValidPlacement = false;
                     bool tileOccupied = false;
@@ -2815,13 +3184,13 @@ namespace Crestforge.Visuals
 
                     if (isDraggingFromBench)
                     {
-                        isValidPlacement = !tileOccupied;
+                        // For bench drags, swapping with occupied tiles is allowed
+                        isValidPlacement = true;
                     }
                     else
                     {
-                        // Board drag - valid if empty or same tile
-                        isValidPlacement = !tileOccupied ||
-                                          (coord.x == dragStartCoord.x && coord.y == dragStartCoord.y);
+                        // Board drag - valid if empty or same tile (swap with another board unit)
+                        isValidPlacement = true;
                     }
 
                     if (isValidPlacement && dragPlaceholder != null)
@@ -2830,14 +3199,18 @@ namespace Crestforge.Visuals
                         previewPos.y = 0.1f;
                         dragPlaceholder.transform.position = previewPos;
                         dragPlaceholder.SetActive(true);
-                        return;
                     }
+                    // Found a valid player tile - don't reset haptic coord even if occupied
+                    return;
                 }
             }
 
-            // Hide preview if not over valid tile
+            // Hide preview if not over valid tile (off the board or on enemy side)
             if (dragPlaceholder != null)
                 dragPlaceholder.SetActive(false);
+            // Don't reset lastHapticHexCoord here - it causes infinite haptic loops
+            // when tile detection flickers near tile edges. The coord is properly
+            // initialized in ActivateDrag() when a new drag starts.
         }
 
         /// <summary>
