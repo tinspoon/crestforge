@@ -7,8 +7,9 @@ using Crestforge.Combat;
 namespace Crestforge.Visuals
 {
     /// <summary>
-    /// Generates and manages 3D hexagonal tiles for the game board.
-    /// Creates extruded hex prisms with proper materials and hover effects.
+    /// Generates and manages hexagonal tiles for the game board.
+    /// Creates flat 2D pointy-top hexes with outlines and proper mesh colliders.
+    /// Hexes touch at edges with no gaps (offset coordinate system).
     /// Supports multiple instances for PvP mode.
     /// </summary>
     public class HexBoard3D : MonoBehaviour
@@ -21,9 +22,16 @@ namespace Crestforge.Visuals
 
         [Header("Board Settings")]
         public float hexRadius = 0.5f;
-        public float hexHeight = 0.15f;
-        public float hexSpacing = 0.05f;
+        public float hexHeight = 0.01f;  // Very thin - essentially 2D
         public int playerRows = 4;  // Player gets 4 rows
+
+        // Hex grid spacing constants (for pointy-top hexes with offset rows)
+        // Width (horizontal spacing) = sqrt(3) * radius
+        // Height (point to point) = 2 * radius
+        // Row spacing = 1.5 * radius (hexes interlock vertically)
+        private float HexWidth => hexRadius * 1.732f;  // sqrt(3) * radius - horizontal spacing
+        private float HexHeight => hexRadius * 2f;     // 2 * radius - point to point height
+        private float RowSpacing => hexRadius * 1.5f;  // Vertical distance between row centers
 
         [Header("Board Identity")]
         [Tooltip("Is this the main player's board?")]
@@ -126,9 +134,9 @@ namespace Crestforge.Visuals
                 // Total board is HEIGHT * 2 (player + enemy sides)
                 int totalRows = GameConstants.Grid.HEIGHT * 2;
                 Vector3 boardSize = new Vector3(
-                    GameConstants.Grid.WIDTH * (hexRadius * 2 + hexSpacing),
+                    GameConstants.Grid.WIDTH * HexWidth,
                     0,
-                    totalRows * (hexRadius * 1.732f + hexSpacing)
+                    (totalRows - 1) * RowSpacing + HexHeight  // Account for proper row spacing
                 );
                 IsometricCameraSetup.Instance.CenterOnBoard(boardCenter, boardSize);
             }
@@ -187,9 +195,9 @@ namespace Crestforge.Visuals
             enemyTiles = new GameObject[width, rowsPerSide];
 
             // Calculate total board size for centering
-            float totalWidth = width * (hexRadius * 2 + hexSpacing);
-            float totalHeight = totalRows * (hexRadius * 1.732f + hexSpacing);
-            Vector3 offset = new Vector3(-totalWidth / 2f + hexRadius, 0, -totalHeight / 2f + hexRadius);
+            float totalWidth = width * HexWidth;
+            float totalHeight = (totalRows - 1) * RowSpacing + HexHeight;
+            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 2f, 0, -totalHeight / 2f + HexHeight / 2f);
 
             // Generate player tiles (bottom rows)
             for (int y = 0; y < playerRows; y++)
@@ -225,14 +233,16 @@ namespace Crestforge.Visuals
 
         /// <summary>
         /// Convert hex grid coordinates to world position
+        /// For pointy-top hexes with offset rows: horizontal spacing = sqrt(3)*radius, vertical spacing = 1.5*radius
         /// </summary>
         public Vector3 HexToWorldPosition(int x, int y)
         {
-            float xOffset = (y % 2 == 1) ? (hexRadius + hexSpacing / 2f) : 0;
-            float worldX = x * (hexRadius * 2 + hexSpacing) + xOffset;
-            float worldZ = y * (hexRadius * 1.732f + hexSpacing);
-            // Raise tiles above ground to prevent Z-fighting
-            return new Vector3(worldX, 0.05f, worldZ);
+            // Odd rows are offset by half the hex width (offset coordinate system)
+            float xOffset = (y % 2 == 1) ? (HexWidth / 2f) : 0;
+            float worldX = x * HexWidth + xOffset;
+            float worldZ = y * RowSpacing;  // 1.5 * radius for interlocking hexes
+            // Raise tiles slightly above ground to prevent Z-fighting
+            return new Vector3(worldX, 0.02f, worldZ);
         }
 
         /// <summary>
@@ -242,16 +252,16 @@ namespace Crestforge.Visuals
         {
             // Total board is HEIGHT * 2 (player + enemy sides)
             int totalRows = GameConstants.Grid.HEIGHT * 2;
-            float totalWidth = GameConstants.Grid.WIDTH * (hexRadius * 2 + hexSpacing);
-            float totalHeight = totalRows * (hexRadius * 1.732f + hexSpacing);
-            Vector3 offset = new Vector3(-totalWidth / 2f + hexRadius, 0, -totalHeight / 2f + hexRadius);
+            float totalWidth = GameConstants.Grid.WIDTH * HexWidth;
+            float totalHeight = (totalRows - 1) * RowSpacing + HexHeight;
+            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 2f, 0, -totalHeight / 2f + HexHeight / 2f);
 
             // Add board's world position to get correct world coordinates
             return transform.position + HexToWorldPosition(x, y) + offset;
         }
 
         /// <summary>
-        /// Create a single 3D hex tile with grass styling (Merge Tactics style)
+        /// Create a single flat 2D hex tile with outline
         /// </summary>
         private GameObject CreateHexTile(Vector3 position, Color color, string name)
         {
@@ -259,14 +269,14 @@ namespace Crestforge.Visuals
             tile.transform.SetParent(transform);
             tile.transform.localPosition = position;  // Use localPosition so tiles are relative to board
 
-            // Create hex mesh
+            // Create flat hex mesh (2D - just the top face)
             MeshFilter mf = tile.AddComponent<MeshFilter>();
             MeshRenderer mr = tile.AddComponent<MeshRenderer>();
             MeshCollider mc = tile.AddComponent<MeshCollider>();
 
-            Mesh mesh = CreateHexMesh();
+            Mesh mesh = CreateFlatHexMesh();
             mf.mesh = mesh;
-            mc.sharedMesh = mesh;
+            mc.sharedMesh = mesh;  // Collider matches visual exactly
 
             // Add slight color variation for natural grass look
             float variation = Random.Range(-0.02f, 0.02f);
@@ -285,21 +295,23 @@ namespace Crestforge.Visuals
                 {
                     mat = new Material(grassShader);
                     mat.SetColor("_MainColor", variedColor);
-                    mat.SetColor("_EdgeColor", Color.Lerp(variedColor, MedievalVisualConfig.BoardColors.HexOutline, 0.5f));
+                    mat.SetColor("_EdgeColor", Color.Lerp(variedColor, MedievalVisualConfig.BoardColors.HexOutline, 0.7f));
                     mat.SetColor("_OutlineColor", MedievalVisualConfig.BoardColors.HexOutline);
-                    mat.SetFloat("_OutlineWidth", 0.03f);
-                    mat.SetFloat("_EdgeWidth", 0.12f);
+                    mat.SetFloat("_OutlineWidth", 0.06f);  // More visible outline
+                    mat.SetFloat("_EdgeWidth", 0.15f);     // Wider edge gradient
                     mat.SetFloat("_Brightness", 1.0f);
                 }
                 else
                 {
-                    // Fallback to URP/Lit material with grass-like appearance
+                    // Fallback to URP/Lit material with edge darkening effect
                     Shader urpShader = Shader.Find("Universal Render Pipeline/Lit");
                     if (urpShader != null)
                     {
+                        // Darken edges by using a darker base color
+                        Color edgeColor = Color.Lerp(variedColor, Color.black, 0.3f);
                         mat = new Material(urpShader);
-                        mat.SetColor("_BaseColor", variedColor);
-                        mat.SetFloat("_Smoothness", 0.1f); // Low smoothness for matte grass look
+                        mat.SetColor("_BaseColor", edgeColor);
+                        mat.SetFloat("_Smoothness", 0.1f);
                         mat.SetFloat("_Metallic", 0f);
                     }
                     else
@@ -323,113 +335,106 @@ namespace Crestforge.Visuals
             hexTile.baseColor = variedColor;
             hexTile.useMedievalTheme = useMedievalTheme;
 
+            // Add visible outline using LineRenderer
+            AddHexOutline(tile, hexRadius, hexHeight);
+
             return tile;
         }
 
         /// <summary>
-        /// Generate a hexagonal prism mesh
+        /// Add a LineRenderer outline to a hex tile
         /// </summary>
-        private Mesh CreateHexMesh()
+        private void AddHexOutline(GameObject tile, float radius, float height)
         {
-            Mesh mesh = new Mesh();
-            mesh.name = "HexTile";
+            GameObject outlineObj = new GameObject("Outline");
+            outlineObj.transform.SetParent(tile.transform, false);
 
-            List<Vector3> vertices = new List<Vector3>();
-            List<int> triangles = new List<int>();
-            List<Vector3> normals = new List<Vector3>();
+            LineRenderer lr = outlineObj.AddComponent<LineRenderer>();
+            lr.useWorldSpace = false;
+            lr.loop = true;
+            lr.positionCount = 6;
 
-            // Generate hex vertices (6 corners + center for top and bottom)
-            Vector3[] topCorners = new Vector3[6];
-            Vector3[] bottomCorners = new Vector3[6];
-
+            // Create outline points at hex corners, slightly above the surface
+            float outlineRadius = radius;
+            float outlineY = height + 0.005f;
             for (int i = 0; i < 6; i++)
             {
-                float angle = 60f * i - 30f; // Start at -30 for flat-top hex
+                float angle = 60f * i - 30f;
+                float rad = angle * Mathf.Deg2Rad;
+                float x = outlineRadius * Mathf.Cos(rad);
+                float z = outlineRadius * Mathf.Sin(rad);
+                lr.SetPosition(i, new Vector3(x, outlineY, z));
+            }
+
+            // Style the outline
+            lr.startWidth = 0.02f;
+            lr.endWidth = 0.02f;
+            lr.material = new Material(Shader.Find("Sprites/Default"));
+            lr.startColor = new Color(0.2f, 0.15f, 0.1f, 0.6f);  // Dark brown, semi-transparent
+            lr.endColor = new Color(0.2f, 0.15f, 0.1f, 0.6f);
+            lr.sortingOrder = 1;
+        }
+
+        /// <summary>
+        /// Generate a flat hexagonal mesh (2D - horizontal face for pointy-top hex)
+        /// </summary>
+        private Mesh CreateFlatHexMesh()
+        {
+            Mesh mesh = new Mesh();
+            mesh.name = "FlatHexTile";
+
+            Vector3[] vertices = new Vector3[7];  // 6 corners + center
+            int[] triangles = new int[18];        // 6 triangles * 3 vertices
+            Vector3[] normals = new Vector3[7];
+            Vector2[] uvs = new Vector2[7];
+
+            // Center vertex
+            vertices[0] = new Vector3(0, 0, 0);
+            normals[0] = Vector3.up;
+            uvs[0] = new Vector2(0.5f, 0.5f);
+
+            // 6 corner vertices (pointy-top hex: start at -30 degrees, point at top)
+            for (int i = 0; i < 6; i++)
+            {
+                float angle = 60f * i - 30f;
                 float rad = angle * Mathf.Deg2Rad;
                 float x = hexRadius * Mathf.Cos(rad);
                 float z = hexRadius * Mathf.Sin(rad);
-                
-                topCorners[i] = new Vector3(x, hexHeight, z);
-                bottomCorners[i] = new Vector3(x, 0, z);
+
+                vertices[i + 1] = new Vector3(x, 0, z);
+                normals[i + 1] = Vector3.up;
+                uvs[i + 1] = new Vector2(0.5f + x / hexRadius * 0.5f, 0.5f + z / hexRadius * 0.5f);
             }
 
-            Vector3 topCenter = new Vector3(0, hexHeight, 0);
-            Vector3 bottomCenter = new Vector3(0, 0, 0);
-
-            // === TOP FACE ===
-            int topCenterIdx = vertices.Count;
-            vertices.Add(topCenter);
-            normals.Add(Vector3.up);
-            
+            // 6 triangles from center to each edge
             for (int i = 0; i < 6; i++)
             {
-                vertices.Add(topCorners[i]);
-                normals.Add(Vector3.up);
+                triangles[i * 3] = 0;                    // Center
+                triangles[i * 3 + 1] = i + 1;            // Current corner
+                triangles[i * 3 + 2] = (i % 6) + 2 > 6 ? 1 : (i % 6) + 2;  // Next corner (wrap)
             }
 
-            for (int i = 0; i < 6; i++)
-            {
-                triangles.Add(topCenterIdx);
-                triangles.Add(topCenterIdx + 1 + i);
-                triangles.Add(topCenterIdx + 1 + (i + 1) % 6);
-            }
+            // Fix the last triangle wrapping
+            triangles[15] = 0;
+            triangles[16] = 6;
+            triangles[17] = 1;
 
-            // === BOTTOM FACE ===
-            int bottomCenterIdx = vertices.Count;
-            vertices.Add(bottomCenter);
-            normals.Add(Vector3.down);
-            
-            for (int i = 0; i < 6; i++)
-            {
-                vertices.Add(bottomCorners[i]);
-                normals.Add(Vector3.down);
-            }
-
-            for (int i = 0; i < 6; i++)
-            {
-                triangles.Add(bottomCenterIdx);
-                triangles.Add(bottomCenterIdx + 1 + (i + 1) % 6);
-                triangles.Add(bottomCenterIdx + 1 + i);
-            }
-
-            // === SIDE FACES ===
-            for (int i = 0; i < 6; i++)
-            {
-                int next = (i + 1) % 6;
-                
-                // Calculate side normal
-                Vector3 edge = topCorners[next] - topCorners[i];
-                Vector3 sideNormal = Vector3.Cross(Vector3.up, edge).normalized;
-
-                int baseIdx = vertices.Count;
-                
-                // Add 4 vertices for this side quad
-                vertices.Add(topCorners[i]);
-                vertices.Add(topCorners[next]);
-                vertices.Add(bottomCorners[next]);
-                vertices.Add(bottomCorners[i]);
-                
-                normals.Add(sideNormal);
-                normals.Add(sideNormal);
-                normals.Add(sideNormal);
-                normals.Add(sideNormal);
-
-                // Two triangles for the quad
-                triangles.Add(baseIdx);
-                triangles.Add(baseIdx + 1);
-                triangles.Add(baseIdx + 2);
-                
-                triangles.Add(baseIdx);
-                triangles.Add(baseIdx + 2);
-                triangles.Add(baseIdx + 3);
-            }
-
-            mesh.vertices = vertices.ToArray();
-            mesh.triangles = triangles.ToArray();
-            mesh.normals = normals.ToArray();
+            mesh.vertices = vertices;
+            mesh.triangles = triangles;
+            mesh.normals = normals;
+            mesh.uv = uvs;
             mesh.RecalculateBounds();
 
             return mesh;
+        }
+
+        /// <summary>
+        /// Generate a hexagonal prism mesh (kept for compatibility, but not used for tiles)
+        /// </summary>
+        private Mesh CreateHexMesh(float radiusScale = 1f)
+        {
+            // Just return flat mesh now
+            return CreateFlatHexMesh();
         }
 
         /// <summary>
@@ -549,7 +554,8 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
-        /// Find the closest tile to a world position (more reliable than raycasting)
+        /// Find the closest tile to a world position (more reliable than raycasting).
+        /// Uses 2D distance in the X-Z plane.
         /// </summary>
         public bool TryGetClosestTileCoord(Vector3 worldPos, float maxDistance, out Vector2Int coord, out bool isEnemy)
         {
@@ -585,6 +591,51 @@ namespace Crestforge.Visuals
 
             return false;
         }
+
+        /// <summary>
+        /// Find the closest tile to a world position, always returns a result if on or near the board.
+        /// This is more reliable than raycast-based detection for hex grids.
+        /// </summary>
+        public bool TryGetClosestTileCoordUnlimited(Vector3 worldPos, out Vector2Int coord, out bool isEnemy)
+        {
+            coord = Vector2Int.zero;
+            isEnemy = false;
+
+            float closestDist = float.MaxValue;
+            GameObject closestTile = null;
+
+            foreach (var kvp in tileToCoord)
+            {
+                GameObject tile = kvp.Key;
+                if (tile == null) continue;
+
+                float dist = Vector2.Distance(
+                    new Vector2(worldPos.x, worldPos.z),
+                    new Vector2(tile.transform.position.x, tile.transform.position.z)
+                );
+
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    closestTile = tile;
+                }
+            }
+
+            if (closestTile != null)
+            {
+                coord = tileToCoord[closestTile];
+                isEnemy = tileIsEnemy[closestTile];
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Get the maximum distance from any point to the nearest hex center.
+        /// For a hex grid, this is approximately the hex radius.
+        /// </summary>
+        public float MaxDistanceToHexCenter => hexRadius;
 
         public Vector3 BoardCenter => boardCenter;
         public float TileRadius => hexRadius;

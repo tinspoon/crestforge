@@ -2615,8 +2615,8 @@ namespace Crestforge.Visuals
                 }
                 else
                 {
-                    // Fallback: find closest tile to drop position (reuse worldPos from above)
-                    foundTile = hexBoard.TryGetClosestTileCoord(worldPos, 1.0f, out coord, out isEnemy);
+                    // Fallback: find closest tile to drop position (use 2x radius to ensure no gaps)
+                    foundTile = hexBoard.TryGetClosestTileCoord(worldPos, hexBoard.TileRadius * 2f, out coord, out isEnemy);
                 }
 
                 if (foundTile)
@@ -3154,8 +3154,9 @@ namespace Crestforge.Visuals
             else
             {
                 // Fallback: find closest tile to dragged unit's current position
+                // Use a generous distance (2x radius) to ensure no gaps between hexes
                 Vector3 dragPos = draggedUnit.transform.position;
-                if (hexBoard.TryGetClosestTileCoord(dragPos, hexBoard.TileRadius * 1.5f, out coord, out isEnemy))
+                if (hexBoard.TryGetClosestTileCoord(dragPos, hexBoard.TileRadius * 2f, out coord, out isEnemy))
                 {
                     foundTile = true;
                 }
@@ -3411,8 +3412,8 @@ namespace Crestforge.Visuals
                 }
                 else
                 {
-                    // Fallback: find closest tile to drop position
-                    foundTile = hexBoard.TryGetClosestTileCoord(worldPos, 1.0f, out coord, out isEnemy);
+                    // Fallback: find closest tile to drop position (use 2x radius to ensure no gaps)
+                    foundTile = hexBoard.TryGetClosestTileCoord(worldPos, hexBoard.TileRadius * 2f, out coord, out isEnemy);
                 }
 
                 if (foundTile)
