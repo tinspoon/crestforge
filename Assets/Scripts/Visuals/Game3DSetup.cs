@@ -569,8 +569,6 @@ namespace Crestforge.Visuals
 
             // Configure board visuals
             board.hexRadius = 0.45f;
-            board.hexHeight = 0.12f;
-            board.hexSpacing = 0.08f;
             board.playerTileColor = new Color(0.25f, 0.4f, 0.55f);
             board.enemyTileColor = new Color(0.55f, 0.3f, 0.3f);
             board.isPlayerBoard = true;
@@ -647,8 +645,6 @@ namespace Crestforge.Visuals
                 playerObj.transform.position = positions[2];
                 playerBoard = playerObj.AddComponent<HexBoard3D>();
                 playerBoard.hexRadius = 0.45f;
-                playerBoard.hexHeight = 0.12f;
-                playerBoard.hexSpacing = 0.08f;
                 playerBoard.playerTileColor = new Color(0.25f, 0.4f, 0.55f);
                 playerBoard.enemyTileColor = new Color(0.55f, 0.3f, 0.3f);
                 playerBoard.isPlayerBoard = true;
@@ -671,8 +667,6 @@ namespace Crestforge.Visuals
 
                 // Copy settings from player board
                 board.hexRadius = playerBoard.hexRadius;
-                board.hexHeight = playerBoard.hexHeight;
-                board.hexSpacing = playerBoard.hexSpacing;
                 board.playerTileColor = playerBoard.playerTileColor;
                 board.enemyTileColor = playerBoard.enemyTileColor;
                 board.isPlayerBoard = false;
@@ -1126,6 +1120,14 @@ namespace Crestforge.Visuals
                 // Position in front of boards (away from the main board area)
                 merchantAreaObj.transform.position = new Vector3(0, 0, 25f);
                 merchantAreaObj.AddComponent<MerchantArea3D>();
+            }
+
+            // Create MajorCrestOrb for major crest rounds (hidden by default)
+            MajorCrestOrb existingCrestOrb = FindAnyObjectByType<MajorCrestOrb>();
+            if (existingCrestOrb == null)
+            {
+                GameObject crestOrbObj = new GameObject("MajorCrestOrb");
+                crestOrbObj.AddComponent<MajorCrestOrb>();
             }
 
             // Load UnitModelDatabase if not already assigned
