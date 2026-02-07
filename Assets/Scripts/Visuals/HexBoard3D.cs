@@ -195,9 +195,11 @@ namespace Crestforge.Visuals
             enemyTiles = new GameObject[width, rowsPerSide];
 
             // Calculate total board size for centering
+            // Account for hex offset pattern: odd rows are shifted by HexWidth/2
+            // True board width spans from 0 to (width-0.5)*HexWidth, so center with HexWidth/4
             float totalWidth = width * HexWidth;
             float totalHeight = (totalRows - 1) * RowSpacing + HexHeight;
-            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 2f, 0, -totalHeight / 2f + HexHeight / 2f);
+            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 4f, 0, -totalHeight / 2f + HexHeight / 2f);
 
             // Generate player tiles (bottom rows)
             for (int y = 0; y < playerRows; y++)
@@ -257,7 +259,8 @@ namespace Crestforge.Visuals
             int totalRows = GameConstants.Grid.HEIGHT * 2;
             float totalWidth = GameConstants.Grid.WIDTH * HexWidth;
             float totalHeight = (totalRows - 1) * RowSpacing + HexHeight;
-            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 2f, 0, -totalHeight / 2f + HexHeight / 2f);
+            // Account for hex offset pattern: odd rows are shifted by HexWidth/2
+            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 4f, 0, -totalHeight / 2f + HexHeight / 2f);
 
             // Add board's world position to get correct world coordinates
             return transform.position + HexToWorldPosition(x, y) + offset;
@@ -359,16 +362,24 @@ namespace Crestforge.Visuals
             int totalRows = GameConstants.Grid.HEIGHT * 2;
 
             // Calculate board offset (same as in GenerateBoard)
+            // Account for hex offset pattern: odd rows are shifted by HexWidth/2
             float totalWidth = width * HexWidth;
             float totalHeight = (totalRows - 1) * RowSpacing + HexHeight;
-            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 2f, 0, -totalHeight / 2f + HexHeight / 2f);
+            Vector3 offset = new Vector3(-totalWidth / 2f + HexWidth / 4f, 0, -totalHeight / 2f + HexHeight / 2f);
 
             float outlineY = hexHeight + 0.005f;
-            Color outlineColor = new Color(0.2f, 0.15f, 0.1f, 0.35f);  // Dark brown, more transparent
+
+            // Different colors for player side vs enemy side
+            Color playerOutlineColor = new Color(0.15f, 0.25f, 0.4f, 0.4f);  // Blue tint for player
+            Color enemyOutlineColor = new Color(0.4f, 0.2f, 0.15f, 0.4f);   // Red/brown tint for enemy
+            int playerRows = totalRows / 2;  // First half is player side
 
             // Go through all hexes and draw their edges
             for (int y = 0; y < totalRows; y++)
             {
+                // Determine which color to use based on row
+                Color outlineColor = (y < playerRows) ? playerOutlineColor : enemyOutlineColor;
+
                 for (int x = 0; x < width; x++)
                 {
                     Vector3 hexCenter = HexToWorldPosition(x, y) + offset;
