@@ -21,8 +21,12 @@ namespace Crestforge.Visuals
         [Tooltip("Camera pitch angle")]
         public float rotationX = 45f;
         
-        [Tooltip("Distance from board center")]
+        [Tooltip("Distance from board center (auto-calculated for perspective)")]
         public float distance = 15f;
+
+        [Header("Projection")]
+        [Tooltip("Field of view for perspective projection")]
+        public float fieldOfView = 25f;
 
         [Header("Board Focus")]
         [Tooltip("Center point the camera looks at")]
@@ -148,7 +152,8 @@ namespace Crestforge.Visuals
         /// </summary>
         public void SetupCamera()
         {
-            cam.orthographic = true;
+            cam.orthographic = false;  // Perspective projection
+            cam.fieldOfView = fieldOfView;
             cam.nearClipPlane = 0.1f;
             cam.farClipPlane = 100f;
             cam.clearFlags = CameraClearFlags.SolidColor;
@@ -159,19 +164,14 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
-        /// Adjust camera ortho size to ensure minimum visible area fits on screen
-        /// This ensures the bench is always fully visible regardless of aspect ratio
-        /// Respects user zoom if they've zoomed out beyond the minimum
+        /// Adjust camera to ensure minimum visible area fits on screen
+        /// Works for both orthographic and perspective projection
         /// </summary>
         public void AdjustForAspectRatio()
         {
             if (cam == null) return;
 
             float aspectRatio = (float)Screen.width / Screen.height;
-
-            // For orthographic camera:
-            // - Vertical visible height = 2 * orthoSize
-            // - Horizontal visible width = 2 * orthoSize * aspectRatio
 
             // Account for camera angle - when tilted, we see more depth compressed
             float angleCompensation = 1f / Mathf.Cos(rotationX * Mathf.Deg2Rad);
@@ -196,7 +196,19 @@ namespace Crestforge.Visuals
                 orthoSize = baseOrthoSize;
             }
 
-            cam.orthographicSize = orthoSize;
+            if (cam.orthographic)
+            {
+                cam.orthographicSize = orthoSize;
+            }
+            else
+            {
+                // For perspective: calculate distance to show same area as orthoSize would
+                // Orthographic: visible height = 2 * orthoSize
+                // Perspective: visible height = 2 * distance * tan(FOV/2)
+                // So: distance = orthoSize / tan(FOV/2)
+                float halfFovRad = (fieldOfView * 0.5f) * Mathf.Deg2Rad;
+                distance = orthoSize / Mathf.Tan(halfFovRad);
+            }
         }
 
         /// <summary>
@@ -217,8 +229,9 @@ namespace Crestforge.Visuals
         /// </summary>
         public void CenterOnBoard(Vector3 boardCenter, Vector3 boardSize)
         {
-            // Focus on board center, shifted slightly forward to show whole board
-            focusPoint = boardCenter + new Vector3(0, 0, boardSize.z * 0.2f);
+            // Focus on board center, shifted down to push battlefield up in portrait view
+            // The -1.5f Y offset raises the board visually on mobile screens
+            focusPoint = boardCenter + new Vector3(0, -1.5f, boardSize.z * 0.2f);
 
             // Update min visible dimensions based on board size (with padding for bench)
             minVisibleWidth = Mathf.Max(minVisibleWidth, boardSize.x + 2f);
@@ -246,7 +259,18 @@ namespace Crestforge.Visuals
                     userHasZoomed = true;
                     orthoSize -= scroll * zoomSpeed;
                     orthoSize = Mathf.Clamp(orthoSize, minOrthoSize, maxOrthoSize);
-                    cam.orthographicSize = orthoSize;
+
+                    if (cam.orthographic)
+                    {
+                        cam.orthographicSize = orthoSize;
+                    }
+                    else
+                    {
+                        // For perspective, adjust distance to match zoom level
+                        float halfFovRad = (fieldOfView * 0.5f) * Mathf.Deg2Rad;
+                        distance = orthoSize / Mathf.Tan(halfFovRad);
+                        UpdateCameraPosition();
+                    }
                 }
             }
 
@@ -315,7 +339,18 @@ namespace Crestforge.Visuals
                     userHasZoomed = true;
                     orthoSize += delta * zoomSpeed * 0.01f;
                     orthoSize = Mathf.Clamp(orthoSize, minOrthoSize, maxOrthoSize);
-                    cam.orthographicSize = orthoSize;
+
+                    if (cam.orthographic)
+                    {
+                        cam.orthographicSize = orthoSize;
+                    }
+                    else
+                    {
+                        // For perspective, adjust distance to match zoom level
+                        float halfFovRad = (fieldOfView * 0.5f) * Mathf.Deg2Rad;
+                        distance = orthoSize / Mathf.Tan(halfFovRad);
+                        UpdateCameraPosition();
+                    }
                 }
             }
         }
