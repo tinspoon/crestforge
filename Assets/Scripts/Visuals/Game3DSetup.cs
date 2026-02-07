@@ -321,6 +321,9 @@ namespace Crestforge.Visuals
             // Create scenery manager for cosmetic decorations
             CreateSceneryManager();
 
+            // Create battlefield manager for environment themes
+            CreateBattlefieldManager();
+
             // Hide visuals initially if configured (for lobby flow)
             if (hideUntilGameStart)
             {
@@ -987,48 +990,40 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
-        /// Create a single bench slot visual (a simple colored platform)
+        /// Create a single bench slot visual (a 2D square outline)
         /// </summary>
         private void CreateBenchSlotVisual(Transform parent, Vector3 position, string name, Color baseColor)
         {
             float slotSize = 0.7f;
-            float slotHeight = 0.12f;
+            float halfSize = slotSize / 2f;
+            float lineWidth = 0.03f;
+            float groundY = 0.02f; // Slightly above ground to avoid z-fighting
 
-            GameObject slot = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            slot.name = name;
+            GameObject slot = new GameObject(name);
             slot.transform.SetParent(parent);
-            slot.transform.position = position;
-            slot.transform.localScale = new Vector3(slotSize, slotHeight, slotSize);
+            slot.transform.position = new Vector3(position.x, groundY, position.z);
 
-            // Remove collider (we don't need collision for bench slots)
-            Collider col = slot.GetComponent<Collider>();
-            if (col != null) Destroy(col);
+            // Add LineRenderer for square outline
+            LineRenderer lr = slot.AddComponent<LineRenderer>();
+            lr.useWorldSpace = false;
+            lr.loop = true;
+            lr.startWidth = lineWidth;
+            lr.endWidth = lineWidth;
 
-            // Create material - slightly muted version of the tile color
-            MeshRenderer renderer = slot.GetComponent<MeshRenderer>();
-            if (renderer != null)
-            {
-                // Use the exact tile color
-                Color slotColor = baseColor;
+            // Create material for the line
+            Material lineMaterial = new Material(Shader.Find("Sprites/Default"));
+            Color outlineColor = new Color(baseColor.r, baseColor.g, baseColor.b, 0.5f);
+            lineMaterial.color = outlineColor;
+            lr.material = lineMaterial;
+            lr.startColor = outlineColor;
+            lr.endColor = outlineColor;
 
-                // Use URP/Lit shader if available
-                Shader urpShader = Shader.Find("Universal Render Pipeline/Lit");
-                if (urpShader != null)
-                {
-                    Material mat = new Material(urpShader);
-                    mat.SetColor("_BaseColor", slotColor);
-                    mat.SetFloat("_Smoothness", 0.15f);
-                    mat.SetFloat("_Metallic", 0f);
-                    renderer.material = mat;
-                }
-                else
-                {
-                    Material mat = new Material(Shader.Find("Standard"));
-                    mat.color = slotColor;
-                    mat.SetFloat("_Glossiness", 0.15f);
-                    renderer.material = mat;
-                }
-            }
+            // Set the 4 corners of the square (in local space)
+            lr.positionCount = 4;
+            lr.SetPosition(0, new Vector3(-halfSize, 0, -halfSize));
+            lr.SetPosition(1, new Vector3(halfSize, 0, -halfSize));
+            lr.SetPosition(2, new Vector3(halfSize, 0, halfSize));
+            lr.SetPosition(3, new Vector3(-halfSize, 0, halfSize));
         }
 
         private void CreateBoardManager()
@@ -1152,6 +1147,16 @@ namespace Crestforge.Visuals
             {
                 GameObject sceneryObj = new GameObject("SceneryManager");
                 sceneryObj.AddComponent<Cosmetics.SceneryManager>();
+            }
+        }
+
+        private void CreateBattlefieldManager()
+        {
+            Cosmetics.BattlefieldManager existing = FindAnyObjectByType<Cosmetics.BattlefieldManager>();
+            if (existing == null)
+            {
+                GameObject battlefieldObj = new GameObject("BattlefieldManager");
+                battlefieldObj.AddComponent<Cosmetics.BattlefieldManager>();
             }
         }
 
