@@ -207,7 +207,7 @@ namespace Crestforge.UI
                 {
                     if (unit == null || unit.template == null) continue;
                     GUI.backgroundColor = GetCostColor(unit.template.cost);
-                    string stars = new string('★', unit.starLevel);
+                    string stars = new string('*', unit.starLevel);
                     if (GUILayout.Button($"{unit.template.unitName} {stars} → Board", GUILayout.Height(25)))
                     {
                         var unitToPlace = unit;
@@ -238,7 +238,7 @@ namespace Crestforge.UI
                         {
                             hasUnits = true;
                             GUI.backgroundColor = GetCostColor(unit.template.cost);
-                            string stars = new string('★', unit.starLevel);
+                            string stars = new string('*', unit.starLevel);
                             if (GUILayout.Button($"{unit.template.unitName} {stars} → Bench", GUILayout.Height(22)))
                             {
                                 var unitToReturn = unit;
@@ -289,7 +289,7 @@ namespace Crestforge.UI
                     for (int i = 0; i < state.majorCrests.Count; i++)
                     {
                         if (state.majorCrests[i] != null)
-                            GUILayout.Label($"★ {state.majorCrests[i].crestName}");
+                            GUILayout.Label($"* {state.majorCrests[i].crestName}");
                     }
                 }
             }

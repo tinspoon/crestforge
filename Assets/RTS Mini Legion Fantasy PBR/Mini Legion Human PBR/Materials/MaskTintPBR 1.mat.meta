@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 0ec81aa251db75047a46156b0b280fc1
+timeCreated: 1565585144
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Human PBR/Materials/MaskTintPBR
+    1.mat
+  uploadId: 534720

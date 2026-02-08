@@ -53,6 +53,11 @@ namespace Crestforge.Visuals
         private Transform healthFill;
         private Transform manaFill;
 
+        // Mana tracking for combat
+        private float currentMana = 0f;
+        private float maxMana = 40f;
+        private const float ManaPerAttack = 10f;
+
         // Item icons
         private GameObject itemIconContainer;
         private System.Collections.Generic.List<GameObject> itemIcons = new System.Collections.Generic.List<GameObject>();
@@ -81,6 +86,12 @@ namespace Crestforge.Visuals
 
         // Multiplayer instance ID (set when syncing from server state)
         public string ServerInstanceId { get; set; }
+
+        // Unit type ID (e.g., "archer", "knight") for identifying unit type
+        public string UnitId { get; set; }
+
+        // Track displayed star level so we can detect changes during sync
+        public int DisplayedStarLevel { get; private set; }
 
         // Server item data for multiplayer
         private System.Collections.Generic.List<Crestforge.Networking.ServerItemData> serverItems;
@@ -135,6 +146,14 @@ namespace Crestforge.Visuals
             {
                 // Fallback for enemies if no camera
                 transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+            }
+
+            // Initialize mana to zero (mana bar is created in CreateVisuals)
+            currentMana = 0f;
+            maxMana = 40f;
+            if (manaFill != null)
+            {
+                UpdateManaBar(0f, 50f);
             }
 
             bobOffset = Random.Range(0f, Mathf.PI * 2f);
@@ -509,9 +528,10 @@ namespace Crestforge.Visuals
         private void CreateStarContainer()
         {
             starContainer = new GameObject("Stars");
-            starContainer.transform.SetParent(transform);
-            starContainer.transform.localPosition = new Vector3(0, 0.1f, 0.3f);
-            starContainer.AddComponent<BillboardUI>();
+            // Parent to health bar so it moves with it and shares billboard
+            starContainer.transform.SetParent(healthBarObj.transform);
+            // Position to the left of the health bar (bar width is 0.5, so left edge is -0.25)
+            starContainer.transform.localPosition = new Vector3(-0.32f, 0, -0.01f);
         }
 
         private void CreateItemIconContainer()
@@ -635,33 +655,47 @@ namespace Crestforge.Visuals
         }
 
         /// <summary>
-        /// Update star display based on unit level
+        /// Update star display based on unit level.
+        /// Stars are positioned to the left of the health bar, overlapping horizontally.
         /// </summary>
         public void UpdateStars(int starLevel)
         {
+            if (starContainer == null) return;
+            DisplayedStarLevel = starLevel;
+
             // Clear existing stars
             foreach (Transform child in starContainer.transform)
             {
                 Destroy(child.gameObject);
             }
 
-            // Create new stars
-            float starSize = 0.08f;
-            float spacing = 0.12f;
-            float startX = -(starLevel - 1) * spacing * 0.5f;
+            // Only show stars for valid star levels
+            if (starLevel < 1) return;
+
+            float starSize = 0.09f;
+            // Overlap: each subsequent star offset slightly to the right
+            float overlap = 0.04f;
 
             for (int i = 0; i < starLevel; i++)
             {
                 GameObject star = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 star.name = $"Star_{i}";
                 star.transform.SetParent(starContainer.transform);
-                star.transform.localPosition = new Vector3(startX + i * spacing, 0, 0);
+                // Stack from right to left so the leftmost star is on top
+                float x = -(starLevel - 1 - i) * overlap;
+                float z = -0.005f * i; // Slight z offset so later stars render in front
+                star.transform.localPosition = new Vector3(x, 0, z);
                 star.transform.localScale = Vector3.one * starSize;
                 star.transform.localRotation = Quaternion.Euler(0, 0, 45); // Diamond shape
                 Destroy(star.GetComponent<Collider>());
-                
-                Material starMat = star.GetComponent<Renderer>().material;
-                starMat.color = new Color(1f, 0.9f, 0.3f); // Gold
+
+                Material starMat = new Material(Shader.Find("Unlit/Color"));
+                // Brighter gold for higher star levels
+                Color starColor = starLevel >= 3
+                    ? new Color(1f, 0.85f, 0.2f)   // Bright gold for 3-star
+                    : new Color(1f, 0.9f, 0.3f);    // Gold for 2-star
+                starMat.color = starColor;
+                star.GetComponent<Renderer>().material = starMat;
             }
         }
 
@@ -722,11 +756,11 @@ namespace Crestforge.Visuals
         /// <summary>
         /// Update mana bar display
         /// </summary>
-        public void UpdateManaBar(float currentMana, float maxMana)
+        public void UpdateManaBar(float mana, float max)
         {
-            if (manaFill == null || maxMana <= 0) return;
-            
-            float percent = Mathf.Clamp01(currentMana / maxMana);
+            if (manaFill == null || max <= 0) return;
+
+            float percent = Mathf.Clamp01(mana / max);
             Vector3 scale = manaFill.localScale;
             scale.x = 0.48f * percent;
             manaFill.localScale = scale;
@@ -734,6 +768,36 @@ namespace Crestforge.Visuals
             Vector3 pos = manaFill.localPosition;
             pos.x = -0.24f * (1f - percent);
             manaFill.localPosition = pos;
+        }
+
+        /// <summary>
+        /// Initialize mana values from combat start data
+        /// </summary>
+        public void InitializeMana(float startMana, float startMaxMana)
+        {
+            currentMana = startMana;
+            maxMana = startMaxMana > 0 ? startMaxMana : 50f;
+            UpdateManaBar(currentMana, maxMana);
+        }
+
+        /// <summary>
+        /// Gain mana (called when unit auto-attacks)
+        /// </summary>
+        public void GainMana(float amount)
+        {
+            currentMana = Mathf.Min(currentMana + amount, maxMana * 2f); // Allow overfill up to 2x
+            UpdateManaBar(currentMana, maxMana);
+        }
+
+        /// <summary>
+        /// Use ability and reset mana
+        /// </summary>
+        public void UseAbility()
+        {
+            // Keep overfill when using ability
+            float overfill = Mathf.Max(0f, currentMana - maxMana);
+            currentMana = overfill;
+            UpdateManaBar(currentMana, maxMana);
         }
 
         /// <summary>
@@ -871,6 +935,45 @@ namespace Crestforge.Visuals
             {
                 unitAnimator.PlayAttack(attackSpeed);
             }
+        }
+
+        /// <summary>
+        /// Play ability animation toward target (uses special ability animation if available)
+        /// Abilities have a fixed duration that does not scale with attack speed.
+        /// </summary>
+        public void PlayAbilityAnimation(Vector3 targetPos, float duration = 1.0f)
+        {
+            if (isAttacking) return;
+
+            attackTarget = targetPos;
+            attackStartPos = transform.position;
+            isAttacking = true;
+            attackTimer = 0f;
+
+            // Abilities use a fixed duration (does not scale with attack speed)
+            attackDuration = Mathf.Clamp(duration, 0.2f, 2.0f);
+
+            // Face the target immediately
+            Vector3 lookDir = (targetPos - transform.position);
+            lookDir.y = 0;
+            if (lookDir.magnitude > 0.1f)
+            {
+                targetRotation = Quaternion.LookRotation(lookDir);
+                transform.rotation = targetRotation;
+            }
+
+            // Trigger ability animation with the fixed duration
+            if (unitAnimator != null)
+            {
+                unitAnimator.PlayAbilityWithDuration(attackDuration);
+            }
+
+            // Play ability VFX flash (blue color)
+            if (flashCoroutine != null)
+            {
+                StopCoroutine(flashCoroutine);
+            }
+            flashCoroutine = StartCoroutine(FlashColor(new Color(0.3f, 0.5f, 1f), 0.3f));
         }
 
         /// <summary>

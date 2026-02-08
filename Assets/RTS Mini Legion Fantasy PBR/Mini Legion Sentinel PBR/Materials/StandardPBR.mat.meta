@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 3ffa0b8f269c5ed4788546744b2fcfc6
+timeCreated: 1558256308
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Sentinel PBR/Materials/StandardPBR.mat
+  uploadId: 534720

@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: c3117e8d6ea664f41970c42a5c119591
+timeCreated: 1557497355
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Warband PBR/Prefabs/Bandwagon
+    MaskTint.prefab
+  uploadId: 534720

@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: c6cf683f5d9f8434b805accfe50c6776
+timeCreated: 1565608718
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Human PBR/Prefabs/Footman_MaskTint_PBR.prefab
+  uploadId: 534720

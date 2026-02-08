@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 54aee1c9b2b7e5a4ebe0e6515d1853b4
+timeCreated: 1557405309
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Warband PBR/Materials/Standard.mat
+  uploadId: 534720

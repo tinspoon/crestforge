@@ -33,9 +33,8 @@ namespace Crestforge.Visuals
         // Runtime
         private Dictionary<UnitInstance, UnitVisual3D> unitVisuals = new Dictionary<UnitInstance, UnitVisual3D>();
         private GameState state;
-        
-        // Drag & drop
-        private UnitVisual3D selectedUnit;
+
+        // Drag & drop (selection is now managed by GameUI)
         private UnitVisual3D draggedUnit;
         private Vector3 dragStartPos;
         private Vector2Int dragStartCoord;
@@ -1156,6 +1155,13 @@ namespace Crestforge.Visuals
 
         private void OnPointerDownMultiplayer(Ray ray)
         {
+            // Don't process 3D clicks when pointer is over UI (prevents grabbing bench units behind UI panels)
+            if (UnityEngine.EventSystems.EventSystem.current != null &&
+                UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            {
+                return;
+            }
+
             RaycastHit hit;
             if (Physics.Raycast(ray, out hit, 100f))
             {
@@ -1228,6 +1234,13 @@ namespace Crestforge.Visuals
         {
             if (!isDragging && !isPendingDrag)
             {
+                // Don't process 3D clicks if clicking on UI (let UI handle its own clicks)
+                if (UnityEngine.EventSystems.EventSystem.current != null &&
+                    UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+                {
+                    return;
+                }
+
                 // Check for click on unit to show tooltip (no pending drag started)
                 RaycastHit hit;
                 if (Physics.Raycast(ray, out hit, 100f))
@@ -1239,8 +1252,8 @@ namespace Crestforge.Visuals
                     }
                     else
                     {
-                        // Clicked on something that's not a unit - hide tooltip
-                        Crestforge.UI.GameUI.Instance?.HideTooltipPinned();
+                        // Clicked on something that's not a unit - delegate to GameUI to clear selection
+                        Crestforge.UI.GameUI.Instance?.HandleUnitClicked(null);
                     }
                 }
                 return;
@@ -2753,32 +2766,12 @@ namespace Crestforge.Visuals
 
         private void SelectUnit(UnitVisual3D unitVis)
         {
-            // Deselect previous
-            if (selectedUnit != null)
-            {
-                selectedUnit.SetSelected(false);
-            }
-
-            // Select new
-            if (selectedUnit == unitVis)
-            {
-                selectedUnit = null;
-            }
-            else
-            {
-                selectedUnit = unitVis;
-                selectedUnit.SetSelected(true);
-
-                // Show unit tooltip/info
-                if (Crestforge.UI.GameUI.Instance != null)
-                {
-                    Crestforge.UI.GameUI.Instance.ShowTooltipPinned(unitVis.unit);
-                }
-            }
+            // Delegate to GameUI for centralized selection state (works for both single and multiplayer)
+            Crestforge.UI.GameUI.Instance?.HandleUnitClicked(unitVis);
         }
 
         /// <summary>
-        /// Select a unit in multiplayer mode and show its tooltip
+        /// Select a unit in multiplayer mode - delegates to GameUI for centralized state management
         /// </summary>
         private void SelectUnitMultiplayer(UnitVisual3D unitVis)
         {
@@ -2789,75 +2782,39 @@ namespace Crestforge.Visuals
                 return;
             }
 
-            // Deselect previous
-            if (selectedUnit != null)
-            {
-                selectedUnit.SetSelected(false);
-            }
+            // Delegate all selection/tooltip logic to GameUI (single source of truth)
+            Crestforge.UI.GameUI.Instance?.HandleUnitClicked(unitVis);
+        }
 
-            // Toggle selection if clicking the same unit
-            if (selectedUnit == unitVis)
-            {
-                selectedUnit = null;
-                Crestforge.UI.GameUI.Instance?.HideTooltipPinned();
-                return;
-            }
-
-            selectedUnit = unitVis;
-            selectedUnit.SetSelected(true);
-
-            // First, check if this is a combat unit or bench unit (during combat phase)
-            if (ServerCombatVisualizer.Instance != null && ServerCombatVisualizer.Instance.IsPlayingCombat)
-            {
-                // Check combat units
-                var combatUnit = ServerCombatVisualizer.Instance.GetCombatUnitByVisual(unitVis);
-                if (combatUnit != null && combatUnit.CombatUnitData != null)
-                {
-                    Crestforge.UI.GameUI.Instance?.ShowTooltipPinned(combatUnit.CombatUnitData);
-                    return;
-                }
-
-                // Check bench units shown during combat
-                var benchUnit = ServerCombatVisualizer.Instance.GetBenchUnitByVisual(unitVis);
-                if (benchUnit != null)
-                {
-                    Crestforge.UI.GameUI.Instance?.ShowTooltipPinned(benchUnit);
-                    return;
-                }
-            }
-
-            // Find the ServerUnitData for this visual
-            ServerUnitData serverUnit = null;
+        /// <summary>
+        /// Find ServerUnitData for a given visual (called by GameUI for centralized selection)
+        /// </summary>
+        public ServerUnitData FindServerUnitByVisual(UnitVisual3D unitVis)
+        {
+            if (unitVis == null) return null;
 
             // Check board visuals
             foreach (var kvp in serverUnitVisuals)
             {
                 if (kvp.Value == unitVis)
                 {
-                    // Find the unit data by instance ID
-                    serverUnit = FindServerUnitByInstanceId(kvp.Key);
-                    break;
+                    return FindServerUnitByInstanceId(kvp.Key);
                 }
             }
 
             // Check bench visuals
-            if (serverUnit == null)
+            if (serverState?.bench != null)
             {
                 foreach (var kvp in serverBenchVisuals)
                 {
                     if (kvp.Value == unitVis && kvp.Key >= 0 && kvp.Key < serverState.bench.Length)
                     {
-                        serverUnit = serverState.bench[kvp.Key];
-                        break;
+                        return serverState.bench[kvp.Key];
                     }
                 }
             }
 
-            // Show tooltip if we found the unit data
-            if (serverUnit != null && Crestforge.UI.GameUI.Instance != null)
-            {
-                Crestforge.UI.GameUI.Instance.ShowTooltipPinned(serverUnit);
-            }
+            return null;
         }
 
         /// <summary>

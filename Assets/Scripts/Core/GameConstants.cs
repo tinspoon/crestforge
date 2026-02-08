@@ -28,9 +28,9 @@ namespace Crestforge.Core
             public const int BASE_GOLD_PER_ROUND = 4;
             public const int BASE_GOLD_PER_TURN = BASE_GOLD_PER_ROUND;  // Alias
             public const int INTEREST_PER_5_GOLD = 1;
-            public const int MAX_INTEREST = 4;           // At 20 gold
-            public const int REROLL_COST = 1;
-            public const int XP_COST = 2;                // Cost to buy XP
+            public const int MAX_INTEREST = 3;           // At 15 gold
+            public const int REROLL_COST = 2;
+            public const int XP_COST = 4;                // Cost to buy XP
             public const int XP_PER_PURCHASE = 2;        // XP gained per purchase
             public const int SHOP_SIZE = 4;
             public const int CREST_TOKEN_COST = 3;       // Cost to buy crest token from shop
@@ -46,7 +46,7 @@ namespace Crestforge.Core
 
             // XP required to reach each level (cumulative)
             // Level: 1    2    3    4     5     6
-            public static readonly int[] XP_REQUIRED = { 0, 0, 2, 6, 12, 22, 36 };
+            public static readonly int[] XP_REQUIRED = { 0, 0, 2, 6, 12, 24, 36 };
 
             // Units allowed on board at each level
             public static readonly int[] UNITS_PER_LEVEL = { 0, 1, 2, 3, 4, 5, 6 };
@@ -65,16 +65,16 @@ namespace Crestforge.Core
                 { 0, 0, 0, 0, 0 },
                 // Level 1: Only 1-costs
                 { 100, 0, 0, 0, 0 },
-                // Level 2: Mostly 1-costs, some 2-costs
-                { 70, 30, 0, 0, 0 },
-                // Level 3: 3-costs start appearing
-                { 50, 35, 15, 0, 0 },
-                // Level 4: 4-costs start appearing
+                // Level 2: Only 1-costs
+                { 100, 0, 0, 0, 0 },
+                // Level 3: 2-costs start appearing
+                { 75, 25, 0, 0, 0 },
+                // Level 4: 3-costs start appearing
+                { 55, 30, 15, 0, 0 },
+                // Level 5: 4-costs start appearing
                 { 30, 40, 25, 5, 0 },
-                // Level 5: 5-costs start appearing (rare)
-                { 15, 30, 35, 18, 2 },
-                // Level 6: Best odds for high-cost units
-                { 10, 20, 30, 30, 10 },
+                // Level 6: 5-costs appear, best odds for high-cost
+                { 15, 25, 30, 20, 10 },
             };
 
             // Chance for crest token to appear in shop (by level)
@@ -87,7 +87,7 @@ namespace Crestforge.Core
         // ===========================================
         public static class Units
         {
-            public const int COPIES_PER_UNIT = 6;        // Copies of each unit in pool
+            public const int COPIES_PER_UNIT = 20;       // Copies of each unit in pool
             public const int POOL_SIZE = COPIES_PER_UNIT;    // Alias
             public const int MAX_STAR_LEVEL = 3;
             public const int UNITS_TO_2_STAR = 2;        // Pairs to upgrade
@@ -127,7 +127,7 @@ namespace Crestforge.Core
         {
             public const int TOTAL_ROUNDS = 14;
             public const int MAX_ROUNDS = TOTAL_ROUNDS;          // Alias for compatibility
-            public const float PLANNING_PHASE_DURATION = 25f;    // Seconds
+            public const float PLANNING_PHASE_DURATION = 20f;    // Seconds
             public const float EARLY_PLANNING_DURATION = 35f;    // Rounds 1-3, extra time
             public const float COMBAT_PHASE_DURATION = 60f;      // Max combat time before draw
             public const float MAD_MERCHANT_DURATION = 45f;      // Time for merchant round

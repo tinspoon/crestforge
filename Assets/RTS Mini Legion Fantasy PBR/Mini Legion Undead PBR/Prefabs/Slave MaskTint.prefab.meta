@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 8fe57ef4fcb67104d8150a98836f76dc
+timeCreated: 1563797291
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Undead PBR/Prefabs/Slave
+    MaskTint.prefab
+  uploadId: 534720

@@ -470,6 +470,7 @@ namespace Crestforge.UI
             Debug.LogError($"[LobbyUI] Connection error: {error}");
             statusText.text = $"Error: {error}";
             statusText.color = Color.red;
+            UpdateUI(); // Refresh UI to show connect panel again
         }
 
         private void HandleRoomCreated(string roomId)
@@ -547,7 +548,7 @@ namespace Crestforge.UI
             if (gameUI != null)
             {
                 Debug.Log("[LobbyUI] Activating GameUI");
-                gameUI.gameObject.SetActive(true);
+                gameUI.Show();
             }
             else
             {

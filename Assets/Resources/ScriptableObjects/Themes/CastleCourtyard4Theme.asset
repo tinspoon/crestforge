@@ -1,0 +1,102 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3536092fbcfe84c5586ab72e93b62898, type: 3}
+  m_Name: CastleCourtyard4Theme
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Cosmetics.BattlefieldTheme
+  themeId: castlecourtyard4
+  themeName: CastleCourtyard4
+  description: Custom theme created in Theme Editor
+  previewImage: {fileID: 0}
+  unlockType: 0
+  unlockRequirement: 
+  purchasePrice: 0
+  skipGround: 1
+  groundPrefab: {fileID: 0}
+  groundMaterial: {fileID: 0}
+  groundColor: {r: 0.3, g: 0.5, b: 0.2, a: 1}
+  groundSize: {x: 12, y: 10}
+  playerHexMaterial: {fileID: 0}
+  enemyHexMaterial: {fileID: 0}
+  playerHexColor: {r: 0.35, g: 0.55, b: 0.25, a: 1}
+  enemyHexColor: {r: 0.45, g: 0.55, b: 0.3, a: 1}
+  skipBench: 1
+  benchPrefab: {fileID: 0}
+  benchOffset: {x: 0, y: 0, z: 0}
+  benchScale: 1
+  zonePlacements:
+  - zone: 0
+    prefab: {fileID: 5158735089969267748, guid: d9a96ffe5e6244a77b0522ddc7776e0f, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: -0.1, z: 0}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 20, y: 0.1, z: 20}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 3728237240822203283, guid: 0fec3f30a1d40de4d8406b1dd3d948bb, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1674046646914551566, guid: e124221217539004d8ec6f2e05fd579b, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.3, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 3728237240822203283, guid: 0fec3f30a1d40de4d8406b1dd3d948bb, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1674046646914551566, guid: e124221217539004d8ec6f2e05fd579b, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.3, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4095537655423778536, guid: 91c403b49f6ef6b47b28838106df5152, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.3, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4095537655423778536, guid: 91c403b49f6ef6b47b28838106df5152, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.3, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  ambientParticlesPrefab: {fileID: 0}
+  ambientParticlesOffset: {x: 0, y: 2, z: 0}
+  ambientAudio: {fileID: 0}
+  ambientVolume: 0.3

@@ -23,6 +23,8 @@ namespace Crestforge.Visuals
         [Header("Colors")]
         public Color crestTokenColor = new Color(0.8f, 0.6f, 1f);   // Purple for crest
         public Color itemAnvilColor = new Color(1f, 0.8f, 0.3f);    // Gold for item
+        public Color mixedLootColor = new Color(0.3f, 1f, 0.8f);    // Cyan/teal for mystery loot
+        public Color largeMixedLootColor = new Color(1f, 0.5f, 0.2f); // Orange for boss loot
 
         // Runtime
         private Vector3 targetPosition;
@@ -42,7 +44,7 @@ namespace Crestforge.Visuals
             GameObject orbObj = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             orbObj.name = $"LootOrb_{type}";
             orbObj.transform.position = spawnPosition + Vector3.up * 0.5f;
-            orbObj.transform.localScale = Vector3.one * 0.3f;
+            orbObj.transform.localScale = Vector3.one * 0.5f;
 
             // Add collider for clicking
             var collider = orbObj.GetComponent<SphereCollider>();
@@ -67,6 +69,10 @@ namespace Crestforge.Visuals
                 type = LootType.CrestToken;
             else if (lootTypeStr == "item_anvil")
                 type = LootType.ItemAnvil;
+            else if (lootTypeStr == "mixed_loot")
+                type = LootType.MixedLoot;
+            else if (lootTypeStr == "large_mixed_loot")
+                type = LootType.LargeMixedLoot;
 
             if (type == LootType.None)
             {
@@ -85,7 +91,13 @@ namespace Crestforge.Visuals
             meshRenderer = GetComponent<MeshRenderer>();
 
             // Set color based on loot type
-            Color orbColor = lootType == LootType.CrestToken ? crestTokenColor : itemAnvilColor;
+            Color orbColor = lootType switch
+            {
+                LootType.CrestToken => crestTokenColor,
+                LootType.MixedLoot => mixedLootColor,
+                LootType.LargeMixedLoot => largeMixedLootColor,
+                _ => itemAnvilColor
+            };
 
             // Create emissive material
             Material mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));

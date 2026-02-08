@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 235a9b0b54507a84485d90f6e2cbba2a
+timeCreated: 1575973429
+licenseType: Store
+ShaderImporter:
+  defaultTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Human PBR/Shader/PBRMaskTint.shader
+  uploadId: 534720

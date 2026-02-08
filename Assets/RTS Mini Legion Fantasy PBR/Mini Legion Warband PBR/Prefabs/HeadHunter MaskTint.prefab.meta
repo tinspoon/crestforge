@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: c7fc9262fdae31e4899ac46cdc127a36
+timeCreated: 1557497413
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Warband PBR/Prefabs/HeadHunter
+    MaskTint.prefab
+  uploadId: 534720

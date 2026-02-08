@@ -1,0 +1,1506 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3536092fbcfe84c5586ab72e93b62898, type: 3}
+  m_Name: CastleCourtyardTheme
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.Cosmetics.BattlefieldTheme
+  themeId: castlecourtyard
+  themeName: CastleCourtyard
+  description: Custom theme created in Theme Editor
+  previewImage: {fileID: 0}
+  unlockType: 0
+  unlockRequirement: 
+  purchasePrice: 0
+  skipGround: 1
+  groundPrefab: {fileID: 0}
+  groundMaterial: {fileID: 0}
+  groundColor: {r: 0.3, g: 0.5, b: 0.2, a: 1}
+  groundSize: {x: 12, y: 10}
+  playerHexMaterial: {fileID: 0}
+  enemyHexMaterial: {fileID: 0}
+  playerHexColor: {r: 0.35, g: 0.55, b: 0.25, a: 1}
+  enemyHexColor: {r: 0.45, g: 0.55, b: 0.3, a: 1}
+  skipBench: 1
+  benchPrefab: {fileID: 0}
+  benchOffset: {x: 0, y: 0, z: 0}
+  benchScale: 1
+  zonePlacements:
+  - zone: 0
+    prefab: {fileID: 9041758002455478323, guid: d0f1ec532a20ff3468d9d373719385e5, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.448, y: 0.441, z: -2.176}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.4, y: 0.4, z: 0.4}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.8, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -4, y: 0, z: -1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.2, y: 0, z: 1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 4, y: 0, z: -1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 8725658135408426006, guid: ff467555aa651ec47a45bd2e208237c6, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.73, y: 0.56, z: 0}
+    rotation: {x: 0, y: 270, z: 0}
+    scale: {x: 0.2000003, y: 0.2, z: 0.2000003}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.6, y: 0.1, z: 4.125}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000048, y: 0.2, z: 0.20000048}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.4, y: 0.1, z: -4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.20000006, y: 0.2, z: 0.20000006}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.169, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.8, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 8848196526208614612, guid: 08dfcc35000ddbb4a9a213fac40454e2, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.074, y: 0.255, z: -0.662}
+    rotation: {x: 339.80582, y: 90, z: 0.0000027290828}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1953223546311678347, guid: d6b277755b85ff940a033bfd7bdc18bc, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.53, y: -0.04999965, z: 0.39}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1953223546311678347, guid: d6b277755b85ff940a033bfd7bdc18bc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.53, y: -0.04999965, z: -0.37}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.8, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.2, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2367030867270548441, guid: d5afedc908c7a424fb652661ee682c41, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.01, y: 0.51, z: -0.37}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.2, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.4, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5241766916773977339, guid: 449e22fbe15f74740a1aa0ebaacfd13c, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.95, y: 0.173, z: -1.577}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.6, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.2, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.4, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 7666204363687604240, guid: 23eef0ed5897ac94984d85ef24b92a18, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.6, y: -1.7, z: -1.62}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.4, y: 0.1, z: 4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 7666204363687604240, guid: 23eef0ed5897ac94984d85ef24b92a18, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.6, y: -1.7, z: 1.62}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.2, y: 0, z: -1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.6, y: 0.1, z: -4.125}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000048, y: 0.2, z: 0.20000048}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.8, y: 0.1, z: 4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.20000006, y: 0.2, z: 0.20000006}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 7728869556245221621, guid: 7c7fd4b1eb88ee5478a42b82fd4ac83f, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.2, y: 0.457, z: -2.323}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.4, y: 0.4, z: 0.4}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.169, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -5, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1777017677904340305, guid: 48d96bcf28d2d654f8d1644e697f2ae8, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.38, y: 0.3, z: -1.9519163}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000018, y: 0.2, z: 0.20000018}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: 0.1, z: -4.125}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000048, y: 0.2, z: 0.20000048}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.8, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.4, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2628397050436746061, guid: b6fbd6a20fc82ce4d9c871caf0d14c5a, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.529, y: 0.5227191, z: -1.745}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.40000036, y: 0.4, z: 0.40000036}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.2, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.4, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2367030867270548441, guid: d5afedc908c7a424fb652661ee682c41, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.01, y: 0.51, z: 0.4}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.4, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5158735089969267748, guid: d9a96ffe5e6244a77b0522ddc7776e0f, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: -0.1, z: 0}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 20, y: 0.1, z: 20}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1674046646914551566, guid: e124221217539004d8ec6f2e05fd579b, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.3, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.58, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2367030867270548441, guid: d5afedc908c7a424fb652661ee682c41, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.01, y: -0.05, z: -0.37}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 8725658135408426006, guid: ff467555aa651ec47a45bd2e208237c6, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.16, y: 0.1, z: 0}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.2000003, y: 0.2, z: 0.2000003}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2469688483021359806, guid: 7f16ca55dc3e9784389916a2988fae57, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.092673, y: 0, z: 7.2054467}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 8725658135408426006, guid: ff467555aa651ec47a45bd2e208237c6, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.73, y: 0.56, z: 0}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.2000003, y: 0.2, z: 0.2000003}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.8, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 4, y: 0, z: 3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1266616175695062684, guid: 85bdbe4be994cf040bfe2d6667b11b71, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.015, y: 0.7, z: 0.005}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.25}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.4, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2367030867270548441, guid: d5afedc908c7a424fb652661ee682c41, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.01, y: -0.05, z: -0.37}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2362216121380496119, guid: 1ed20c0fb0814c442a28980ebbf4bc1c, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.5846918, y: 0.45770872, z: 2.620189}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.8, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.8, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 970687031569021003, guid: 9c026b79a1eb094499d4092ef452adb1, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.264, y: 0.53967774, z: -1.72988}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.4, y: 0.4, z: 0.4}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.4, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.58, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1266616175695062684, guid: 85bdbe4be994cf040bfe2d6667b11b71, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.015, y: 0.7, z: 0.005}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.25}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1953223546311678347, guid: d6b277755b85ff940a033bfd7bdc18bc, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.53, y: -0.04999965, z: -0.37}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 696249653265975027, guid: 32910ca222235d940bdd4a787982eb9f, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.62, y: 0.1323356, z: 5.29}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.2, y: 0, z: -3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.6, y: 0, z: 5.4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 7295001163072759297, guid: f85e1953e6eca7b4b82c488c4a7d399d, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.39, y: 0.1, z: 5.43}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.6, y: 0.1, z: 4.125}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000048, y: 0.2, z: 0.20000048}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -4, y: 0, z: 1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1561967366707410497, guid: b93f48c7c8d5ce14b89d41a21cf0fcdc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.4472845, y: 0.06446554, z: 1.6083275}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -4, y: 0, z: -3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2009566014177887714, guid: ae2e17aa3d65b684ca9168cc7bd25ba9, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.81, y: -0.01282464, z: -3.21}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.4, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.169, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.2, y: 0, z: -3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1561967366707410497, guid: b93f48c7c8d5ce14b89d41a21cf0fcdc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.342, y: 0.136, z: 1.6083275}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.75, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 5, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 8725658135408426006, guid: ff467555aa651ec47a45bd2e208237c6, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.16, y: 0.1, z: 0}
+    rotation: {x: 0, y: 270, z: 0}
+    scale: {x: 0.2000003, y: 0.2, z: 0.2000003}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 4, y: 0, z: -3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1561967366707410497, guid: b93f48c7c8d5ce14b89d41a21cf0fcdc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.293, y: 0.06446554, z: 1.6083275}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.8, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.2, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 3728237240822203283, guid: 0fec3f30a1d40de4d8406b1dd3d948bb, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 4, y: 0, z: 1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1790812320112759928, guid: 173d5a733e1e90f40bf86627787fa8b8, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.5603957, y: -0.050000798, z: 8.397966}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.6, y: 0, z: 5.4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2367030867270548441, guid: d5afedc908c7a424fb652661ee682c41, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.01, y: 0.51, z: 0.4}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 3728237240822203283, guid: 0fec3f30a1d40de4d8406b1dd3d948bb, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1953223546311678347, guid: d6b277755b85ff940a033bfd7bdc18bc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.53, y: -0.04999965, z: 0.39}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2730467352980673067, guid: e16ae779dbfb49349b193799332f978c, type: 3}
+    objectType: 0
+    positionOffset: {x: -5.17, y: -0.04051838, z: 3.08}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000018, y: 0.2, z: 0.20000018}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.75, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.2, y: 0, z: 3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4095537655423778536, guid: 91c403b49f6ef6b47b28838106df5152, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.3, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.4, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 3478033722718605926, guid: 2be6252894777b041b49b86b3927f864, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.07, y: 0.13, z: 2.42}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.2, y: 0, z: -1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 5, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.6, y: 0.1, z: -4.125}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000048, y: 0.2, z: 0.20000048}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.6, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1674046646914551566, guid: e124221217539004d8ec6f2e05fd579b, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.3, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.2, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1690926021282771832, guid: d8c8af6df822d6b46b83396c1966d669, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.96, y: -0.04999972, z: -1.9630603}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.2000003, y: 0.2, z: 0.2000003}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 7805578898320859060, guid: ec3bc71ef47dff849b8d39c2787ca3e0, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.38, y: 0, z: 4.726}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -4, y: 0, z: 3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 0, y: 0.1, z: 4.125}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.20000048, y: 0.2, z: 0.20000048}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.75, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.6, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -5, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.2, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1561967366707410497, guid: b93f48c7c8d5ce14b89d41a21cf0fcdc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.376, y: 0.06446554, z: 1.6083275}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1561967366707410497, guid: b93f48c7c8d5ce14b89d41a21cf0fcdc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.21, y: 0.06446554, z: 1.6083275}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.2, y: 0, z: 1.25}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.2, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.2, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.4, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 6729793356892599221, guid: 2d9d275ae01aaac41bc7309d576d7e41, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.27, y: -0.050000064, z: -0.65}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.8, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1690926021282771832, guid: d8c8af6df822d6b46b83396c1966d669, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.96, y: -0.04999972, z: 1.66}
+    rotation: {x: -0, y: 90, z: -0}
+    scale: {x: 0.2000003, y: 0.2, z: 0.2000003}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4095537655423778536, guid: 91c403b49f6ef6b47b28838106df5152, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.3, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.8, y: 0.1, z: -4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.20000006, y: 0.2, z: 0.20000006}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.2, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.2, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.8, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5258116840670902508, guid: e3422ef45c097474da4f86ca1f74aa85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.5059645, y: -0.0065668933, z: 3.4929004}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.58, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2962150512507293844, guid: 906c417adc2f05247a16b3e11756d5fd, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.2, y: 0, z: 3.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -5, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5076021563309590065, guid: eaef1c9811d60a54e8662f563dddb7d3, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.6002634, y: -0.038221497, z: 3.2891953}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.8, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.8, y: 0.1, z: -4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.20000006, y: 0.2, z: 0.20000006}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1561967366707410497, guid: b93f48c7c8d5ce14b89d41a21cf0fcdc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.303, y: 0.206, z: 1.6083275}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 5, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5241766916773977339, guid: 449e22fbe15f74740a1aa0ebaacfd13c, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.884, y: 0.173, z: -2.3076868}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: -2.4, y: 0.1, z: -4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 1561967366707410497, guid: b93f48c7c8d5ce14b89d41a21cf0fcdc, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.256, y: 0.136, z: 1.6083275}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.75, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2742311303673260675, guid: e77e0e96e0deac64ba0e2e06f9e1201c, type: 3}
+    objectType: 0
+    positionOffset: {x: 4.84, y: -0.012825631, z: 4.63}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.4, y: 0.1, z: 4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.20000006, y: 0.2, z: 0.20000006}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.2, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.2, y: 0, z: 4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 7380376205519161278, guid: 5ab30aa4a46887b4491a238b925eca3a, type: 3}
+    objectType: 0
+    positionOffset: {x: -3.161, y: 0.501, z: -1.803}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.4, y: 0.4, z: 0.4}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2.8, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -2, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.4, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 2367030867270548441, guid: d5afedc908c7a424fb652661ee682c41, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.01, y: 0.51, z: -0.37}
+    rotation: {x: 0, y: 180, z: 0}
+    scale: {x: 0.3, y: 0.3, z: 0.3}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.58, y: 0, z: 5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5500737550676003842, guid: cce1823cb64f7774793ca5335977d13f, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.169, y: 0, z: -5.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 3.6, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 2, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 4702917332821319706, guid: 21a173c510201164d9c1c43e2a8b29c7, type: 3}
+    objectType: 0
+    positionOffset: {x: -0.8, y: 0.1, z: 4.125}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.20000006, y: 0.2, z: 0.20000006}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -1.2, y: 0, z: -4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.2, y: 0, z: 4}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 1.2, y: 0, z: -5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: -4.2, y: 0, z: 5.6}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  - zone: 0
+    prefab: {fileID: 5546880012423465853, guid: dcd45b8c8f3b9e441a0b17ef2b9cba85, type: 3}
+    objectType: 0
+    positionOffset: {x: 0.4, y: 0, z: -4.8}
+    rotation: {x: -0, y: 0, z: 0}
+    scale: {x: 0.2, y: 0.2, z: 0.2}
+    positionVariance: 0
+    rotationVariance: 0
+    scaleVariance: 0
+  ambientParticlesPrefab: {fileID: 0}
+  ambientParticlesOffset: {x: 0, y: 2, z: 0}
+  ambientAudio: {fileID: 0}
+  ambientVolume: 0.3

@@ -24,7 +24,7 @@ MonoBehaviour:
     armor: 20
     magicResist: 25
     attack: 35
-    attackSpeed: 0.55
+    attackSpeed: 0.63
     range: 1
     moveSpeed: 2
     startingMana: 0

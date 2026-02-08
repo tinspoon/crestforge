@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 14a841ea7d3386848a14c76884013a5a
+timeCreated: 1563797336
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Undead PBR/Prefabs/Lich
+    MaskTint.prefab
+  uploadId: 534720

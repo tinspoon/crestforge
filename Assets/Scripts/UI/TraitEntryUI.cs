@@ -6,9 +6,9 @@ using Crestforge.Data;
 namespace Crestforge.UI
 {
     /// <summary>
-    /// Component for trait entries in the trait panel - handles hover detection
+    /// Component for trait icon entries in the trait panel - handles tap and hover detection
     /// </summary>
-    public class TraitEntryUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+    public class TraitEntryUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
     {
         public TraitData trait;
         public int count;
@@ -16,6 +16,9 @@ namespace Crestforge.UI
         private bool isHovered = false;
         private Image backgroundImage;
         private Color originalColor;
+
+        // Static reference to currently selected entry (for tap-to-toggle on mobile)
+        private static TraitEntryUI currentlySelected;
 
         private void Awake()
         {
@@ -35,26 +38,41 @@ namespace Crestforge.UI
         {
             isHovered = true;
             Crestforge.Visuals.AudioManager.Instance?.PlayUIHover();
-
-            // Highlight effect
-            if (backgroundImage != null)
-            {
-                Color highlightColor = originalColor;
-                highlightColor.r = Mathf.Min(1f, highlightColor.r + 0.1f);
-                highlightColor.g = Mathf.Min(1f, highlightColor.g + 0.1f);
-                highlightColor.b = Mathf.Min(1f, highlightColor.b + 0.05f);
-                backgroundImage.color = highlightColor;
-            }
+            ApplyHighlight();
         }
 
         public void OnPointerExit(PointerEventData eventData)
         {
-            isHovered = false;
+            // On mobile, keep selected state even after pointer exit
+            if (currentlySelected == this) return;
 
-            // Restore original color
-            if (backgroundImage != null)
+            isHovered = false;
+            RestoreColor();
+        }
+
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            // Toggle behavior for mobile: tap to select, tap again to deselect
+            if (currentlySelected == this)
             {
-                backgroundImage.color = originalColor;
+                // Deselect
+                currentlySelected = null;
+                isHovered = false;
+                RestoreColor();
+            }
+            else
+            {
+                // Deselect previous
+                if (currentlySelected != null)
+                {
+                    currentlySelected.isHovered = false;
+                    currentlySelected.RestoreColor();
+                }
+
+                // Select this one
+                currentlySelected = this;
+                isHovered = true;
+                ApplyHighlight();
             }
         }
 
@@ -64,6 +82,39 @@ namespace Crestforge.UI
             if (backgroundImage != null && !isHovered)
             {
                 backgroundImage.color = color;
+            }
+        }
+
+        /// <summary>
+        /// Deselect any currently selected trait entry (called when tapping outside)
+        /// </summary>
+        public static void DeselectAll()
+        {
+            if (currentlySelected != null)
+            {
+                currentlySelected.isHovered = false;
+                currentlySelected.RestoreColor();
+                currentlySelected = null;
+            }
+        }
+
+        private void ApplyHighlight()
+        {
+            if (backgroundImage != null)
+            {
+                Color highlightColor = originalColor;
+                highlightColor.r = Mathf.Min(1f, highlightColor.r + 0.15f);
+                highlightColor.g = Mathf.Min(1f, highlightColor.g + 0.15f);
+                highlightColor.b = Mathf.Min(1f, highlightColor.b + 0.1f);
+                backgroundImage.color = highlightColor;
+            }
+        }
+
+        private void RestoreColor()
+        {
+            if (backgroundImage != null)
+            {
+                backgroundImage.color = originalColor;
             }
         }
     }

@@ -11,7 +11,9 @@ namespace Crestforge.Data
     {
         None,
         CrestToken,     // Drops minor crest selection
-        ItemAnvil       // Drops item selection
+        ItemAnvil,      // Drops item selection
+        MixedLoot,      // Random loot - gold or unit
+        LargeMixedLoot  // Boss loot - more gold or better unit
     }
 
     /// <summary>
@@ -187,7 +189,7 @@ namespace Crestforge.Data
         /// </summary>
         public string GetDisplayName()
         {
-            string stars = new string('★', starLevel);
+            string stars = new string('*', starLevel);
             return $"{template.unitName} {stars}";
         }
 

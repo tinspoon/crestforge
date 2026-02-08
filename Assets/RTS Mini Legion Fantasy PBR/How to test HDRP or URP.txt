@@ -1,0 +1,7 @@
+To test HDRP or URP, you have to do the following steps.
+
+1. Locate SRP folders inside of each faction folders.
+
+2. In that folder, you will find text file just like this one.
+
+3. Do exactly what it tells you to do.

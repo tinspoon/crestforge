@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 27c5c3666ba751946848d2130fe06ba4
+timeCreated: 1580647109
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Undead PBR/Prefabs/Bolt
+    Standard.prefab
+  uploadId: 534720

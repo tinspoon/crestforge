@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 2b825746209155e4d9926dcd9ecc4eac
+timeCreated: 1580472220
+licenseType: Store
+ShaderImporter:
+  defaultTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Sentinel PBR/Shader/PBRMaskTint.shader
+  uploadId: 534720

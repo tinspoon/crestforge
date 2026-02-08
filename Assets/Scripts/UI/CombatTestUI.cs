@@ -31,7 +31,7 @@ namespace Crestforge.UI
     public class TestTeamConfig
     {
         public List<TestUnitConfig> units = new List<TestUnitConfig>();
-        public string minorCrestId;
+        public List<string> minorCrestIds = new List<string>();
         public string majorCrestId;
     }
 
@@ -55,14 +55,14 @@ namespace Crestforge.UI
         private TestTeamConfig teamAConfig = new TestTeamConfig();
         private Dictionary<Vector2Int, TestUnitConfig> teamABoard = new Dictionary<Vector2Int, TestUnitConfig>();
         private List<Button> teamATileButtons = new List<Button>();
-        private Dropdown teamAMinorCrestDropdown;
+        private Dropdown[] teamAMinorCrestDropdowns = new Dropdown[3];
         private Dropdown teamAMajorCrestDropdown;
 
         // Team B (right side)
         private TestTeamConfig teamBConfig = new TestTeamConfig();
         private Dictionary<Vector2Int, TestUnitConfig> teamBBoard = new Dictionary<Vector2Int, TestUnitConfig>();
         private List<Button> teamBTileButtons = new List<Button>();
-        private Dropdown teamBMinorCrestDropdown;
+        private Dropdown[] teamBMinorCrestDropdowns = new Dropdown[3];
         private Dropdown teamBMajorCrestDropdown;
 
         // Current selection state
@@ -292,23 +292,36 @@ namespace Crestforge.UI
             // Board grid (5 wide x 4 tall)
             CreateBoardGrid(container.transform, new Vector2(0, 30), isTeamA);
 
-            // Crest dropdowns
-            CreateText(container.transform, "Minor Crest:", 14, new Vector2(-120, -180));
-            Dropdown minorDropdown = CreateDropdown(container.transform, minorCrests, new Vector2(80, -180), 180);
-            minorDropdown.onValueChanged.AddListener((val) => OnCrestChanged(isTeamA, true, val));
+            // Minor crest dropdowns (3 slots)
+            CreateText(container.transform, "Minor Crests:", 14, new Vector2(-120, -180));
+            for (int i = 0; i < 3; i++)
+            {
+                float yPos = -180 - (i * 35);
+                Dropdown minorDropdown = CreateDropdown(container.transform, minorCrests, new Vector2(80, yPos), 180);
+                int slotIndex = i; // Capture for closure
+                minorDropdown.onValueChanged.AddListener((val) => OnMinorCrestChanged(isTeamA, slotIndex, val));
 
-            CreateText(container.transform, "Major Crest:", 14, new Vector2(-120, -220));
-            Dropdown majorDropdown = CreateDropdown(container.transform, majorCrests, new Vector2(80, -220), 180);
-            majorDropdown.onValueChanged.AddListener((val) => OnCrestChanged(isTeamA, false, val));
+                if (isTeamA)
+                {
+                    teamAMinorCrestDropdowns[i] = minorDropdown;
+                }
+                else
+                {
+                    teamBMinorCrestDropdowns[i] = minorDropdown;
+                }
+            }
+
+            // Major crest dropdown
+            CreateText(container.transform, "Major Crest:", 14, new Vector2(-120, -290));
+            Dropdown majorDropdown = CreateDropdown(container.transform, majorCrests, new Vector2(80, -290), 180);
+            majorDropdown.onValueChanged.AddListener((val) => OnMajorCrestChanged(isTeamA, val));
 
             if (isTeamA)
             {
-                teamAMinorCrestDropdown = minorDropdown;
                 teamAMajorCrestDropdown = majorDropdown;
             }
             else
             {
-                teamBMinorCrestDropdown = minorDropdown;
                 teamBMajorCrestDropdown = majorDropdown;
             }
         }
@@ -910,21 +923,31 @@ namespace Crestforge.UI
             }
         }
 
-        private void OnCrestChanged(bool isTeamA, bool isMinor, int value)
+        private void OnMinorCrestChanged(bool isTeamA, int slotIndex, int value)
         {
             var config = isTeamA ? teamAConfig : teamBConfig;
-            var list = isMinor ? minorCrests : majorCrests;
+            string crestId = value >= 0 && value < minorCrests.Count ? minorCrests[value] : "";
 
-            string crestId = value >= 0 && value < list.Count ? list[value] : "";
+            // Ensure the list has enough slots
+            while (config.minorCrestIds.Count <= slotIndex)
+            {
+                config.minorCrestIds.Add("");
+            }
 
-            if (isMinor)
+            config.minorCrestIds[slotIndex] = crestId;
+
+            // Remove empty trailing entries
+            while (config.minorCrestIds.Count > 0 && string.IsNullOrEmpty(config.minorCrestIds[config.minorCrestIds.Count - 1]))
             {
-                config.minorCrestId = crestId;
+                config.minorCrestIds.RemoveAt(config.minorCrestIds.Count - 1);
             }
-            else
-            {
-                config.majorCrestId = crestId;
-            }
+        }
+
+        private void OnMajorCrestChanged(bool isTeamA, int value)
+        {
+            var config = isTeamA ? teamAConfig : teamBConfig;
+            string crestId = value >= 0 && value < majorCrests.Count ? majorCrests[value] : "";
+            config.majorCrestId = crestId;
         }
 
         private void OnAddUnitClicked()
@@ -1418,9 +1441,12 @@ namespace Crestforge.UI
             teamBConfig = new TestTeamConfig();
 
             // Reset crest dropdowns
-            if (teamAMinorCrestDropdown != null) teamAMinorCrestDropdown.value = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                if (teamAMinorCrestDropdowns[i] != null) teamAMinorCrestDropdowns[i].value = 0;
+                if (teamBMinorCrestDropdowns[i] != null) teamBMinorCrestDropdowns[i].value = 0;
+            }
             if (teamAMajorCrestDropdown != null) teamAMajorCrestDropdown.value = 0;
-            if (teamBMinorCrestDropdown != null) teamBMinorCrestDropdown.value = 0;
             if (teamBMajorCrestDropdown != null) teamBMajorCrestDropdown.value = 0;
 
             selectedTile = null;
@@ -1466,38 +1492,15 @@ namespace Crestforge.UI
         {
             // Find and hide GameUI entirely during combat test mode
             var gameUI = GameUI.Instance;
+            if (gameUI == null)
+            {
+                gameUI = Object.FindAnyObjectByType<GameUI>(FindObjectsInactive.Include);
+            }
+
             if (gameUI != null)
             {
-                // GameUI has a mainCanvas field - disable it
-                if (gameUI.mainCanvas != null)
-                {
-                    gameUI.mainCanvas.enabled = false;
-                    Debug.Log("[CombatTestUI] Disabled GameUI.mainCanvas");
-                }
-
-                // Also try to hide the shop panel directly as backup
-                if (gameUI.shopPanel != null)
-                {
-                    gameUI.shopPanel.gameObject.SetActive(false);
-                }
-
-                // And hide the entire GameUI game object
-                gameUI.gameObject.SetActive(false);
+                gameUI.Hide();
                 Debug.Log("[CombatTestUI] Hidden GameUI");
-            }
-            else
-            {
-                // Try to find by type if Instance is null
-                var foundGameUI = Object.FindAnyObjectByType<GameUI>();
-                if (foundGameUI != null)
-                {
-                    if (foundGameUI.mainCanvas != null)
-                    {
-                        foundGameUI.mainCanvas.enabled = false;
-                    }
-                    foundGameUI.gameObject.SetActive(false);
-                    Debug.Log("[CombatTestUI] Hidden GameUI (found by type)");
-                }
             }
 
             // Also try to find and hide any canvas named "GameCanvas"
@@ -1518,11 +1521,7 @@ namespace Crestforge.UI
             var gameUI = Object.FindAnyObjectByType<GameUI>(FindObjectsInactive.Include);
             if (gameUI != null)
             {
-                gameUI.gameObject.SetActive(true);
-                if (gameUI.mainCanvas != null)
-                {
-                    gameUI.mainCanvas.enabled = true;
-                }
+                gameUI.Show();
             }
 
             // Re-enable any game canvases we disabled

@@ -249,6 +249,8 @@ namespace Crestforge.UI
 
         public void OnPointerClick(PointerEventData eventData)
         {
+            Debug.Log($"[ItemSlotUI] OnPointerClick called - item: {item?.itemName ?? "null"}, serverItem: {serverItem?.name ?? "null"}, button: {eventData.button}");
+
             // Handle single-player items
             if (item != null)
             {
@@ -258,11 +260,13 @@ namespace Crestforge.UI
                     // Check if item is a consumable
                     if (item.effect.IsConsumable())
                     {
+                        Debug.Log($"[ItemSlotUI] Using consumable: {item.itemName}");
                         UseConsumable();
                     }
                     else
                     {
                         // Pin/unpin tooltip for regular items
+                        Debug.Log($"[ItemSlotUI] Toggling tooltip for item: {item.itemName}");
                         GameUI.Instance?.ToggleItemTooltipPin(item);
                     }
                 }
@@ -279,14 +283,21 @@ namespace Crestforge.UI
                     bool isConsumable = serverItem.itemId == "crest_token" || serverItem.itemId == "item_anvil";
                     if (isConsumable)
                     {
+                        Debug.Log($"[ItemSlotUI] Using server consumable: {serverItem.name}");
                         UseConsumableMultiplayer();
                     }
                     else
                     {
-                        // Show tooltip for regular items
-                        GameUI.Instance?.ShowServerItemInfoTemporary(serverItem);
+                        // Pin/unpin tooltip for regular items
+                        Debug.Log($"[ItemSlotUI] Toggling server tooltip for: {serverItem.name}");
+                        GameUI.Instance?.ToggleServerItemTooltipPin(serverItem);
                     }
                 }
+            }
+
+            if (item == null && serverItem == null)
+            {
+                Debug.LogWarning("[ItemSlotUI] OnPointerClick - both item and serverItem are null!");
             }
         }
 

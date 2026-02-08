@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 1b0f54a91bcba614cbf14c979a2ecc11
+timeCreated: 1560140866
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Sentinel PBR/Materials/MaskTintPBR
+    2.mat
+  uploadId: 534720

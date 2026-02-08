@@ -20,6 +20,8 @@ namespace Crestforge.Systems
         // Fallback movement duration if server doesn't provide one
         public float moveAnimationDuration = 0.8f;
         public float playbackSpeed = 1f;
+        // Delay before combat actions start (gives players time to see unit layout)
+        public float startDelay = 1.0f;
 
         // State
         public bool IsPlaying { get; private set; }
@@ -198,7 +200,7 @@ namespace Crestforge.Systems
                     case "unitDeath":
                         ProcessUnitDeathInstant(evt);
                         break;
-                    // Skip unitAttack during fast-forward (just visual)
+                    // Skip unitAttack and unitAbility during fast-forward (just visual)
                 }
                 eventIndex++;
             }
@@ -208,6 +210,8 @@ namespace Crestforge.Systems
 
         private IEnumerator PlaybackCoroutine(bool reuseExistingVisuals)
         {
+            bool hasAppliedStartDelay = false;
+
             while (IsPlaying && eventIndex < events.Count)
             {
                 // Process all events at current tick
@@ -215,6 +219,13 @@ namespace Crestforge.Systems
                 {
                     ProcessEvent(events[eventIndex], reuseExistingVisuals);
                     eventIndex++;
+                }
+
+                // After processing tick 0 (combatStart), add a delay so players can see unit positions
+                if (!hasAppliedStartDelay && CurrentTick == 0 && startDelay > 0)
+                {
+                    hasAppliedStartDelay = true;
+                    yield return new WaitForSeconds(startDelay);
                 }
 
                 // Find the next tick that has events
@@ -237,10 +248,38 @@ namespace Crestforge.Systems
                 }
             }
 
-            IsPlaying = false;
+            // Wait for any ongoing ability/attack animations on winning units to finish
+            // Keep IsPlaying=true during this wait so health bars aren't reset by UpdateHealthDisplay
+            if (CombatWinner != null)
+            {
+                float maxWait = 2f;
+                float waited = 0f;
+                while (waited < maxWait)
+                {
+                    bool anyAttacking = false;
+                    foreach (var kvp in combatUnits)
+                    {
+                        var visual = kvp.Value;
+                        if (visual != null && visual.gameObject != null && visual.gameObject.activeInHierarchy
+                            && visual.TeamId == CombatWinner
+                            && visual.IsPlayingAttack)
+                        {
+                            anyAttacking = true;
+                            break;
+                        }
+                    }
+                    if (!anyAttacking) break;
+                    waited += Time.deltaTime;
+                    yield return null;
+                }
+            }
 
-            // Start victory pose
+            // Start victory pose BEFORE setting IsPlaying=false
+            // This ensures IsInVictoryPose=true before IsPlaying=false,
+            // so UpdateHealthDisplay always sees at least one guard flag
+            // and doesn't reset health bars to full
             StartVictoryPose();
+            IsPlaying = false;
 
             OnPlaybackEnded?.Invoke();
         }
@@ -257,6 +296,9 @@ namespace Crestforge.Systems
                     break;
                 case "unitAttack":
                     ProcessUnitAttack(evt);
+                    break;
+                case "unitAbility":
+                    ProcessUnitAbility(evt);
                     break;
                 case "unitDamage":
                     ProcessUnitDamage(evt);
@@ -351,6 +393,9 @@ namespace Crestforge.Systems
                 existingVisual.gameObject.SetActive(true);
                 existingVisual.SetPosition(worldPos);
 
+                // Update item icons from server data (important for away players)
+                existingVisual.SetServerItems(unit.items ?? new System.Collections.Generic.List<Crestforge.Networking.ServerItemData>());
+
                 visual = existingVisual.gameObject.GetComponent<CombatUnitVisual>();
                 if (visual == null)
                 {
@@ -395,6 +440,14 @@ namespace Crestforge.Systems
             if (visual != null)
             {
                 combatUnits[unit.instanceId] = visual;
+
+                // Initialize mana from server data
+                if (visual.BaseVisual != null)
+                {
+                    int unitMana = unit.mana;
+                    int unitMaxMana = unit.maxMana > 0 ? unit.maxMana : 40;
+                    visual.BaseVisual.InitializeMana(unitMana, unitMaxMana);
+                }
             }
         }
 
@@ -511,7 +564,24 @@ namespace Crestforge.Systems
             if (!combatUnits.TryGetValue(evt.targetId, out var target)) return;
             if (attacker == null || target == null) return;
 
+            // Update mana display (unit gains mana when attacking)
+            attacker.GainMana(10);
+
             attacker.PlayAttackAnimation(target.transform.position);
+        }
+
+        private void ProcessUnitAbility(ServerCombatEvent evt)
+        {
+            if (!combatUnits.TryGetValue(evt.attackerId, out var attacker)) return;
+            if (!combatUnits.TryGetValue(evt.targetId, out var target)) return;
+            if (attacker == null || target == null) return;
+
+            // Reset mana when ability is used
+            attacker.UseAbility();
+
+            // Play ability animation with fixed duration from server
+            float duration = evt.abilityDuration > 0 ? evt.abilityDuration : 1.0f;
+            attacker.PlayAbilityAnimation(target.transform.position, duration);
         }
 
         private void ProcessUnitDamage(ServerCombatEvent evt)
@@ -544,9 +614,28 @@ namespace Crestforge.Systems
             visual.PlayDeathAnimation();
             OnUnitDied?.Invoke(evt.instanceId);
 
-            // Spawn loot orb if the unit dropped loot
-            if (!string.IsNullOrEmpty(evt.lootType) && evt.lootType != "none" && !string.IsNullOrEmpty(evt.lootId))
+            // Spawn loot orb(s) if the unit dropped loot
+            if (evt.lootDrops != null && evt.lootDrops.Count > 0)
             {
+                // Multiple loot drops (from bosses)
+                var hexBoard = Board ?? HexBoard3D.Instance;
+                for (int i = 0; i < evt.lootDrops.Count; i++)
+                {
+                    var drop = evt.lootDrops[i];
+                    Vector3 lootPosition = visual.transform.position;
+                    if (drop.lootPosition != null && hexBoard != null)
+                    {
+                        lootPosition = hexBoard.GetTileWorldPosition(drop.lootPosition.x, drop.lootPosition.y);
+                    }
+                    // Offset each orb slightly so they don't overlap
+                    float offsetX = (i - (evt.lootDrops.Count - 1) / 2f) * 0.6f;
+                    lootPosition += new Vector3(offsetX, 0, 0);
+                    LootOrb.CreateMultiplayer(lootPosition, drop.lootType, drop.lootId);
+                }
+            }
+            else if (!string.IsNullOrEmpty(evt.lootType) && evt.lootType != "none" && !string.IsNullOrEmpty(evt.lootId))
+            {
+                // Single loot drop (backwards compatible)
                 Vector3 lootPosition = visual.transform.position;
                 if (evt.lootPosition != null)
                 {
@@ -766,6 +855,8 @@ namespace Crestforge.Systems
                             if (visual.BaseVisual != null)
                             {
                                 visual.BaseVisual.FreezePosition = false;
+                                // Reset mana to zero after combat
+                                visual.BaseVisual.InitializeMana(0, 40);
                             }
                             UnitAnimator unitAnimator = visual.GetComponentInChildren<UnitAnimator>();
                             if (unitAnimator != null)
@@ -781,6 +872,11 @@ namespace Crestforge.Systems
                             // Unit died - ensure the visual is hidden
                             // (death animation coroutine might not have completed before we destroy the component)
                             visual.gameObject.SetActive(false);
+                            // Reset mana even for dead units (in case visual gets reused)
+                            if (visual.BaseVisual != null)
+                            {
+                                visual.BaseVisual.InitializeMana(0, 40);
+                            }
                         }
 
                         GameObject.Destroy(visual); // Just the component
@@ -809,6 +905,7 @@ namespace Crestforge.Systems
         public UnitVisual3D BaseVisual { get; private set; }
         public bool IsReusedVisual { get; private set; }
         public ServerCombatUnit CombatUnitData { get; private set; }
+        public bool IsPlayingAttack => (BaseVisual != null && BaseVisual.IsAttacking) || isAttacking;
 
         private Vector3 moveTarget;
         private bool isMoving;
@@ -878,6 +975,35 @@ namespace Crestforge.Systems
                 StopCoroutine(attackCoroutine);
             }
             attackCoroutine = StartCoroutine(AttackCoroutine(targetPosition));
+        }
+
+        public void PlayAbilityAnimation(Vector3 targetPosition, float duration = 1.0f)
+        {
+            if (BaseVisual != null)
+            {
+                // Pass the fixed ability duration from server
+                BaseVisual.PlayAbilityAnimation(targetPosition, duration);
+                return;
+            }
+
+            // Fallback: just use attack animation
+            PlayAttackAnimation(targetPosition);
+        }
+
+        public void GainMana(float amount)
+        {
+            if (BaseVisual != null)
+            {
+                BaseVisual.GainMana(amount);
+            }
+        }
+
+        public void UseAbility()
+        {
+            if (BaseVisual != null)
+            {
+                BaseVisual.UseAbility();
+            }
         }
 
         private IEnumerator AttackCoroutine(Vector3 targetPos)

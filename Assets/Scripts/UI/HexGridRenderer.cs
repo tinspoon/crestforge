@@ -421,7 +421,7 @@ namespace Crestforge.UI
             stars.transform.parent = parent.transform;
             stars.transform.localPosition = new Vector3(0, 0.35f, 0);
             TextMesh tm = stars.AddComponent<TextMesh>();
-            tm.text = new string('★', starLevel);
+            tm.text = new string('*', starLevel);
             tm.fontSize = 24;
             tm.characterSize = 0.04f;
             tm.anchor = TextAnchor.MiddleCenter;

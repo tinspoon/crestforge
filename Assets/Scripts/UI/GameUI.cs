@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 using System.Collections;
 using System.Collections.Generic;
 using Crestforge.Core;
@@ -16,6 +17,12 @@ namespace Crestforge.UI
     public class GameUI : MonoBehaviour
     {
         public static GameUI Instance { get; private set; }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ClearStaticCache()
+        {
+            _cachedTitanFont = null;
+        }
 
         [Header("References")]
         public Canvas mainCanvas;
@@ -74,17 +81,17 @@ namespace Crestforge.UI
 
         [Header("Trait Tooltip")]
         public RectTransform traitTooltipPanel;
-        public Text traitTooltipTitle;
-        public Text traitTooltipDescription;
+        public TMP_Text traitTooltipTitle;
+        public TMP_Text traitTooltipDescription;
         public RectTransform traitTooltipTierContainer;
-        public Text traitTooltipUnits;
+        public TMP_Text traitTooltipUnits;
 
         [Header("Crest Tooltip")]
         public RectTransform crestTooltipPanel;
-        public Text crestTooltipTitle;
-        public Text crestTooltipType;
-        public Text crestTooltipDescription;
-        public Text crestTooltipBonus;
+        public TMP_Text crestTooltipTitle;
+        public TMP_Text crestTooltipType;
+        public TMP_Text crestTooltipDescription;
+        public TMP_Text crestTooltipBonus;
 
         [Header("Prefabs")]
         public GameObject unitCardPrefab;
@@ -93,14 +100,31 @@ namespace Crestforge.UI
 
         [Header("Tooltip")]
         public RectTransform tooltipPanel;
-        public Text tooltipTitle;
-        public Text tooltipCost;
-        public Text tooltipStats;
-        public Text tooltipTraits;
-        public Text tooltipAbility;
+        public TMP_Text tooltipTitle;
+        public TMP_Text tooltipCost;
+        public TMP_Text tooltipStats;
+        public TMP_Text tooltipTraits;
+        public TMP_Text tooltipAbility;
         public Image tooltipSprite;
         public RectTransform tooltipItemContainer;
-        public Text tooltipItemsLabel;
+        public TMP_Text tooltipItemsLabel;
+
+        // Tooltip state machine - single source of truth for selection and tooltips
+        public enum TooltipType { None, Unit, Item, ShopUnit, CombatUnit, ServerItem }
+        private TooltipType currentTooltipType = TooltipType.None;
+        private bool isTooltipPinned = false;
+        private int tooltipShownFrame = -1; // Frame when tooltip was last shown, to prevent immediate dismissal
+        private bool showingTemporaryItemInfo = false; // True when temporarily showing item info on a pinned unit tooltip
+        // Current tooltip data references (for toggle logic)
+        private UnitInstance currentTooltipUnit = null;
+        private ServerUnitData currentTooltipServerUnit = null;
+        private ServerShopUnit currentTooltipShopUnit = null;
+        private ServerCombatUnit currentTooltipCombatUnit = null;
+        private ItemData currentTooltipItem = null;
+        private ServerItemData currentTooltipServerItem = null;
+        private List<TooltipItemSlot> tooltipItemSlots = new List<TooltipItemSlot>();
+        // Currently selected 3D unit visual (for visual highlighting - GameUI owns selection state)
+        private Crestforge.Visuals.UnitVisual3D selectedUnitVisual = null;
 
         // Runtime
         private GameState state;
@@ -114,7 +138,6 @@ namespace Crestforge.UI
         private GamePhase lastShownPhase = GamePhase.Planning;
         private bool selectionShown = false;
         private bool isInitialized = false;
-        private bool isTooltipPinned = false;
         private TraitData hoveredTrait = null;
         private GameObject traitTooltipBlocker = null;
         private List<GameObject> traitTooltipTierEntries = new List<GameObject>();
@@ -122,9 +145,6 @@ namespace Crestforge.UI
         private GameObject crestTooltipBlocker = null;
         private bool crestTooltipShowing = false;
         private GameObject activeCrestIcon = null;
-        private UnitInstance tooltipUnit = null;
-        private List<TooltipItemSlot> tooltipItemSlots = new List<TooltipItemSlot>();
-        private bool showingTemporaryItemInfo = false;
 
         // Sell overlay
         private GameObject sellOverlay;
@@ -165,11 +185,19 @@ namespace Crestforge.UI
         private void Start()
         {
             Initialize();
-            
-            // Hide if main menu is present and active
-            if (MainMenuUI.Instance != null && MainMenuUI.Instance.gameObject.activeInHierarchy)
+
+            // Hide by default - will be shown when game actually starts
+            // Check for main menu or lobby UI being active
+            bool shouldHide = (MainMenuUI.Instance != null && MainMenuUI.Instance.gameObject.activeInHierarchy) ||
+                              (LobbyUI.Instance != null && LobbyUI.Instance.gameObject.activeInHierarchy) ||
+                              (ServerGameState.Instance == null || !ServerGameState.Instance.IsConnected);
+
+            if (shouldHide)
             {
-                gameObject.SetActive(false);
+                if (mainCanvas != null)
+                    mainCanvas.gameObject.SetActive(false);
+                else
+                    gameObject.SetActive(false);
             }
         }
 
@@ -280,9 +308,9 @@ namespace Crestforge.UI
         private void Initialize()
         {
             if (isInitialized) return;
-            
+
             state = GameState.Instance;
-            
+
             if (mainCanvas == null)
                 mainCanvas = GetComponentInChildren<Canvas>();
             if (mainCamera == null)
@@ -291,6 +319,36 @@ namespace Crestforge.UI
             CreateUI();
             UpdateLayout();
             isInitialized = true;
+        }
+
+        /// <summary>
+        /// Show the game UI (call when game starts)
+        /// </summary>
+        public void Show()
+        {
+            if (mainCanvas != null)
+                mainCanvas.gameObject.SetActive(true);
+            gameObject.SetActive(true);
+
+            // Re-subscribe to server events in case OnEnable() ran before ServerGameState was ready
+            if (ServerGameState.Instance != null)
+            {
+                ServerGameState.Instance.OnGameEnded -= HandleGameEnded;
+                ServerGameState.Instance.OnGameEnded += HandleGameEnded;
+                ServerGameState.Instance.OnActionResult -= HandleActionResult;
+                ServerGameState.Instance.OnActionResult += HandleActionResult;
+                ServerGameState.Instance.OnStateUpdated -= ClearOptimisticGold;
+                ServerGameState.Instance.OnStateUpdated += ClearOptimisticGold;
+            }
+        }
+
+        /// <summary>
+        /// Hide the game UI (call when returning to menu)
+        /// </summary>
+        public void Hide()
+        {
+            if (mainCanvas != null)
+                mainCanvas.gameObject.SetActive(false);
         }
 
         private void Update()
@@ -313,59 +371,8 @@ namespace Crestforge.UI
                 action.Invoke();
             }
 
-            // Hide tooltip when clicking anywhere (except on unit cards, which handle their own clicks)
-            bool itemTooltipActive = tooltipPanel != null && tooltipPanel.gameObject.activeSelf;
-            bool crestTooltipActive = crestTooltipPanel != null && crestTooltipPanel.gameObject.activeSelf;
-            bool detailPanelActive = unitDetailVisible && unitDetailPanel != null && unitDetailPanel.gameObject.activeSelf;
-            if (Input.GetMouseButtonDown(0) && (itemTooltipActive || crestTooltipActive || detailPanelActive))
-            {
-                // Check if clicking on a UI element
-                var eventSystem = UnityEngine.EventSystems.EventSystem.current;
-                if (eventSystem != null)
-                {
-                    var pointerData = new UnityEngine.EventSystems.PointerEventData(eventSystem)
-                    {
-                        position = Input.mousePosition
-                    };
-                    var results = new System.Collections.Generic.List<UnityEngine.EventSystems.RaycastResult>();
-                    eventSystem.RaycastAll(pointerData, results);
-
-                    // Check if any hit object is a UnitCardUI, ItemSlotUI, CrestSlotUI, TooltipItemSlot, or the tooltip/detail panel itself
-                    bool clickedOnTooltipSource = false;
-                    bool clickedOnDetailPanel = false;
-                    foreach (var result in results)
-                    {
-                        if (result.gameObject.GetComponentInParent<UnitCardUI>() != null ||
-                            result.gameObject.GetComponentInParent<ItemSlotUI>() != null ||
-                            result.gameObject.GetComponentInParent<CrestSlotUI>() != null ||
-                            result.gameObject.GetComponentInParent<TooltipItemSlot>() != null ||
-                            (tooltipPanel != null && result.gameObject.transform.IsChildOf(tooltipPanel.transform)))
-                        {
-                            clickedOnTooltipSource = true;
-                        }
-                        if (unitDetailPanel != null && result.gameObject.transform.IsChildOf(unitDetailPanel.transform))
-                        {
-                            clickedOnDetailPanel = true;
-                        }
-                    }
-
-                    if (!clickedOnTooltipSource)
-                    {
-                        isTooltipPinned = false;
-
-                        showingTemporaryItemInfo = false;
-                        tooltipUnit = null;
-                        HideTooltip();
-                        HideCrestTooltip();
-                    }
-
-                    // Dismiss detail panel when clicking outside it (but not on shop cards)
-                    if (detailPanelActive && !clickedOnDetailPanel && !clickedOnTooltipSource)
-                    {
-                        HideUnitDetailPanel();
-                    }
-                }
-            }
+            // Tooltip dismiss logic - uses state machine for clarity
+            HandleTooltipDismiss();
 
             // Check for orientation change
             bool nowPortrait = Screen.height > Screen.width;
@@ -1070,7 +1077,7 @@ namespace Crestforge.UI
             tooltipTitle = CreateTooltipText("Unit Name", nameCol.transform, 36, FontStyle.Bold, Color.white, 48);
 
             // Cost
-            tooltipCost = CreateTooltipText("$0 ★★★", nameCol.transform, 28, FontStyle.Normal, new Color(1f, 0.85f, 0.3f), 40);
+            tooltipCost = CreateTooltipText("$0 ***", nameCol.transform, 28, FontStyle.Normal, new Color(1f, 0.85f, 0.3f), 40);
 
             // Divider 1
             CreateTooltipDivider(tooltipObj.transform);
@@ -1133,25 +1140,47 @@ namespace Crestforge.UI
             le.preferredHeight = 2;
         }
 
-        private Text CreateTooltipText(string content, Transform parent, int fontSize, FontStyle style, Color color, float height)
+        private TMP_Text CreateTooltipText(string content, Transform parent, int fontSize, FontStyle style, Color color, float height)
         {
             GameObject obj = new GameObject("Text");
             obj.transform.SetParent(parent, false);
-            
-            Text text = obj.AddComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            text.text = content;
-            text.fontSize = fontSize;
-            text.fontStyle = style;
-            text.color = color;
-            text.alignment = TextAnchor.UpperLeft;
-            
+
+            TextMeshProUGUI tmpText = obj.AddComponent<TextMeshProUGUI>();
+            tmpText.text = content;
+            tmpText.fontSize = fontSize;
+            tmpText.fontStyle = style == FontStyle.Bold ? FontStyles.Bold : FontStyles.Normal;
+            tmpText.color = color;
+            tmpText.alignment = TextAlignmentOptions.TopLeft;
+
+            // Load Titan One font
+            TMP_FontAsset titanFont = LoadTitanOneFont();
+            if (titanFont != null)
+                tmpText.font = titanFont;
+
             LayoutElement le = obj.AddComponent<LayoutElement>();
             le.minHeight = height;
             le.preferredHeight = height;
             le.preferredWidth = 500;
 
-            return text;
+            return tmpText;
+        }
+
+        private static TMP_FontAsset _cachedTitanFont;
+        private TMP_FontAsset LoadTitanOneFont()
+        {
+            if (_cachedTitanFont != null)
+                return _cachedTitanFont;
+
+            _cachedTitanFont = Resources.Load<TMP_FontAsset>("TextStyles/TitanOne-Regular SDF");
+            if (_cachedTitanFont == null)
+                _cachedTitanFont = Resources.Load<TMP_FontAsset>("Fonts/TitanOne-Regular SDF");
+            if (_cachedTitanFont == null)
+            {
+                var presets = Resources.Load<TextStylePresets>("TextStylePresets");
+                if (presets != null && presets.primaryFont != null)
+                    _cachedTitanFont = presets.primaryFont;
+            }
+            return _cachedTitanFont;
         }
 
         private void CreateTraitPanel()
@@ -1659,7 +1688,7 @@ namespace Crestforge.UI
             unitDetailName = CreateDetailText("Unit Name", nameCol.transform, 20, FontStyle.Bold, Color.white, 28);
 
             // Cost and stars
-            unitDetailCost = CreateDetailText("$0 ★★★", nameCol.transform, 16, FontStyle.Normal, new Color(1f, 0.85f, 0.3f), 22);
+            unitDetailCost = CreateDetailText("$0 ***", nameCol.transform, 16, FontStyle.Normal, new Color(1f, 0.85f, 0.3f), 22);
 
             // Divider 1
             CreateDetailDivider(panelObj.transform);
@@ -1848,7 +1877,7 @@ namespace Crestforge.UI
             unitDetailName.color = GetCostColor(t.cost);
 
             // Set cost and stars
-            unitDetailCost.text = $"${t.cost}  " + new string('★', unit.starLevel);
+            unitDetailCost.text = $"${t.cost}  " + new string('*', unit.starLevel);
 
             // Set stats
             var stats = unit.currentStats ?? t.baseStats;
@@ -2461,7 +2490,7 @@ namespace Crestforge.UI
                 {
                     if (unit != null && unit.HasTrait(trait))
                     {
-                        string stars = new string('★', unit.starLevel);
+                        string stars = new string('*', unit.starLevel);
                         unitNames.Add($"{unit.template.unitName} {stars}");
                     }
                 }
@@ -2480,7 +2509,7 @@ namespace Crestforge.UI
                             {
                                 if (t == trait.traitId)
                                 {
-                                    string stars = new string('★', serverUnit.starLevel);
+                                    string stars = new string('*', serverUnit.starLevel);
                                     unitNames.Add($"{serverUnit.name} {stars}");
                                     break;
                                 }
@@ -3289,6 +3318,11 @@ namespace Crestforge.UI
                     break;
 
                 case "gameOver":
+                    // Hide other panels so game-over screen is clearly visible
+                    shopPanel.gameObject.SetActive(false);
+                    benchPanel?.gameObject.SetActive(false);
+                    if (traitPanel != null) traitPanel.gameObject.SetActive(false);
+                    if (traitTooltipPanel != null) traitTooltipPanel.gameObject.SetActive(false);
                     if (phaseChanged || !selectionShown)
                     {
                         ShowGameOverMultiplayer();
@@ -3605,10 +3639,25 @@ namespace Crestforge.UI
             if (!showingTemporaryItemInfo) return;
             showingTemporaryItemInfo = false;
 
-            // Restore the unit tooltip if we have a unit pinned
-            if (isTooltipPinned && tooltipUnit != null)
+            // Restore the appropriate unit tooltip based on state
+            if (!isTooltipPinned) return;
+
+            switch (currentTooltipType)
             {
-                ShowTooltip(tooltipUnit);
+                case TooltipType.Unit:
+                    if (currentTooltipUnit != null)
+                        ShowTooltip(currentTooltipUnit);
+                    else if (currentTooltipServerUnit != null)
+                        ShowTooltip(currentTooltipServerUnit);
+                    break;
+                case TooltipType.CombatUnit:
+                    if (currentTooltipCombatUnit != null)
+                        ShowTooltip(currentTooltipCombatUnit);
+                    break;
+                case TooltipType.ShopUnit:
+                    if (currentTooltipShopUnit != null)
+                        ShowTooltip(currentTooltipShopUnit);
+                    break;
             }
         }
 
@@ -3616,29 +3665,73 @@ namespace Crestforge.UI
         {
             if (item == null || tooltipPanel == null) return;
 
+            // Update state
+            currentTooltipType = TooltipType.Item;
+            currentTooltipItem = item;
             isTooltipPinned = true;
+            tooltipShownFrame = Time.frameCount;
             tooltipPanel.gameObject.SetActive(true);
 
             // Reset to default anchored position (middle-right, set in CreateTooltip)
             tooltipPanel.anchoredPosition = new Vector2(-15, 50);
 
             PopulateItemTooltip(item);
+
+            // Force layout rebuild since ContentSizeFitter needs it after content changes
+            LayoutRebuilder.ForceRebuildLayoutImmediate(tooltipPanel);
         }
 
         public void ToggleItemTooltipPin(ItemData item)
         {
             if (item == null || tooltipPanel == null) return;
 
-            if (isTooltipPinned && tooltipPanel.gameObject.activeSelf)
+            // Check if this same item is already shown and pinned - toggle off
+            if (isTooltipPinned && currentTooltipType == TooltipType.Item &&
+                currentTooltipItem == item && tooltipPanel.gameObject.activeSelf)
             {
-                // Already pinned, unpin and hide
-                isTooltipPinned = false;
+                ClearTooltipState();
                 tooltipPanel.gameObject.SetActive(false);
             }
             else
             {
-                // Pin the tooltip
                 ShowItemTooltipPinned(item);
+            }
+        }
+
+        public void ShowServerItemTooltipPinned(ServerItemData serverItem)
+        {
+            if (serverItem == null || tooltipPanel == null) return;
+
+            // Update state
+            currentTooltipType = TooltipType.ServerItem;
+            currentTooltipServerItem = serverItem;
+            isTooltipPinned = true;
+            tooltipShownFrame = Time.frameCount;
+            tooltipPanel.gameObject.SetActive(true);
+
+            // Reset to default anchored position
+            tooltipPanel.anchoredPosition = new Vector2(-15, 50);
+
+            PopulateServerItemTooltip(serverItem);
+
+            // Force layout rebuild since ContentSizeFitter needs it after content changes
+            LayoutRebuilder.ForceRebuildLayoutImmediate(tooltipPanel);
+        }
+
+        public void ToggleServerItemTooltipPin(ServerItemData serverItem)
+        {
+            if (serverItem == null || tooltipPanel == null) return;
+
+            // Check if this same item is already shown and pinned - toggle off
+            if (isTooltipPinned && currentTooltipType == TooltipType.ServerItem &&
+                currentTooltipServerItem?.itemId == serverItem.itemId && tooltipPanel.gameObject.activeSelf)
+            {
+                ClearTooltipState();
+                tooltipPanel.gameObject.SetActive(false);
+            }
+            else
+            {
+                ShowServerItemTooltipPinned(serverItem);
             }
         }
 
@@ -4497,10 +4590,20 @@ namespace Crestforge.UI
         {
             if (unit == null || unit.template == null)
             {
+                if (isTooltipPinned) return; // Don't hide if we have a pinned tooltip
                 tooltipPanel.gameObject.SetActive(false);
                 return;
             }
 
+            // Don't overwrite a pinned tooltip with a non-pinned call
+            if (isTooltipPinned && tooltipPanel.gameObject.activeSelf)
+            {
+                return;
+            }
+
+            // Update state
+            currentTooltipType = TooltipType.Unit;
+            currentTooltipUnit = unit;
             tooltipPanel.gameObject.SetActive(true);
 
             var t = unit.template;
@@ -4517,7 +4620,7 @@ namespace Crestforge.UI
             tooltipTitle.color = GetCostColor(t.cost);
 
             // Set cost and stars
-            tooltipCost.text = $"${t.cost}  " + new string('★', unit.starLevel);
+            tooltipCost.text = $"${t.cost}  " + new string('*', unit.starLevel);
 
             // Set stats
             string stats = "";
@@ -4569,7 +4672,6 @@ namespace Crestforge.UI
             }
 
             // Set items
-            tooltipUnit = unit;
             PopulateTooltipItems(unit);
         }
 
@@ -4580,7 +4682,14 @@ namespace Crestforge.UI
         {
             if (serverUnit == null)
             {
+                if (isTooltipPinned) return; // Don't hide if we have a pinned tooltip
                 tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Don't overwrite a pinned tooltip with a non-pinned call
+            if (isTooltipPinned && tooltipPanel.gameObject.activeSelf)
+            {
                 return;
             }
 
@@ -4595,6 +4704,9 @@ namespace Crestforge.UI
                 return;
             }
 
+            // Update state
+            currentTooltipType = TooltipType.Unit;
+            currentTooltipServerUnit = serverUnit;
             tooltipPanel.gameObject.SetActive(true);
 
             // Set sprite - prefer 3D portrait
@@ -4609,7 +4721,7 @@ namespace Crestforge.UI
             tooltipTitle.color = GetCostColor(serverUnit.cost);
 
             // Set cost and stars
-            tooltipCost.text = $"${serverUnit.cost}  " + new string('★', serverUnit.starLevel);
+            tooltipCost.text = $"${serverUnit.cost}  " + new string('*', serverUnit.starLevel);
 
             // Set stats - use server stats if available, otherwise template base stats
             string stats = "";
@@ -4665,7 +4777,6 @@ namespace Crestforge.UI
             }
 
             // Set items
-            tooltipUnit = null; // Clear UnitInstance reference
             PopulateTooltipItems(serverUnit);
         }
 
@@ -4675,6 +4786,8 @@ namespace Crestforge.UI
         public void ShowTooltipPinned(ServerUnitData serverUnit)
         {
             isTooltipPinned = true;
+            tooltipShownFrame = Time.frameCount;
+            currentTooltipServerUnit = serverUnit;
             ShowTooltip(serverUnit);
         }
 
@@ -4685,7 +4798,14 @@ namespace Crestforge.UI
         {
             if (shopUnit == null)
             {
+                if (isTooltipPinned) return; // Don't hide if we have a pinned tooltip
                 tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Don't overwrite a pinned tooltip with a non-pinned call
+            if (isTooltipPinned && tooltipPanel.gameObject.activeSelf)
+            {
                 return;
             }
 
@@ -4700,6 +4820,9 @@ namespace Crestforge.UI
                 return;
             }
 
+            // Update state
+            currentTooltipType = TooltipType.ShopUnit;
+            currentTooltipShopUnit = shopUnit;
             tooltipPanel.gameObject.SetActive(true);
 
             // Set sprite - prefer 3D portrait
@@ -4714,7 +4837,7 @@ namespace Crestforge.UI
             tooltipTitle.color = GetCostColor(shopUnit.cost);
 
             // Set cost (shop units are always 1-star)
-            tooltipCost.text = $"${shopUnit.cost}  ★";
+            tooltipCost.text = $"${shopUnit.cost}  *";
 
             // Set stats from template base stats
             string stats = $"HP: {template.baseStats.health}    ATK: {template.baseStats.attack}\n";
@@ -4752,7 +4875,6 @@ namespace Crestforge.UI
             }
 
             // Clear items (shop units don't have items)
-            tooltipUnit = null;
             foreach (var slot in tooltipItemSlots)
             {
                 if (slot != null && slot.gameObject != null)
@@ -4783,6 +4905,8 @@ namespace Crestforge.UI
         public void ShowTooltipPinned(ServerShopUnit shopUnit)
         {
             isTooltipPinned = true;
+            tooltipShownFrame = Time.frameCount;
+            currentTooltipShopUnit = shopUnit;
             ShowTooltip(shopUnit);
         }
 
@@ -4793,7 +4917,14 @@ namespace Crestforge.UI
         {
             if (combatUnit == null)
             {
+                if (isTooltipPinned) return; // Don't hide if we have a pinned tooltip
                 tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Don't overwrite a pinned tooltip with a non-pinned call
+            if (isTooltipPinned && tooltipPanel.gameObject.activeSelf)
+            {
                 return;
             }
 
@@ -4808,6 +4939,9 @@ namespace Crestforge.UI
                 return;
             }
 
+            // Update state
+            currentTooltipType = TooltipType.CombatUnit;
+            currentTooltipCombatUnit = combatUnit;
             tooltipPanel.gameObject.SetActive(true);
 
             // Set sprite - prefer 3D portrait
@@ -4825,7 +4959,7 @@ namespace Crestforge.UI
             int starLevel = 1;
             if (combatUnit.maxHealth > template.baseStats.health * 2.5f) starLevel = 3;
             else if (combatUnit.maxHealth > template.baseStats.health * 1.5f) starLevel = 2;
-            tooltipCost.text = $"${template.cost}  " + new string('★', starLevel);
+            tooltipCost.text = $"${template.cost}  " + new string('*', starLevel);
 
             // Set stats from combat unit
             string stats = "";
@@ -4877,7 +5011,6 @@ namespace Crestforge.UI
             }
 
             // Set items
-            tooltipUnit = null;
             PopulateTooltipItems(combatUnit);
         }
 
@@ -4887,6 +5020,8 @@ namespace Crestforge.UI
         public void ShowTooltipPinned(ServerCombatUnit combatUnit)
         {
             isTooltipPinned = true;
+            tooltipShownFrame = Time.frameCount;
+            currentTooltipCombatUnit = combatUnit;
             ShowTooltip(combatUnit);
         }
 
@@ -5053,7 +5188,7 @@ namespace Crestforge.UI
             RefreshBench();
 
             // Refresh tooltip if still showing this unit
-            if (tooltipUnit == unit && tooltipPanel.gameObject.activeSelf)
+            if (currentTooltipUnit == unit && tooltipPanel.gameObject.activeSelf)
             {
                 PopulateTooltipItems(unit);
             }
@@ -5066,6 +5201,8 @@ namespace Crestforge.UI
         public void ShowTooltipPinned(UnitInstance unit)
         {
             isTooltipPinned = true;
+            tooltipShownFrame = Time.frameCount;
+            currentTooltipUnit = unit;
             ShowTooltip(unit);
         }
 
@@ -5074,9 +5211,7 @@ namespace Crestforge.UI
         /// </summary>
         public void HideTooltipPinned()
         {
-            isTooltipPinned = false;
-            showingTemporaryItemInfo = false;
-            tooltipUnit = null;
+            ClearTooltipState();
             tooltipPanel.gameObject.SetActive(false);
         }
 
@@ -5084,7 +5219,239 @@ namespace Crestforge.UI
         {
             // Don't hide if tooltip is pinned
             if (isTooltipPinned) return;
+            // Only clear state for hover tooltips (non-pinned)
+            currentTooltipType = TooltipType.None;
             tooltipPanel.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// Clears all tooltip state - call when hiding tooltip
+        /// </summary>
+        private void ClearTooltipState()
+        {
+            currentTooltipType = TooltipType.None;
+            isTooltipPinned = false;
+            showingTemporaryItemInfo = false;
+            currentTooltipUnit = null;
+            currentTooltipServerUnit = null;
+            currentTooltipShopUnit = null;
+            currentTooltipCombatUnit = null;
+            currentTooltipItem = null;
+            currentTooltipServerItem = null;
+            // Clear visual selection
+            if (selectedUnitVisual != null)
+            {
+                selectedUnitVisual.SetSelected(false);
+                selectedUnitVisual = null;
+            }
+        }
+
+        /// <summary>
+        /// Centralized handler for unit clicks - called by BoardManager3D
+        /// Handles all toggle/show/hide logic for unit selection
+        /// </summary>
+        public void HandleUnitClicked(Crestforge.Visuals.UnitVisual3D unitVisual)
+        {
+            if (unitVisual == null)
+            {
+                ClearTooltipState();
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Check if clicking the same unit - toggle off
+            if (selectedUnitVisual == unitVisual && isTooltipPinned && tooltipPanel.gameObject.activeSelf)
+            {
+                ClearTooltipState();
+                tooltipPanel.gameObject.SetActive(false);
+                return;
+            }
+
+            // Clear previous selection visual
+            if (selectedUnitVisual != null && selectedUnitVisual != unitVisual)
+            {
+                selectedUnitVisual.SetSelected(false);
+            }
+
+            // Set new selection
+            selectedUnitVisual = unitVisual;
+            selectedUnitVisual.SetSelected(true);
+
+            // Find and show the appropriate tooltip data
+            ShowTooltipForUnitVisual(unitVisual);
+        }
+
+        /// <summary>
+        /// Find the data for a unit visual and show its tooltip
+        /// </summary>
+        private void ShowTooltipForUnitVisual(Crestforge.Visuals.UnitVisual3D unitVisual)
+        {
+            var boardManager = Crestforge.Visuals.BoardManager3D.Instance;
+
+            // FIRST: Check if this is a combat unit (during combat phase) - has highest priority
+            if (Crestforge.Systems.ServerCombatVisualizer.Instance != null &&
+                Crestforge.Systems.ServerCombatVisualizer.Instance.IsPlayingCombat)
+            {
+                var combatUnit = Crestforge.Systems.ServerCombatVisualizer.Instance.GetCombatUnitByVisual(unitVisual);
+                if (combatUnit != null && combatUnit.CombatUnitData != null)
+                {
+                    isTooltipPinned = true;
+                    tooltipShownFrame = Time.frameCount;
+                    currentTooltipCombatUnit = combatUnit.CombatUnitData;
+                    currentTooltipType = TooltipType.CombatUnit;
+                    ShowTooltip(combatUnit.CombatUnitData);
+                    return;
+                }
+
+                // Check bench units shown during combat
+                var benchUnit = Crestforge.Systems.ServerCombatVisualizer.Instance.GetBenchUnitByVisual(unitVisual);
+                if (benchUnit != null)
+                {
+                    isTooltipPinned = true;
+                    tooltipShownFrame = Time.frameCount;
+                    currentTooltipServerUnit = benchUnit;
+                    currentTooltipType = TooltipType.Unit;
+                    ShowTooltip(benchUnit);
+                    return;
+                }
+            }
+
+            // SECOND: Check multiplayer board/bench units (server-authoritative data)
+            if (boardManager != null && serverState != null)
+            {
+                ServerUnitData serverUnit = boardManager.FindServerUnitByVisual(unitVisual);
+                if (serverUnit != null)
+                {
+                    isTooltipPinned = true;
+                    tooltipShownFrame = Time.frameCount;
+                    currentTooltipServerUnit = serverUnit;
+                    currentTooltipType = TooltipType.Unit;
+                    ShowTooltip(serverUnit);
+                    return;
+                }
+            }
+
+            // THIRD: Fallback to single-player UnitInstance (if available)
+            if (unitVisual.unit != null)
+            {
+                isTooltipPinned = true;
+                tooltipShownFrame = Time.frameCount;
+                currentTooltipUnit = unitVisual.unit;
+                currentTooltipType = TooltipType.Unit;
+                ShowTooltip(unitVisual.unit);
+                return;
+            }
+
+            Debug.LogWarning($"[GameUI] ShowTooltipForUnitVisual - could not find data for visual");
+        }
+
+        /// <summary>
+        /// Handle tooltip dismiss on click - centralized logic to avoid race conditions
+        /// </summary>
+        private void HandleTooltipDismiss()
+        {
+            if (!Input.GetMouseButtonDown(0)) return;
+
+            bool tooltipActive = tooltipPanel != null && tooltipPanel.gameObject.activeSelf;
+            bool crestTooltipActive = crestTooltipPanel != null && crestTooltipPanel.gameObject.activeSelf;
+            bool detailPanelActive = unitDetailVisible && unitDetailPanel != null && unitDetailPanel.gameObject.activeSelf;
+            bool tooltipJustShown = Time.frameCount == tooltipShownFrame;
+
+            // Don't process dismiss if tooltip was just shown this frame (prevents race with click handlers)
+            if (tooltipJustShown) return;
+
+            // Nothing to dismiss
+            if (!tooltipActive && !crestTooltipActive && !detailPanelActive) return;
+
+            // Check if clicking on a tooltip source (UI element or 3D unit)
+            bool clickedOnTooltipSource = CheckClickedOnTooltipSource();
+            bool clickedOnDetailPanel = CheckClickedOnDetailPanel();
+
+            if (!clickedOnTooltipSource)
+            {
+                ClearTooltipState();
+                tooltipPanel.gameObject.SetActive(false);
+                HideCrestTooltip();
+            }
+
+            // Dismiss detail panel when clicking outside it (but not on shop cards)
+            if (detailPanelActive && !clickedOnDetailPanel && !clickedOnTooltipSource)
+            {
+                HideUnitDetailPanel();
+            }
+        }
+
+        /// <summary>
+        /// Check if the current click is on a tooltip source (UI or 3D unit)
+        /// </summary>
+        private bool CheckClickedOnTooltipSource()
+        {
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem == null) return false;
+
+            var pointerData = new UnityEngine.EventSystems.PointerEventData(eventSystem)
+            {
+                position = Input.mousePosition
+            };
+            var results = new List<UnityEngine.EventSystems.RaycastResult>();
+            eventSystem.RaycastAll(pointerData, results);
+
+            // Check UI elements
+            foreach (var result in results)
+            {
+                if (result.gameObject.GetComponentInParent<UnitCardUI>() != null ||
+                    result.gameObject.GetComponentInParent<ItemSlotUI>() != null ||
+                    result.gameObject.GetComponentInParent<CrestSlotUI>() != null ||
+                    result.gameObject.GetComponentInParent<TooltipItemSlot>() != null ||
+                    result.gameObject.GetComponentInParent<ServerTooltipItemSlot>() != null ||
+                    (tooltipPanel != null && result.gameObject.transform.IsChildOf(tooltipPanel.transform)))
+                {
+                    return true;
+                }
+            }
+
+            // Check 3D units - use RaycastAll because ground might be hit first
+            if (Camera.main != null)
+            {
+                Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+                RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
+                foreach (var hit in hits)
+                {
+                    if (hit.collider.GetComponentInParent<Crestforge.Visuals.UnitVisual3D>() != null)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Check if the current click is on the detail panel
+        /// </summary>
+        private bool CheckClickedOnDetailPanel()
+        {
+            if (unitDetailPanel == null) return false;
+
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem == null) return false;
+
+            var pointerData = new UnityEngine.EventSystems.PointerEventData(eventSystem)
+            {
+                position = Input.mousePosition
+            };
+            var results = new List<UnityEngine.EventSystems.RaycastResult>();
+            eventSystem.RaycastAll(pointerData, results);
+
+            foreach (var result in results)
+            {
+                if (result.gameObject.transform.IsChildOf(unitDetailPanel.transform))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         // ========== Layout ==========
@@ -5151,15 +5518,7 @@ namespace Crestforge.UI
                     optimisticGoldDelta -= shopUnit.cost;
 
                     // Create optimistic visual immediately (before server confirms)
-                    if (Crestforge.Visuals.BoardManager3D.Instance != null)
-                    {
-                        int slot = Crestforge.Visuals.BoardManager3D.Instance.CreateOptimisticPurchaseVisual(shopUnit);
-                        Debug.Log($"[GameUI] CreateOptimisticPurchaseVisual returned slot: {slot}");
-                    }
-                    else
-                    {
-                        Debug.Log("[GameUI] BoardManager3D.Instance is null!");
-                    }
+                    Crestforge.Visuals.BoardManager3D.Instance?.CreateOptimisticPurchaseVisual(shopUnit);
 
                     // Clear the shop card immediately for instant feedback
                     if (index < shopCards.Count && shopCards[index] != null)

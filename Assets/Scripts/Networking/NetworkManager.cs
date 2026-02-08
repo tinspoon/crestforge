@@ -30,7 +30,7 @@ namespace Crestforge.Networking
 
         [Header("Server Settings")]
         [Tooltip("WebSocket server URL")]
-        public string serverUrl = "ws://localhost:8080";
+        public string serverUrl = "ws://192.168.1.228:8080";
 
         [Header("State")]
         public ConnectionState connectionState = ConnectionState.Disconnected;
@@ -103,6 +103,11 @@ namespace Crestforge.Networking
         public event Action<string, string> OnMerchantTurnUpdate; // currentPickerId, currentPickerName
         public event Action<string, string, string> OnMerchantPick; // optionId, pickedById, pickedByName
         public event Action OnMerchantEnd;
+
+        // Events - Major Crest
+        public event Action<MajorCrestStartMessage> OnMajorCrestStart;
+        public event Action<string, string, string, string> OnMajorCrestSelect; // playerId, playerName, crestId, crestName
+        public event Action OnMajorCrestEnd;
 
         private void Awake()
         {
@@ -180,6 +185,10 @@ namespace Crestforge.Networking
         {
             if (webSocket != null)
             {
+                webSocket.OnOpen -= HandleOpen;
+                webSocket.OnMessage -= HandleMessage;
+                webSocket.OnClose -= HandleClose;
+                webSocket.OnError -= HandleError;
                 webSocket.Close();
                 webSocket = null;
             }
@@ -495,7 +504,17 @@ namespace Crestforge.Networking
 
         private void HandleClose()
         {
-                        connectionState = ConnectionState.Disconnected;
+            connectionState = ConnectionState.Disconnected;
+
+            // Clean up websocket reference
+            if (webSocket != null)
+            {
+                webSocket.OnOpen -= HandleOpen;
+                webSocket.OnMessage -= HandleMessage;
+                webSocket.OnClose -= HandleClose;
+                webSocket.OnError -= HandleError;
+                webSocket = null;
+            }
 
             // Queue for main thread
             lock (queueLock)
@@ -507,6 +526,19 @@ namespace Crestforge.Networking
         private void HandleError(string error)
         {
             Debug.LogError($"[NetworkManager] WebSocket error: {error}");
+
+            // Reset connection state on error so reconnection attempts work
+            connectionState = ConnectionState.Disconnected;
+
+            // Clean up websocket reference
+            if (webSocket != null)
+            {
+                webSocket.OnOpen -= HandleOpen;
+                webSocket.OnMessage -= HandleMessage;
+                webSocket.OnClose -= HandleClose;
+                webSocket.OnError -= HandleError;
+                webSocket = null;
+            }
 
             lock (queueLock)
             {
@@ -834,8 +866,10 @@ namespace Crestforge.Networking
 
                     case "gameEnd":
                         var gameEnd = JsonUtility.FromJson<GameEndMessage>(data);
-                        connectionState = ConnectionState.InRoom;
-                                                OnGameEnd?.Invoke(gameEnd.winnerId, gameEnd.winnerName);
+                        // Keep connectionState as InGame so IsMultiplayer remains true
+                        // and GameUI continues to run UpdatePhaseUIMultiplayer (showing game-over UI).
+                        // Transition to InRoom happens when the player leaves the room.
+                        OnGameEnd?.Invoke(gameEnd.winnerId, gameEnd.winnerName);
                         break;
 
                     case "opponentBoardUpdate":
@@ -907,6 +941,38 @@ namespace Crestforge.Networking
                         OnMerchantEnd?.Invoke();
                         break;
 
+                    // Major Crest messages
+                    case "majorCrestStart":
+                        try
+                        {
+                            var crestStart = JsonUtility.FromJson<MajorCrestStartMessage>(data);
+                            Debug.Log($"[NetworkManager] Major crest round started - {crestStart.options?.Count ?? 0} options");
+                            OnMajorCrestStart?.Invoke(crestStart);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[NetworkManager] Failed to parse majorCrestStart: {ex.Message}");
+                        }
+                        break;
+
+                    case "majorCrestSelect":
+                        try
+                        {
+                            var crestSelect = JsonUtility.FromJson<MajorCrestSelectMessage>(data);
+                            Debug.Log($"[NetworkManager] Major crest selected: {crestSelect.playerName} chose {crestSelect.crestName}");
+                            OnMajorCrestSelect?.Invoke(crestSelect.playerId, crestSelect.playerName, crestSelect.crestId, crestSelect.crestName);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[NetworkManager] Failed to parse majorCrestSelect: {ex.Message}");
+                        }
+                        break;
+
+                    case "majorCrestEnd":
+                        Debug.Log("[NetworkManager] Major crest round ended");
+                        OnMajorCrestEnd?.Invoke();
+                        break;
+
                     default:
                         Debug.LogWarning($"[NetworkManager] Unknown message type: {baseMsg.type}");
                         break;
@@ -949,13 +1015,15 @@ namespace Crestforge.Networking
         /// </summary>
         private void ForwardCombatEvents()
         {
+            int subscriberCount = OnCombatEventsReceived?.GetInvocationList()?.Length ?? 0;
+
             if (pendingCombatEvents.Count > 0)
             {
-                int subscriberCount = OnCombatEventsReceived?.GetInvocationList()?.Length ?? 0;
-                                try
+                Debug.Log($"[NetworkManager] Forwarding {pendingCombatEvents.Count} combat events to {subscriberCount} subscribers");
+                try
                 {
                     OnCombatEventsReceived?.Invoke(new List<ServerCombatEvent>(pendingCombatEvents));
-                                    }
+                }
                 catch (System.Exception ex)
                 {
                     Debug.LogError($"[NetworkManager] Exception invoking OnCombatEventsReceived: {ex.Message}\n{ex.StackTrace}");
@@ -963,7 +1031,16 @@ namespace Crestforge.Networking
             }
             else
             {
-                Debug.LogWarning($"[NetworkManager] No combat events to forward");
+                // Still invoke with empty list so visualizer knows combat started but has no events
+                Debug.LogWarning($"[NetworkManager] No combat events to forward - invoking with empty list");
+                try
+                {
+                    OnCombatEventsReceived?.Invoke(new List<ServerCombatEvent>());
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[NetworkManager] Exception invoking OnCombatEventsReceived with empty list: {ex.Message}");
+                }
             }
             pendingCombatEvents.Clear();
         }
@@ -1009,6 +1086,24 @@ namespace Crestforge.Networking
             string actionJson = JsonUtility.ToJson(action);
             string json = $"{{\"type\":\"action\",\"action\":{actionJson}}}";
             webSocket?.Send(json);
+        }
+
+        /// <summary>
+        /// Send a major crest selection to the server
+        /// </summary>
+        public void SendMajorCrestSelect(string crestId)
+        {
+            if (!IsInGame)
+            {
+                Debug.LogWarning("[NetworkManager] Cannot send major crest select - not in game");
+                return;
+            }
+
+            var action = new SelectMajorCrestAction(crestId);
+            string actionJson = JsonUtility.ToJson(action);
+            string json = $"{{\"type\":\"action\",\"action\":{actionJson}}}";
+            webSocket?.Send(json);
+            Debug.Log($"[NetworkManager] Sent major crest selection: {crestId}");
         }
     }
 }

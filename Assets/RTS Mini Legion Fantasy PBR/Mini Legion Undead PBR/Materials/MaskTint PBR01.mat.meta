@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: a1285a0039baf60408c0d7fab9f07dc1
+timeCreated: 1563794570
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Undead PBR/Materials/MaskTint
+    PBR01.mat
+  uploadId: 534720

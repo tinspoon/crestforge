@@ -315,6 +315,12 @@ namespace Crestforge.Systems
                 return;
             }
 
+            // Cancel any in-progress drag before combat setup (ensures dragged unit is restored to bench)
+            if (BoardManager3D.Instance != null)
+            {
+                BoardManager3D.Instance.CancelDrag();
+            }
+
             var cameraSetup = IsometricCameraSetup.Instance;
             var serverState = ServerGameState.Instance;
 
@@ -412,7 +418,7 @@ namespace Crestforge.Systems
         }
 
         /// <summary>
-        /// Play combat visualization on a specific board (for scouting)
+        /// Play combat visualization on a specific board (for scouting or test mode)
         /// </summary>
         /// <param name="board">The board to visualize on</param>
         /// <param name="combatEvents">The combat events to play</param>
@@ -441,8 +447,20 @@ namespace Crestforge.Systems
 
             activeCombats[board] = playback;
 
+            // If no player combat is active (e.g., test mode), treat this as the player's combat
+            // This ensures isPlaying flag is synced in Update() for proper health bar handling
+            if (playerCombat == null)
+            {
+                playerCombat = playback;
+                combatBoard = board;
+                myTeam = team;
+                isHostPlayer = isHost;
+            }
+
             playback.StartPlayback(board, combatEvents, team, isHost, startTick, reuseExistingVisuals: false);
 
+            // Set isPlaying immediately for the first frame
+            isPlaying = true;
 
             return playback;
         }

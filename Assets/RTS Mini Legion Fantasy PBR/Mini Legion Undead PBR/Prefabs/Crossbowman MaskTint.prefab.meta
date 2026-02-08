@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: e47f396cd9a0f0f4aa3fbbcce196f5e4
+timeCreated: 1563797484
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Undead PBR/Prefabs/Crossbowman
+    MaskTint.prefab
+  uploadId: 534720

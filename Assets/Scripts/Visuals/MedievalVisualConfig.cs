@@ -38,6 +38,27 @@ namespace Crestforge.Visuals
         }
 
         // ==========================================
+        // UNIT COST TIER COLORS
+        // ==========================================
+
+        /// <summary>
+        /// Get the color associated with a unit's cost tier.
+        /// Used for card backgrounds, tooltips, and other UI elements.
+        /// </summary>
+        public static Color GetCostColor(int cost)
+        {
+            return cost switch
+            {
+                1 => new Color(0.725f, 0.725f, 1f),  // Light steel blue
+                2 => new Color(0f, 0.9f, 0f),         // Green
+                3 => new Color(0f, 0f, 0.9f),        // Blue
+                4 => new Color(0.75f, 0.15f, 0.75f), // Purple
+                5 => new Color(1f, 0.8f, 0.2f),      // Gold/Legendary
+                _ => Color.white
+            };
+        }
+
+        // ==========================================
         // ORIGIN COLOR PALETTES (Medieval themed)
         // ==========================================
 

@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 183ac3d3c1f24904f8cf5b32a2df8e72
+timeCreated: 1565581725
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Human PBR/Prefabs/Arrow_Standard_PBR.prefab
+  uploadId: 534720

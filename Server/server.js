@@ -271,9 +271,39 @@ function handleLeaveRoom(client) {
                 send(newHost.ws, { type: 'becameHost' });
             }
         }
+
+        // If merchant round is active and the disconnected player was the current picker,
+        // immediately advance the merchant turn
+        const merchantState = room.getMerchantState();
+        if (merchantState && merchantState.needsSkip) {
+            merchantState.needsSkip = false;
+            console.log(`[handleLeaveRoom] Merchant picker disconnected, advancing turn`);
+            // Clear existing merchant turn timer
+            if (room.merchantTurnTimer) {
+                clearTimeout(room.merchantTurnTimer);
+                room.merchantTurnTimer = null;
+            }
+            const turnResult = room.advanceMerchantTurn();
+            if (turnResult) {
+                if (turnResult.allPicked) {
+                    room.endMerchantRound();
+                    broadcastMerchantEnd(room);
+                    endMerchantRoundAndAdvance(room);
+                } else {
+                    broadcastMerchantTurnUpdate(room, turnResult);
+                    startMerchantTurnTimer(room);
+                }
+            } else {
+                // No more turns possible, end the round
+                room.endMerchantRound();
+                broadcastMerchantEnd(room);
+                endMerchantRoundAndAdvance(room);
+            }
+        }
     } else {
+        room.cleanupTimers();
         rooms.delete(oldRoomId);
-        console.log(`Room ${oldRoomId} deleted (empty)`);
+        console.log(`Room ${oldRoomId} deleted (empty, timers cleaned up)`);
     }
 
     send(client.ws, { type: 'leftRoom' });
@@ -826,7 +856,10 @@ function startCombat(room) {
     console.log(`[startCombat] Combat: ${maxDurationTicks} ticks = ${realTimeDuration.toFixed(1)}s, waiting ${combatDuration}ms`);
 
     // Wait for combat animation to complete, then send results
-    setTimeout(() => {
+    const gen = room.phaseGeneration;
+    room.combatTimer = setTimeout(() => {
+        room.combatTimer = null;
+        if (room.phaseGeneration !== gen) return;
         sendCombatResults(room);
     }, combatDuration);
 }
@@ -862,7 +895,10 @@ function sendCombatResults(room) {
     const resultsTime = GameConstants.Rounds.RESULTS_DURATION * 1000;
     console.log(`[sendCombatResults] Results phase will end in ${resultsTime}ms`);
 
-    setTimeout(() => {
+    const gen = room.phaseGeneration;
+    room.resultsTimer = setTimeout(() => {
+        room.resultsTimer = null;
+        if (room.phaseGeneration !== gen) return;
         endResults(room);
     }, resultsTime);
 }
@@ -927,7 +963,10 @@ function endGame(room, winnerId) {
     console.log(`[endGame] Game ended in room ${room.roomId}. Winner: ${winner?.name}`);
 
     // Reset room after delay
-    setTimeout(() => {
+    const gen = room.phaseGeneration;
+    room.resetTimer = setTimeout(() => {
+        room.resetTimer = null;
+        if (room.phaseGeneration !== gen) return;
         if (rooms.has(room.roomId)) {
             room.state = 'waiting';
             room.round = 1;
@@ -942,9 +981,10 @@ function endGame(room, winnerId) {
 
 function startPhaseUpdates(room) {
     // Send periodic phase timer updates
-    const updateInterval = setInterval(() => {
+    room.phaseUpdateInterval = setInterval(() => {
         if (!rooms.has(room.roomId) || room.state !== 'playing') {
-            clearInterval(updateInterval);
+            clearInterval(room.phaseUpdateInterval);
+            room.phaseUpdateInterval = null;
             return;
         }
 
@@ -1018,6 +1058,21 @@ function startMerchantRound(room) {
 
         // Start turn timer for the first picker
         startMerchantTurnTimer(room);
+
+        // Safety timeout: force-end merchant round after 90 seconds (max ~6 picks * 15s)
+        // This prevents the round from getting stuck indefinitely
+        const safetyGen = room.phaseGeneration;
+        room.merchantSafetyTimer = setTimeout(() => {
+            room.merchantSafetyTimer = null;
+            if (room.phaseGeneration !== safetyGen) return;
+            const state = room.getMerchantState();
+            if (state && state.isActive) {
+                console.log(`[startMerchantRound] Safety timeout hit - forcing merchant round end`);
+                room.endMerchantRound();
+                broadcastMerchantEnd(room);
+                endMerchantRoundAndAdvance(room);
+            }
+        }, 90000);
     }
 }
 
@@ -1028,10 +1083,14 @@ function startMerchantTurnTimer(room) {
     // Clear any existing timer
     if (room.merchantTurnTimer) {
         clearTimeout(room.merchantTurnTimer);
+        room.merchantTurnTimer = null;
     }
 
     // Set 15 second timer for current picker
+    const gen = room.phaseGeneration;
     room.merchantTurnTimer = setTimeout(() => {
+        room.merchantTurnTimer = null;
+        if (room.phaseGeneration !== gen) return;
         autoPickMerchant(room);
     }, 15000);
 }
@@ -1046,12 +1105,15 @@ function autoPickMerchant(room) {
     }
 
     const currentPicker = room.getPlayer(merchantState.currentPickerId);
-    console.log(`[autoPickMerchant] ${currentPicker?.name || 'Unknown'} took too long, auto-picking`);
+    console.log(`[autoPickMerchant] ${currentPicker?.name || 'Unknown'} (${merchantState.currentPickerId}) took too long, auto-picking`);
 
     // Find the first unpicked option (prefer gold)
     const unpicked = merchantState.options.filter(o => !o.isPicked);
     if (unpicked.length === 0) {
-        console.log(`[autoPickMerchant] No unpicked options left`);
+        console.log(`[autoPickMerchant] No unpicked options left, ending merchant round`);
+        room.endMerchantRound();
+        broadcastMerchantEnd(room);
+        endMerchantRoundAndAdvance(room);
         return;
     }
 
@@ -1059,7 +1121,7 @@ function autoPickMerchant(room) {
     const goldOption = unpicked.find(o => o.optionType === 'gold');
     const optionToPick = goldOption || unpicked[0];
 
-    // Simulate the pick
+    // Simulate the pick - may fail if player disconnected
     const result = room.handleMerchantPick(merchantState.currentPickerId, optionToPick.optionId);
     if (result.success) {
         broadcastMerchantPick(room, {
@@ -1067,20 +1129,28 @@ function autoPickMerchant(room) {
             pickedById: result.pickedById,
             pickedByName: result.pickedByName
         });
-
-        const turnResult = room.advanceMerchantTurn();
-        if (turnResult) {
-            if (turnResult.allPicked) {
-                room.endMerchantRound();
-                broadcastMerchantEnd(room);
-                endMerchantRoundAndAdvance(room);
-            } else {
-                broadcastMerchantTurnUpdate(room, turnResult);
-                startMerchantTurnTimer(room); // Start timer for next picker
-            }
-        }
-
         broadcastStateToRoom(room);
+    } else {
+        console.log(`[autoPickMerchant] Pick failed (player likely disconnected), skipping turn`);
+    }
+
+    // Always advance the turn, even if the pick failed (disconnected player)
+    const turnResult = room.advanceMerchantTurn();
+    if (turnResult) {
+        if (turnResult.allPicked) {
+            room.endMerchantRound();
+            broadcastMerchantEnd(room);
+            endMerchantRoundAndAdvance(room);
+        } else {
+            broadcastMerchantTurnUpdate(room, turnResult);
+            startMerchantTurnTimer(room); // Start timer for next picker
+        }
+    } else {
+        // advanceMerchantTurn returned null (merchant not active), force end
+        console.log(`[autoPickMerchant] advanceMerchantTurn returned null, forcing end`);
+        room.endMerchantRound();
+        broadcastMerchantEnd(room);
+        endMerchantRoundAndAdvance(room);
     }
 }
 
@@ -1094,9 +1164,26 @@ function endMerchantRoundAndAdvance(room) {
         room.merchantTurnTimer = null;
     }
 
+    // Clear safety timer
+    if (room.merchantSafetyTimer) {
+        clearTimeout(room.merchantSafetyTimer);
+        room.merchantSafetyTimer = null;
+    }
+
     console.log(`[endMerchantRoundAndAdvance] Merchant round complete, advancing to next round`);
 
-    setTimeout(() => {
+    const gen = room.phaseGeneration;
+    room.advanceRoundTimer = setTimeout(() => {
+        room.advanceRoundTimer = null;
+        if (room.phaseGeneration !== gen) return;
+
+        // Check for game end before advancing (a player could have been eliminated earlier)
+        const active = room.getActivePlayers();
+        if (active.length <= 1) {
+            endGame(room, active[0]?.clientId);
+            return;
+        }
+
         room.advanceRound();
 
         broadcastToRoom(room, {
@@ -1133,7 +1220,10 @@ function startMajorCrestRound(room) {
         room.majorCrestStartTime = Date.now();
 
         // Set up 20 second timer for major crest round
+        const gen = room.phaseGeneration;
         room.majorCrestTimer = setTimeout(() => {
+            room.majorCrestTimer = null;
+            if (room.phaseGeneration !== gen) return;
             console.log(`[startMajorCrestRound] Timer expired, ending major crest round`);
             endMajorCrestRoundAndAdvance(room);
         }, 20000);
@@ -1169,7 +1259,11 @@ function endMajorCrestRoundAndAdvance(room) {
     broadcastMajorCrestEnd(room);
 
     // Short delay then advance directly to next round's planning phase
-    setTimeout(() => {
+    const gen = room.phaseGeneration;
+    room.advanceRoundTimer = setTimeout(() => {
+        room.advanceRoundTimer = null;
+        if (room.phaseGeneration !== gen) return;
+
         // Check for game end
         const active = room.getActivePlayers();
         if (active.length <= 1) {

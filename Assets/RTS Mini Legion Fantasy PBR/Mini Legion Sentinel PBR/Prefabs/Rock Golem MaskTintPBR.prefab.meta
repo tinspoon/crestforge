@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: fab392df2fc7f314ca1814ba8885b9d3
+timeCreated: 1560141264
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Sentinel PBR/Prefabs/Rock
+    Golem MaskTintPBR.prefab
+  uploadId: 534720

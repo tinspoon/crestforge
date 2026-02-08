@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80107729967074436b4cf6ef554b9feb, type: 3}
+  m_Name: TextStylePresets
+  m_EditorClassIdentifier: Assembly-CSharp::Crestforge.UI.TextStylePresets
+  primaryFont: {fileID: 11400000, guid: ba04b91444a3845fdbac7d8b0e49351c, type: 2}
+  title: {fileID: 11400000, guid: 41f2a68673adf448081beb3eddfac771, type: 2}
+  header: {fileID: 11400000, guid: 9c2d78aabcf144b0c823449c9be3eb13, type: 2}
+  body: {fileID: 11400000, guid: 52a1522417cfc4d53be15ab299522cb6, type: 2}
+  button: {fileID: 11400000, guid: a8e2db746149e40b485fe632055415a8, type: 2}
+  buttonSmall: {fileID: 11400000, guid: 30338ef339771471d97792538dada926, type: 2}
+  damageNumber: {fileID: 11400000, guid: 15da000ba42b4458886a1075e20b5fa6, type: 2}
+  healNumber: {fileID: 11400000, guid: 247d6b3e5104f443086b257ac135ba74, type: 2}
+  criticalHit: {fileID: 11400000, guid: 91dbbea8df64e41f18e281c769c88550, type: 2}
+  unitName: {fileID: 11400000, guid: 2ce6889a0eefd41d3af4e6302c04a65e, type: 2}
+  healthBar: {fileID: 11400000, guid: 0e4cbe661a626448eab0eceb5b12bb06, type: 2}
+  gold: {fileID: 11400000, guid: 94a57ce6bc3284a0d9b54a4213ea2388, type: 2}
+  xp: {fileID: 11400000, guid: 632311881ccd04b4ea6fd924fca73c19, type: 2}
+  level: {fileID: 11400000, guid: d7c7e5901cfc74c50a3eed5192e8f689, type: 2}
+  cardName: {fileID: 11400000, guid: e04bb19d8df4f4d5db2248a5f806f5e9, type: 2}
+  cardCost: {fileID: 11400000, guid: b7016b31b97264cf485a241fb7fb2ccf, type: 2}
+  cardStats: {fileID: 11400000, guid: 4c6d194cb0d794f7ebe2e4815de0661c, type: 2}
+  traitName: {fileID: 11400000, guid: 0f6c14c8110bb4ae9b852a247a2c7a43, type: 2}
+  timer: {fileID: 11400000, guid: cf180ff0599d1491f83d178a93f1faf6, type: 2}
+  roundNumber: {fileID: 11400000, guid: 0aa2918b0e9754d529c35dc64fb4333a, type: 2}
+  playerName: {fileID: 11400000, guid: 81502c1292b264523bdc24c8123ff135, type: 2}
+  notification: {fileID: 11400000, guid: 03be1ef1f8332414789c0a675f56cb2f, type: 2}

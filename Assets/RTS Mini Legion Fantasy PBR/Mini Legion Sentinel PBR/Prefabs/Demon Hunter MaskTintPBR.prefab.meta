@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: a239b32d40dbf1346a741d928bb02888
+timeCreated: 1560141163
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Sentinel PBR/Prefabs/Demon
+    Hunter MaskTintPBR.prefab
+  uploadId: 534720

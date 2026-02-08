@@ -248,7 +248,12 @@ namespace Crestforge.Networking
                 return;
             }
 
-            
+
+            // Don't let state updates override gameOver phase
+            // (server reset timer sends state with phase='planning' while game-over screen is showing)
+            if (phase == "gameOver")
+                return;
+
             // Update game info
             roomId = state.roomId;
             phase = state.phase;
@@ -368,7 +373,10 @@ namespace Crestforge.Networking
             {
                 for (int i = 0; i < GameConstants.Player.BENCH_SIZE && i < data.bench.Length; i++)
                 {
-                    bench[i] = data.bench[i];
+                    var benchUnit = data.bench[i];
+                    // Only store if it's a valid unit with an instanceId
+                    // JSON deserializer may create empty objects instead of null
+                    bench[i] = (benchUnit != null && !string.IsNullOrEmpty(benchUnit.instanceId)) ? benchUnit : null;
                 }
             }
 
@@ -377,7 +385,10 @@ namespace Crestforge.Networking
             {
                 for (int i = 0; i < 5 && i < data.shop.Length; i++)
                 {
-                    shop[i] = data.shop[i];
+                    var shopUnit = data.shop[i];
+                    // Only store if it's a valid unit with a unitId
+                    // JSON deserializer may create empty objects instead of null
+                    shop[i] = (shopUnit != null && !string.IsNullOrEmpty(shopUnit.unitId)) ? shopUnit : null;
                 }
                 OnShopUpdated?.Invoke();
             }

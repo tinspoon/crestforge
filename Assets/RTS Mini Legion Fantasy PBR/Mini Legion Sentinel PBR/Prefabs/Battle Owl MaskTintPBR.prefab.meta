@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: d25ff39e9bc0b944c8d06d72849be4d6
+timeCreated: 1560141143
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Sentinel PBR/Prefabs/Battle
+    Owl MaskTintPBR.prefab
+  uploadId: 534720

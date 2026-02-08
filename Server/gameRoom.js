@@ -233,8 +233,8 @@ class PlayerState {
 
     calculateIncome() {
         let income = GameConstants.Economy.BASE_GOLD_PER_TURN;
-        // Interest: 1 gold per 10 gold saved, max 5
-        const interest = Math.min(Math.floor(this.gold / 10), GameConstants.Economy.MAX_INTEREST);
+        // Interest: 1 gold per 5 gold saved, max 3 (at 15 gold)
+        const interest = Math.min(Math.floor(this.gold / 5), GameConstants.Economy.MAX_INTEREST);
         income += interest;
         // Win/loss streak bonus
         const streak = Math.max(this.winStreak, this.lossStreak);
@@ -1262,7 +1262,20 @@ class GameRoom {
         this.lastHostByPair = new Map(); // "player1Id-player2Id" -> lastHostId (for alternating home/away)
 
         // Timers
-        this.timerInterval = null;
+        this.timerInterval = null;          // Internal 100ms phase countdown
+        this.phaseUpdateInterval = null;    // 1s broadcast interval (managed by server.js)
+        this.combatTimer = null;            // setTimeout for combat duration wait
+        this.resultsTimer = null;           // setTimeout for results duration wait
+        this.resetTimer = null;             // setTimeout for room reset after game end
+        this.advanceRoundTimer = null;      // setTimeout for merchant/crest advance delay
+        this.merchantTurnTimer = null;      // setTimeout for merchant per-turn timer
+        this.merchantSafetyTimer = null;    // setTimeout for merchant safety timeout
+        this.majorCrestTimer = null;        // setTimeout for major crest round timer
+        this.majorCrestStartTime = null;    // Date.now() when major crest round started
+
+        // Generation counter - increments on every phase/round transition
+        // Callbacks capture this value and bail if it has changed
+        this.phaseGeneration = 0;
 
         // Mad Merchant state
         this.merchantState = null;
@@ -1301,6 +1314,62 @@ class GameRoom {
         if (clientId === this.hostId && this.players.size > 0) {
             this.hostId = this.players.keys().next().value;
         }
+
+        // If no players remain, clean up all timers
+        if (this.players.size === 0) {
+            this.incrementGeneration();
+            this.cleanupTimers();
+            return;
+        }
+
+        // If merchant round is active and this was the current picker, signal to skip their turn
+        if (this.merchantState && this.merchantState.isActive &&
+            this.merchantState.currentPickerId === clientId) {
+            this.merchantState.needsSkip = true;
+        }
+    }
+
+    /**
+     * Clean up all timers and intervals to prevent leaks
+     */
+    cleanupTimers() {
+        // Clear all setTimeout-based timers
+        const timeoutFields = [
+            'combatTimer', 'resultsTimer', 'resetTimer', 'advanceRoundTimer',
+            'merchantTurnTimer', 'merchantSafetyTimer', 'majorCrestTimer'
+        ];
+        for (const field of timeoutFields) {
+            if (this[field]) {
+                clearTimeout(this[field]);
+                this[field] = null;
+            }
+        }
+
+        // Clear all setInterval-based timers
+        const intervalFields = ['timerInterval', 'phaseUpdateInterval'];
+        for (const field of intervalFields) {
+            if (this[field]) {
+                clearInterval(this[field]);
+                this[field] = null;
+            }
+        }
+
+        this.majorCrestStartTime = null;
+
+        if (this.merchantState) {
+            this.merchantState.isActive = false;
+        }
+
+        console.log(`[GameRoom] All timers cleaned up`);
+    }
+
+    /**
+     * Increment the phase generation counter.
+     * Returns the new generation value so callers can capture it in closures.
+     */
+    incrementGeneration() {
+        this.phaseGeneration++;
+        return this.phaseGeneration;
     }
 
     getPlayer(clientId) {
@@ -1435,6 +1504,7 @@ class GameRoom {
     }
 
     startPlanningPhase() {
+        this.incrementGeneration();
         this.phase = 'planning';
 
         // Stop any existing timer from previous phase
@@ -1457,10 +1527,9 @@ class GameRoom {
         console.log(`[GameRoom] Starting planning phase for round ${this.round} (${roundType}), timer: ${this.phaseTimer}s`);
         this.phaseStartTime = Date.now();
 
-        // Major crest rounds don't use normal planning phase mechanics
-        if (roundType === 'major_crest') {
-            // Timer is handled in server.js startMajorCrestRound()
-            // Don't give income, refresh shop, or start planning timer
+        // Major crest and mad merchant rounds don't use normal planning phase mechanics
+        if (roundType === 'major_crest' || roundType === 'mad_merchant') {
+            // Don't give income, passive XP, refresh shop, or start planning timer
             return;
         }
 
@@ -1469,13 +1538,26 @@ class GameRoom {
             this.checkAllMerges(player);
         }
 
-        // Give income
-        console.log(`[GameRoom] startPlanningPhase - giving income to ${this.getActivePlayers().length} players`);
+        // Give income and passive XP
+        console.log(`[GameRoom] startPlanningPhase - giving income and XP to ${this.getActivePlayers().length} players`);
         for (const player of this.getActivePlayers()) {
             const income = player.calculateIncome();
             const oldGold = player.gold;
             player.gold += income;
-            console.log(`[GameRoom] ${player.name}: gold ${oldGold} + income ${income} = ${player.gold}`);
+
+            // Grant passive XP
+            const freeXp = GameConstants.Leveling.FREE_XP_PER_ROUND;
+            const oldXp = player.xp;
+            const oldLevel = player.level;
+            player.xp += freeXp;
+            while (player.canLevelUp()) {
+                player.level++;
+            }
+            if (player.level > oldLevel) {
+                console.log(`[GameRoom] ${player.name}: LEVELED UP ${oldLevel} -> ${player.level} (xp: ${oldXp} + ${freeXp} = ${player.xp})`);
+            }
+
+            console.log(`[GameRoom] ${player.name}: gold ${oldGold} + ${income} = ${player.gold}, xp ${oldXp} + ${freeXp} = ${player.xp} (lv${player.level})`);
             player.isReady = false;
 
             // Refresh shop if not locked
@@ -1489,6 +1571,11 @@ class GameRoom {
     }
 
     startCombatPhase() {
+        this.incrementGeneration();
+
+        // Stop any lingering planning phase timer to prevent leaks
+        this.stopPhaseTimer();
+
         this.phase = 'combat';
         this.phaseTimer = GameConstants.Rounds.COMBAT_MAX_DURATION;
         this.phaseStartTime = Date.now();
@@ -1964,12 +2051,14 @@ class GameRoom {
     }
 
     startResultsPhase() {
+        this.incrementGeneration();
         this.phase = 'results';
         this.phaseTimer = GameConstants.Rounds.RESULTS_DURATION;
         this.phaseStartTime = Date.now();
     }
 
     advanceRound() {
+        this.incrementGeneration();
         this.round++;
 
         // Check for game end - only when 1 or fewer players remain
@@ -1986,9 +2075,10 @@ class GameRoom {
     }
 
     endGame(winnerId) {
+        this.incrementGeneration();
         this.state = 'finished';
         this.phase = 'gameOver';
-        this.stopPhaseTimer();
+        this.cleanupTimers();
     }
 
     startPhaseTimer() {
@@ -2042,7 +2132,8 @@ class GameRoom {
             case 'planning':
                 // Mad Merchant rounds don't advance on timer - they wait for all picks
                 if (roundType === 'mad_merchant') {
-                    console.log(`[GameRoom] Mad Merchant round - ignoring planning timer, waiting for all picks`);
+                    console.log(`[GameRoom] Mad Merchant round - stopping leaked planning timer`);
+                    this.stopPhaseTimer();
                     return;
                 }
 
@@ -2145,14 +2236,17 @@ class GameRoom {
                 return this.handleMerchantPick(clientId, action.optionId);
         }
 
+        // Sell unit - bench units can be sold any time, board units only during planning
+        if (action.type === 'sellUnit') {
+            return this.sellUnit(player, action.instanceId, this.phase !== 'planning');
+        }
+
         // All other actions require planning phase
         if (this.phase !== 'planning') {
             return { success: false, error: 'Not in planning phase' };
         }
 
         switch (action.type) {
-            case 'sellUnit':
-                return this.sellUnit(player, action.instanceId);
             case 'placeUnit':
                 return this.placeUnit(player, action.instanceId, action.x, action.y);
             case 'benchUnit':
@@ -2222,21 +2316,23 @@ class GameRoom {
         };
     }
 
-    sellUnit(player, instanceId) {
+    sellUnit(player, instanceId, benchOnly = false) {
         // Find unit on board or bench
         let unit = null;
         let location = null;
 
-        // Check board
-        for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
-            for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
-                if (player.board[x][y]?.instanceId === instanceId) {
-                    unit = player.board[x][y];
-                    location = { type: 'board', x, y };
-                    break;
+        // Check board (skip if benchOnly - can only sell bench units during combat/results)
+        if (!benchOnly) {
+            for (let x = 0; x < GameConstants.Grid.WIDTH; x++) {
+                for (let y = 0; y < GameConstants.Grid.HEIGHT; y++) {
+                    if (player.board[x][y]?.instanceId === instanceId) {
+                        unit = player.board[x][y];
+                        location = { type: 'board', x, y };
+                        break;
+                    }
                 }
+                if (unit) break;
             }
-            if (unit) break;
         }
 
         // Check bench
@@ -2251,6 +2347,9 @@ class GameRoom {
         }
 
         if (!unit) {
+            if (benchOnly) {
+                return { success: false, error: 'Can only sell bench units during combat' };
+            }
             return { success: false, error: 'Unit not found' };
         }
 
@@ -3624,7 +3723,17 @@ class GameRoom {
 
         this.merchantState.currentPickerIndex++;
 
-        // Check if all players have picked
+        // Skip disconnected players (no longer in room)
+        while (this.merchantState.currentPickerIndex < this.merchantState.pickOrder.length) {
+            const candidate = this.merchantState.pickOrder[this.merchantState.currentPickerIndex];
+            if (this.players.has(candidate.clientId)) {
+                break; // This player is still connected
+            }
+            console.log(`[GameRoom] Skipping disconnected player ${candidate.name} in merchant pick order`);
+            this.merchantState.currentPickerIndex++;
+        }
+
+        // Check if all players have picked (or been skipped)
         if (this.merchantState.currentPickerIndex >= this.merchantState.pickOrder.length) {
             console.log(`[GameRoom] All players have picked, ending merchant round`);
             return { allPicked: true };
@@ -3632,6 +3741,7 @@ class GameRoom {
 
         const nextPicker = this.merchantState.pickOrder[this.merchantState.currentPickerIndex];
         this.merchantState.currentPickerId = nextPicker.clientId;
+        this.merchantState.needsSkip = false; // Reset skip flag for new picker
 
         console.log(`[GameRoom] Merchant turn advanced to: ${nextPicker.name}`);
 

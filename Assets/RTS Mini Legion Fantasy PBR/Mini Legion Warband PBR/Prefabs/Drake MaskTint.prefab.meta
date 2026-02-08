@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 5e8d0433a3b25614889b02c47e093dd5
+timeCreated: 1557497371
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Warband PBR/Prefabs/Drake
+    MaskTint.prefab
+  uploadId: 534720

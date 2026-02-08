@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 880ebb2decf479343b94e44c771716fe
+timeCreated: 1563707855
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Undead PBR/Materials/Stage.mat
+  uploadId: 534720

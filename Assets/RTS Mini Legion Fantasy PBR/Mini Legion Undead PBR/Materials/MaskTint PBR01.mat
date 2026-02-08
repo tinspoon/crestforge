@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 6
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: MaskTint PBR01
+  m_Shader: {fileID: 4800000, guid: 3d1e9a58115991e45aaccda4810de683, type: 3}
+  m_ShaderKeywords: 
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _Albedo:
+        m_Texture: {fileID: 2800000, guid: f2caf7206e5305a4885b09d198397517, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Emission:
+        m_Texture: {fileID: 2800000, guid: c09d4271d7a7bd545875043dda6d8e2a, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Mask:
+        m_Texture: {fileID: 2800000, guid: 754f52298f622bc47b40c055f8c5adb4, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Normal:
+        m_Texture: {fileID: 2800000, guid: 445f0a26f30d1dc4bbb670ffcad4528c, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SAM:
+        m_Texture: {fileID: 2800000, guid: 587493d10c5f2474291379d0a9bfe955, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _texcoord:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Floats:
+    - _Brightness: 1.4
+    - _Color01Power: 2
+    - _EmissionPower: 5
+    - __dirty: 1
+    m_Colors:
+    - _Color01: {r: 0, g: 0.22439456, b: 1, a: 0}
+    - _Color02: {r: 0.7352941, g: 0.3907648, b: 0.021626318, a: 0}
+    - _Color03: {r: 0.46323532, g: 0.069297366, b: 0.02384299, a: 0}
+    - _EmissionColor: {r: 1, g: 0.2275862, b: 0, a: 0}
+  m_BuildTextureStacks: []

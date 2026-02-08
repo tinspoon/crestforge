@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 31c0791c7a6c46742b4d019e9e174c30
+timeCreated: 1557497452
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Warband PBR/Prefabs/Warlock
+    MaskTint.prefab
+  uploadId: 534720

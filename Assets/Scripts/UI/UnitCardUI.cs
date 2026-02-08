@@ -93,12 +93,12 @@ namespace Crestforge.UI
                 costText.text = t.cost.ToString();
                 if (starsText != null)
                 {
-                    starsText.text = unit.starLevel > 1 ? new string('★', unit.starLevel) : "";
+                    starsText.text = unit.starLevel > 1 ? new string('*', unit.starLevel) : "";
                 }
             }
             else if (isBenchSlot)
             {
-                costText.text = new string('★', unit.starLevel);
+                costText.text = new string('*', unit.starLevel);
             }
             else
             {
@@ -188,15 +188,7 @@ namespace Crestforge.UI
 
         private Color GetRarityColor(int cost)
         {
-            return cost switch
-            {
-                1 => new Color(1f, 1f, 1f),              // White
-                2 => new Color(0.35f, 0.65f, 0.35f),   // Green
-                3 => new Color(0.35f, 0.55f, 0.85f),   // Blue
-                4 => new Color(0.65f, 0.35f, 0.65f),   // Purple
-                5 => new Color(0.95f, 0.75f, 0.25f),   // Gold
-                _ => new Color(0.3f, 0.3f, 0.35f)
-            };
+            return Crestforge.Visuals.MedievalVisualConfig.GetCostColor(cost);
         }
 
         public void OnPointerEnter(PointerEventData eventData)
@@ -371,14 +363,7 @@ namespace Crestforge.UI
 
         private Color GetCostColor(int cost)
         {
-            return cost switch
-            {
-                1 => new Color(0.45f, 0.45f, 0.5f),
-                2 => new Color(0.25f, 0.5f, 0.25f),
-                3 => new Color(0.25f, 0.4f, 0.7f),
-                4 => new Color(0.55f, 0.25f, 0.55f),
-                _ => new Color(0.3f, 0.3f, 0.35f)
-            };
+            return Crestforge.Visuals.MedievalVisualConfig.GetCostColor(cost);
         }
 
         private void ClearTraitIcons()

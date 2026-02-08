@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using TMPro;
 using Crestforge.Core;
 using Crestforge.Systems;
 
@@ -29,6 +30,13 @@ namespace Crestforge.UI
 
         private void Start()
         {
+            // Ensure TextStyleManager exists
+            if (TextStyleManager.Instance == null)
+            {
+                GameObject styleManagerObj = new GameObject("TextStyleManager");
+                styleManagerObj.AddComponent<TextStyleManager>();
+            }
+
             CreateMenuUI();
             ShowMainMenu();
         }
@@ -74,7 +82,21 @@ namespace Crestforge.UI
             mainPanel.anchorMax = Vector2.one;
             mainPanel.offsetMin = Vector2.zero;
             mainPanel.offsetMax = Vector2.zero;
-            panelObj.GetComponent<Image>().color = new Color(0.08f, 0.08f, 0.12f, 1f);
+
+            // Load background image
+            Image bgImage = panelObj.GetComponent<Image>();
+            Sprite bgSprite = Resources.Load<Sprite>("UI/crestForgeHome_v1");
+            if (bgSprite != null)
+            {
+                bgImage.sprite = bgSprite;
+                bgImage.type = Image.Type.Simple;
+                bgImage.preserveAspect = false;
+                bgImage.color = Color.white;
+            }
+            else
+            {
+                bgImage.color = new Color(0.08f, 0.08f, 0.12f, 1f);
+            }
 
             // Vertical layout for content
             VerticalLayoutGroup vlg = panelObj.AddComponent<VerticalLayoutGroup>();
@@ -85,40 +107,81 @@ namespace Crestforge.UI
             vlg.childControlHeight = false;
             vlg.childForceExpandWidth = false;
 
-            // Title
-            Text title = CreateText("CRESTFORGE", mainPanel, 400);
-            title.fontSize = 72;
-            title.fontStyle = FontStyle.Bold;
-            title.alignment = TextAnchor.MiddleCenter;
-            title.color = new Color(0.9f, 0.8f, 0.5f);
-            title.GetComponent<LayoutElement>().preferredHeight = 120;
+            // Spacer before title (pushes it down)
+            GameObject spacerTop = new GameObject("SpacerTop");
+            spacerTop.transform.SetParent(mainPanel);
+            spacerTop.AddComponent<RectTransform>();
+            spacerTop.AddComponent<LayoutElement>().preferredHeight = 80;
 
-            // Subtitle
-            Text subtitle = CreateText("Auto-Battler", mainPanel, 300);
-            subtitle.fontSize = 28;
-            subtitle.alignment = TextAnchor.MiddleCenter;
-            subtitle.color = new Color(0.7f, 0.7f, 0.8f);
-            subtitle.GetComponent<LayoutElement>().preferredHeight = 50;
+            // Title - Large and stylized with Titan One font
+            TextMeshProUGUI title = CreateText("CrestForge", mainPanel, 900, null);
+            title.fontSize = 140;
+            title.alignment = TextAlignmentOptions.Center;
+            title.GetComponent<LayoutElement>().preferredHeight = 200;
+
+            // Load Titan One font
+            TMP_FontAsset titanFont = Resources.Load<TMP_FontAsset>("TextStyles/TitanOne-Regular SDF");
+            if (titanFont == null)
+            {
+                // Try alternative paths
+                titanFont = Resources.Load<TMP_FontAsset>("Fonts/TitanOne-Regular SDF");
+            }
+            if (titanFont == null)
+            {
+                // Try loading from TextStylePresets
+                var presets = Resources.Load<TextStylePresets>("TextStylePresets");
+                if (presets != null && presets.primaryFont != null)
+                {
+                    titanFont = presets.primaryFont;
+                }
+            }
+            if (titanFont != null)
+            {
+                title.font = titanFont;
+            }
+
+            // Apply gradient color (gold to orange)
+            title.enableVertexGradient = true;
+            title.colorGradient = new VertexGradient(
+                new Color(1f, 0.95f, 0.6f),      // Top left - bright gold
+                new Color(1f, 0.85f, 0.4f),      // Top right - gold
+                new Color(1f, 0.6f, 0.2f),       // Bottom left - orange
+                new Color(0.9f, 0.5f, 0.1f)      // Bottom right - deep orange
+            );
+
+            // Apply outline via material
+            Material titleMat = title.fontMaterial;
+            titleMat.EnableKeyword("OUTLINE_ON");
+            titleMat.SetColor("_OutlineColor", new Color(0.15f, 0.08f, 0f, 1f));
+            titleMat.SetFloat("_OutlineWidth", 0.2f);
+
+            // Shadow using underlay - crisp drop shadow
+            titleMat.EnableKeyword("UNDERLAY_ON");
+            titleMat.SetColor("_UnderlayColor", new Color(0f, 0f, 0f, 0.7f));
+            titleMat.SetFloat("_UnderlayOffsetX", 1f);
+            titleMat.SetFloat("_UnderlayOffsetY", -1f);
+            titleMat.SetFloat("_UnderlayDilate", 0f);
+            titleMat.SetFloat("_UnderlaySoftness", 0f);
 
             // Spacer
             GameObject spacer1 = new GameObject("Spacer");
             spacer1.transform.SetParent(mainPanel);
             spacer1.AddComponent<RectTransform>();
-            spacer1.AddComponent<LayoutElement>().preferredHeight = 100;
+            spacer1.AddComponent<LayoutElement>().preferredHeight = 80;
 
-            // Play button (large, prominent)
-            CreateMenuButton("▶  PLAY", mainPanel, 320, 80, OnPlayClicked, 
-                new Color(0.2f, 0.5f, 0.3f), 32);
+            // Play button (large, prominent with glow effect)
+            CreateStylizedButton("PLAY", mainPanel, 400, 100, OnPlayClicked,
+                new Color(0.15f, 0.55f, 0.25f), new Color(0.2f, 0.7f, 0.35f), 42);
 
             // Spacer
             GameObject spacer2 = new GameObject("Spacer2");
             spacer2.transform.SetParent(mainPanel);
             spacer2.AddComponent<RectTransform>();
-            spacer2.AddComponent<LayoutElement>().preferredHeight = 30;
+            spacer2.AddComponent<LayoutElement>().preferredHeight = 25;
 
             // Settings button
-            CreateMenuButton("⚙  Settings", mainPanel, 280, 60, OnSettingsClicked,
-                new Color(0.3f, 0.3f, 0.4f), 24);
+            CreateStylizedButton("SETTINGS", mainPanel, 340, 80, OnSettingsClicked,
+                new Color(0.25f, 0.28f, 0.35f), new Color(0.35f, 0.4f, 0.5f), 32);
 
             // Spacer
             GameObject spacer3 = new GameObject("Spacer3");
@@ -127,8 +190,8 @@ namespace Crestforge.UI
             spacer3.AddComponent<LayoutElement>().preferredHeight = 20;
 
             // Quit button
-            CreateMenuButton("✕  Quit", mainPanel, 280, 60, OnQuitClicked,
-                new Color(0.5f, 0.25f, 0.25f), 24);
+            CreateStylizedButton("QUIT", mainPanel, 340, 80, OnQuitClicked,
+                new Color(0.5f, 0.2f, 0.2f), new Color(0.65f, 0.3f, 0.3f), 32);
 
             // Flexible spacer
             GameObject spacerFlex = new GameObject("SpacerFlex");
@@ -137,9 +200,9 @@ namespace Crestforge.UI
             spacerFlex.AddComponent<LayoutElement>().flexibleHeight = 1;
             
             // Version text
-            Text version = CreateText("v0.1 Alpha", mainPanel, 200);
+            TextMeshProUGUI version = CreateText("v0.1 Alpha", mainPanel, 200, "body");
             version.fontSize = 16;
-            version.alignment = TextAnchor.MiddleCenter;
+            version.alignment = TextAlignmentOptions.Center;
             version.color = new Color(0.4f, 0.4f, 0.5f);
             version.GetComponent<LayoutElement>().preferredHeight = 30;
         }
@@ -164,11 +227,8 @@ namespace Crestforge.UI
             vlg.childForceExpandWidth = false;
 
             // Header
-            Text header = CreateText("SELECT GAME MODE", gameModePanel, 400);
-            header.fontSize = 36;
-            header.fontStyle = FontStyle.Bold;
-            header.alignment = TextAnchor.MiddleCenter;
-            header.color = new Color(0.9f, 0.85f, 0.7f);
+            TextMeshProUGUI header = CreateText("SELECT GAME MODE", gameModePanel, 400, "header");
+            header.alignment = TextAlignmentOptions.Center;
             header.GetComponent<LayoutElement>().preferredHeight = 60;
 
             // Spacer
@@ -177,31 +237,22 @@ namespace Crestforge.UI
             spacer1.AddComponent<RectTransform>();
             spacer1.AddComponent<LayoutElement>().preferredHeight = 40;
 
-            // PvE Wave Mode (available)
-            CreateGameModeCard(
-                "PvE WAVE MODE",
-                "Battle against increasingly difficult waves of enemies. " +
-                "Build your team, collect items, and see how far you can go!",
-                true,
-                OnPvEWaveClicked
-            );
-
-            // PvP Mode (now available)
-            CreateGameModeCard(
-                "PvP BATTLE",
-                "Battle against 3 AI opponents! " +
-                "Eliminate them all to claim victory!",
-                true,
-                OnPvPClicked
-            );
-
             // Multiplayer Mode
             CreateGameModeCard(
                 "MULTIPLAYER",
-                "Battle against a real player online! " +
+                "Battle against real players online! " +
                 "Create or join a room to fight head-to-head!",
                 true,
                 OnMultiplayerClicked
+            );
+
+            // Combat Test Mode
+            CreateGameModeCard(
+                "COMBAT TEST",
+                "Configure and test combat scenarios. " +
+                "Set up units, items, and crests for both teams and watch them fight!",
+                true,
+                OnCombatTestClicked
             );
 
             // Flexible spacer
@@ -211,8 +262,8 @@ namespace Crestforge.UI
             spacer2.AddComponent<LayoutElement>().flexibleHeight = 1;
 
             // Back button
-            CreateMenuButton("← Back", gameModePanel, 200, 50, OnBackToMainClicked,
-                new Color(0.3f, 0.3f, 0.4f), 22);
+            CreateStylizedButton("BACK", gameModePanel, 260, 65, OnBackToMainClicked,
+                new Color(0.25f, 0.28f, 0.35f), new Color(0.4f, 0.45f, 0.55f), 28);
 
             gameModePanel.gameObject.SetActive(false);
         }
@@ -253,22 +304,21 @@ namespace Crestforge.UI
             titleHLG.childControlHeight = true;
             titleRow.AddComponent<LayoutElement>().preferredHeight = 35;
 
-            Text titleText = CreateText(title, titleRowRT, 300);
+            TextMeshProUGUI titleText = CreateText(title, titleRowRT, 300, "cardName");
             titleText.fontSize = 24;
-            titleText.fontStyle = FontStyle.Bold;
             titleText.color = available ? Color.white : new Color(0.5f, 0.5f, 0.5f);
 
             if (!available)
             {
-                Text comingSoon = CreateText("COMING SOON", titleRowRT, 150);
+                TextMeshProUGUI comingSoon = CreateText("COMING SOON", titleRowRT, 150, "body");
                 comingSoon.fontSize = 14;
-                comingSoon.fontStyle = FontStyle.Italic;
-                comingSoon.alignment = TextAnchor.MiddleRight;
+                comingSoon.fontStyle = FontStyles.Italic;
+                comingSoon.alignment = TextAlignmentOptions.MidlineRight;
                 comingSoon.color = new Color(0.6f, 0.5f, 0.3f);
             }
 
             // Description
-            Text descText = CreateText(description, cardObj.transform, 0);
+            TextMeshProUGUI descText = CreateText(description, cardObj.transform, 0, "body");
             descText.fontSize = 16;
             descText.color = available ? new Color(0.75f, 0.75f, 0.8f) : new Color(0.4f, 0.4f, 0.45f);
             descText.GetComponent<LayoutElement>().preferredHeight = 60;
@@ -313,12 +363,9 @@ namespace Crestforge.UI
             vlg.childForceExpandWidth = false;
 
             // Header
-            Text header = CreateText("SETTINGS", settingsPanel, 300);
-            header.fontSize = 36;
-            header.fontStyle = FontStyle.Bold;
-            header.alignment = TextAnchor.MiddleCenter;
-            header.color = new Color(0.9f, 0.85f, 0.7f);
-            header.GetComponent<LayoutElement>().preferredHeight = 60;
+            TextMeshProUGUI settingsHeader = CreateText("SETTINGS", settingsPanel, 300, "header");
+            settingsHeader.alignment = TextAlignmentOptions.Center;
+            settingsHeader.GetComponent<LayoutElement>().preferredHeight = 60;
 
             // Spacer
             GameObject spacer1 = new GameObject("Spacer");
@@ -345,8 +392,8 @@ namespace Crestforge.UI
             spacer2.AddComponent<LayoutElement>().flexibleHeight = 1;
 
             // Back button
-            CreateMenuButton("← Back", settingsPanel, 200, 50, OnBackToMainClicked,
-                new Color(0.3f, 0.3f, 0.4f), 22);
+            CreateStylizedButton("BACK", settingsPanel, 260, 65, OnBackToMainClicked,
+                new Color(0.25f, 0.28f, 0.35f), new Color(0.4f, 0.45f, 0.55f), 28);
 
             settingsPanel.gameObject.SetActive(false);
         }
@@ -368,7 +415,7 @@ namespace Crestforge.UI
             hlg.childControlWidth = false;
             hlg.childControlHeight = true;
 
-            Text labelText = CreateText(label, rowRT, 250);
+            TextMeshProUGUI labelText = CreateText(label, rowRT, 250, "body");
             labelText.fontSize = 20;
             labelText.color = Color.white;
 
@@ -378,15 +425,14 @@ namespace Crestforge.UI
             toggleRT.sizeDelta = new Vector2(80, 36);
             Image toggleBg = toggleObj.GetComponent<Image>();
             toggleBg.color = defaultValue ? new Color(0.2f, 0.5f, 0.3f) : new Color(0.3f, 0.3f, 0.35f);
-            
+
             LayoutElement toggleLE = toggleObj.AddComponent<LayoutElement>();
             toggleLE.preferredWidth = 80;
             toggleLE.preferredHeight = 36;
 
-            Text toggleText = CreateText(defaultValue ? "ON" : "OFF", toggleObj.transform, 0);
+            TextMeshProUGUI toggleText = CreateText(defaultValue ? "ON" : "OFF", toggleObj.transform, 0, "buttonSmall");
             toggleText.fontSize = 16;
-            toggleText.fontStyle = FontStyle.Bold;
-            toggleText.alignment = TextAnchor.MiddleCenter;
+            toggleText.alignment = TextAlignmentOptions.Center;
             RectTransform toggleTextRT = toggleText.GetComponent<RectTransform>();
             toggleTextRT.anchorMin = Vector2.zero;
             toggleTextRT.anchorMax = Vector2.one;
@@ -422,7 +468,7 @@ namespace Crestforge.UI
             hlg.childControlWidth = false;
             hlg.childControlHeight = true;
 
-            Text labelText = CreateText(label, rowRT, 160);
+            TextMeshProUGUI labelText = CreateText(label, rowRT, 160, "body");
             labelText.fontSize = 20;
             labelText.color = Color.white;
 
@@ -438,14 +484,14 @@ namespace Crestforge.UI
                 Image optBg = optObj.GetComponent<Image>();
                 optBg.color = (i == defaultIndex) ? new Color(0.3f, 0.5f, 0.6f) : new Color(0.25f, 0.25f, 0.3f);
                 optionBgs.Add(optBg);
-                
+
                 LayoutElement optLE = optObj.AddComponent<LayoutElement>();
                 optLE.preferredWidth = 55;
                 optLE.preferredHeight = 36;
 
-                Text optText = CreateText(options[i], optObj.transform, 0);
+                TextMeshProUGUI optText = CreateText(options[i], optObj.transform, 0, "buttonSmall");
                 optText.fontSize = 16;
-                optText.alignment = TextAnchor.MiddleCenter;
+                optText.alignment = TextAlignmentOptions.Center;
                 RectTransform optTextRT = optText.GetComponent<RectTransform>();
                 optTextRT.anchorMin = Vector2.zero;
                 optTextRT.anchorMax = Vector2.one;
@@ -459,7 +505,7 @@ namespace Crestforge.UI
                     currentIndex = index;
                     for (int j = 0; j < optionBgs.Count; j++)
                     {
-                        optionBgs[j].color = (j == currentIndex) ? 
+                        optionBgs[j].color = (j == currentIndex) ?
                             new Color(0.3f, 0.5f, 0.6f) : new Color(0.25f, 0.25f, 0.3f);
                     }
                 });
@@ -492,52 +538,6 @@ namespace Crestforge.UI
             ShowMainMenu();
         }
 
-        private void OnPvEWaveClicked()
-        {
-            // Hide menu
-            Hide();
-
-            // Show game UI first
-            GameUI gameUI = GameUI.Instance;
-            if (gameUI == null)
-            {
-                gameUI = Object.FindAnyObjectByType<GameUI>(FindObjectsInactive.Include);
-            }
-            if (gameUI != null)
-            {
-                gameUI.gameObject.SetActive(true);
-            }
-
-            // Start the game in PvE mode
-            if (RoundManager.Instance != null)
-            {
-                RoundManager.Instance.StartGame(GameMode.PvEWave);
-            }
-        }
-
-        private void OnPvPClicked()
-        {
-            // Hide menu
-            Hide();
-
-            // Show game UI first
-            GameUI gameUI = GameUI.Instance;
-            if (gameUI == null)
-            {
-                gameUI = Object.FindAnyObjectByType<GameUI>(FindObjectsInactive.Include);
-            }
-            if (gameUI != null)
-            {
-                gameUI.gameObject.SetActive(true);
-            }
-
-            // Start the game in PvP mode
-            if (RoundManager.Instance != null)
-            {
-                RoundManager.Instance.StartGame(GameMode.PvP);
-            }
-        }
-
         private void OnMultiplayerClicked()
         {
             // Hide menu
@@ -552,6 +552,22 @@ namespace Crestforge.UI
                 lobbyUI = lobbyObj.AddComponent<LobbyUI>();
             }
             lobbyUI.Show();
+        }
+
+        private void OnCombatTestClicked()
+        {
+            // Hide menu
+            Hide();
+
+            // Show combat test UI
+            CombatTestUI combatTestUI = CombatTestUI.Instance;
+            if (combatTestUI == null)
+            {
+                // Create CombatTestUI if it doesn't exist
+                GameObject testObj = new GameObject("CombatTestUI");
+                combatTestUI = testObj.AddComponent<CombatTestUI>();
+            }
+            combatTestUI.Show();
         }
 
         // ========== Panel Management ==========
@@ -600,7 +616,7 @@ namespace Crestforge.UI
             return obj;
         }
 
-        private Text CreateText(string content, Transform parent, float width)
+        private TextMeshProUGUI CreateText(string content, Transform parent, float width, string styleName = null)
         {
             GameObject obj = new GameObject("Text");
             obj.transform.SetParent(parent, false);
@@ -610,22 +626,28 @@ namespace Crestforge.UI
             {
                 le.preferredWidth = width;
             }
-            Text text = obj.AddComponent<Text>();
+            TextMeshProUGUI text = obj.AddComponent<TextMeshProUGUI>();
             text.text = content;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.fontSize = 18;
             text.color = Color.white;
-            text.alignment = TextAnchor.MiddleLeft;
+            text.alignment = TextAlignmentOptions.MidlineLeft;
+
+            // Apply style if specified
+            if (!string.IsNullOrEmpty(styleName))
+            {
+                TextStyleManager.ApplyStyle(text, styleName);
+            }
+
             return text;
         }
 
-        private Button CreateMenuButton(string label, Transform parent, float width, float height, 
+        private Button CreateMenuButton(string label, Transform parent, float width, float height,
             System.Action onClick, Color bgColor, int fontSize)
         {
             GameObject btnObj = CreatePanel("Button", parent);
             RectTransform btnRT = btnObj.GetComponent<RectTransform>();
             btnRT.sizeDelta = new Vector2(width, height);
-            
+
             Image btnBg = btnObj.GetComponent<Image>();
             btnBg.color = bgColor;
             btnBg.raycastTarget = true;
@@ -634,11 +656,11 @@ namespace Crestforge.UI
             le.preferredWidth = width;
             le.preferredHeight = height;
 
-            // Button text
-            Text btnText = CreateText(label, btnObj.transform, 0);
+            // Button text with TMP
+            string styleName = fontSize >= 28 ? "button" : "buttonSmall";
+            TextMeshProUGUI btnText = CreateText(label, btnObj.transform, 0, styleName);
             btnText.fontSize = fontSize;
-            btnText.fontStyle = FontStyle.Bold;
-            btnText.alignment = TextAnchor.MiddleCenter;
+            btnText.alignment = TextAlignmentOptions.Center;
             btnText.raycastTarget = false;
             RectTransform textRT = btnText.GetComponent<RectTransform>();
             textRT.anchorMin = Vector2.zero;
@@ -661,6 +683,106 @@ namespace Crestforge.UI
             colors.normalColor = Color.white;
             colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f);
             colors.pressedColor = new Color(0.85f, 0.85f, 0.85f);
+            btn.colors = colors;
+
+            return btn;
+        }
+
+        private Button CreateStylizedButton(string label, Transform parent, float width, float height,
+            System.Action onClick, Color bgColor, Color highlightColor, int fontSize)
+        {
+            // Create button container with rounded appearance
+            GameObject btnObj = CreatePanel("StylizedButton", parent);
+            RectTransform btnRT = btnObj.GetComponent<RectTransform>();
+            btnRT.sizeDelta = new Vector2(width, height);
+
+            Image btnBg = btnObj.GetComponent<Image>();
+            btnBg.color = bgColor;
+            btnBg.raycastTarget = true;
+
+            LayoutElement le = btnObj.AddComponent<LayoutElement>();
+            le.preferredWidth = width;
+            le.preferredHeight = height;
+
+            // Add outline/border effect using a child image
+            GameObject borderObj = new GameObject("Border");
+            borderObj.transform.SetParent(btnObj.transform, false);
+            RectTransform borderRT = borderObj.AddComponent<RectTransform>();
+            borderRT.anchorMin = Vector2.zero;
+            borderRT.anchorMax = Vector2.one;
+            borderRT.offsetMin = new Vector2(-3, -3);
+            borderRT.offsetMax = new Vector2(3, 3);
+            borderRT.SetAsFirstSibling();
+            Image borderImg = borderObj.AddComponent<Image>();
+            borderImg.color = new Color(highlightColor.r, highlightColor.g, highlightColor.b, 0.6f);
+            borderImg.raycastTarget = false;
+
+            // Inner highlight gradient
+            GameObject innerGlow = new GameObject("InnerGlow");
+            innerGlow.transform.SetParent(btnObj.transform, false);
+            RectTransform glowRT = innerGlow.AddComponent<RectTransform>();
+            glowRT.anchorMin = new Vector2(0, 0.5f);
+            glowRT.anchorMax = new Vector2(1, 1);
+            glowRT.offsetMin = new Vector2(4, 0);
+            glowRT.offsetMax = new Vector2(-4, -4);
+            Image glowImg = innerGlow.AddComponent<Image>();
+            glowImg.color = new Color(1f, 1f, 1f, 0.15f);
+            glowImg.raycastTarget = false;
+
+            // Button text with TMP styling
+            TextMeshProUGUI btnText = CreateText(label, btnObj.transform, 0, null);
+            btnText.fontSize = fontSize;
+            btnText.alignment = TextAlignmentOptions.Center;
+            btnText.color = Color.white;
+
+            // Load Titan One font for buttons
+            TMP_FontAsset titanFont = Resources.Load<TMP_FontAsset>("TextStyles/TitanOne-Regular SDF");
+            if (titanFont == null)
+            {
+                titanFont = Resources.Load<TMP_FontAsset>("Fonts/TitanOne-Regular SDF");
+            }
+            if (titanFont == null)
+            {
+                var presets = Resources.Load<TextStylePresets>("TextStylePresets");
+                if (presets != null && presets.primaryFont != null)
+                {
+                    titanFont = presets.primaryFont;
+                }
+            }
+            if (titanFont != null)
+            {
+                btnText.font = titanFont;
+            }
+            btnText.raycastTarget = false;
+
+            // Add outline to text
+            Material textMat = btnText.fontMaterial;
+            textMat.EnableKeyword("OUTLINE_ON");
+            textMat.SetColor("_OutlineColor", new Color(0f, 0f, 0f, 0.5f));
+            textMat.SetFloat("_OutlineWidth", 0.1f);
+
+            RectTransform textRT = btnText.GetComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.offsetMin = Vector2.zero;
+            textRT.offsetMax = Vector2.zero;
+
+            Button btn = btnObj.AddComponent<Button>();
+            btn.targetGraphic = btnBg;
+            if (onClick != null)
+            {
+                btn.onClick.AddListener(() => {
+                    Crestforge.Visuals.AudioManager.Instance?.PlayUIClick();
+                    onClick();
+                });
+            }
+
+            // Enhanced hover colors
+            ColorBlock colors = btn.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.2f, 1.2f, 1.2f);
+            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f);
+            colors.selectedColor = new Color(1.1f, 1.1f, 1.1f);
             btn.colors = colors;
 
             return btn;

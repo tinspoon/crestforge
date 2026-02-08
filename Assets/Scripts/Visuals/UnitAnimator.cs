@@ -23,6 +23,9 @@ namespace Crestforge.Visuals
         [Tooltip("Name of the attack animation clip")]
         public string attackClip = "CharacterArmature|Punch";
 
+        [Tooltip("Name of the ability animation clip (falls back to attack if not found)")]
+        public string abilityClip = "";
+
         [Tooltip("Name of the death animation clip (optional)")]
         public string deathClip = "CharacterArmature|Death";
 
@@ -51,6 +54,7 @@ namespace Crestforge.Visuals
         private Coroutine returnToIdleCoroutine = null;
         private bool isPlayingHit = false;
         public bool IsPlayingHit => isPlayingHit;
+        private bool waitingForAttackEnd = false;
 
         private void Awake()
         {
@@ -93,6 +97,21 @@ namespace Crestforge.Visuals
             }
         }
 
+        private void Update()
+        {
+            // Frame-accurate attack completion: transition to idle the moment the clip finishes
+            if (waitingForAttackEnd && !useLegacy && animator != null)
+            {
+                var stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+                if (stateInfo.normalizedTime >= 0.95f)
+                {
+                    waitingForAttackEnd = false;
+                    animator.speed = 1f;
+                    ResetToIdle();
+                }
+            }
+        }
+
         /// <summary>
         /// Auto-detect animation clip names from the Animator controller
         /// </summary>
@@ -109,6 +128,7 @@ namespace Crestforge.Visuals
             string foundIdle = null;
             string foundWalk = null;
             string foundAttack = null;
+            string foundAbility = null;
             string foundHit = null;
             string foundDeath = null;
             string foundVictory = null;
@@ -143,6 +163,12 @@ namespace Crestforge.Visuals
                     foundAttack = clip.name;
                 }
 
+                // Find ability (Attack02 or spell/ability animations)
+                if (name.Contains("attack02") || name.Contains("attack_02") || name.Contains("ability") || name.Contains("spell") || name.Contains("cast"))
+                {
+                    foundAbility = clip.name;
+                }
+
                 // Find hit
                 if (name.Contains("gethit") || name.Contains("get_hit") || name.Contains("hit") || name.Contains("hurt"))
                 {
@@ -166,6 +192,7 @@ namespace Crestforge.Visuals
             if (!string.IsNullOrEmpty(foundIdle)) idleClip = foundIdle;
             if (!string.IsNullOrEmpty(foundWalk)) walkClip = foundWalk;
             if (!string.IsNullOrEmpty(foundAttack)) attackClip = foundAttack;
+            if (!string.IsNullOrEmpty(foundAbility)) abilityClip = foundAbility;
             if (!string.IsNullOrEmpty(foundHit)) hitClip = foundHit;
             if (!string.IsNullOrEmpty(foundDeath)) deathClip = foundDeath;
             if (!string.IsNullOrEmpty(foundVictory)) victoryClip = foundVictory;
@@ -184,6 +211,7 @@ namespace Crestforge.Visuals
             string foundIdle = null;
             string foundWalk = null;
             string foundAttack = null;
+            string foundAbility = null;
             string foundHit = null;
             string foundDeath = null;
             string foundVictory = null;
@@ -205,6 +233,10 @@ namespace Crestforge.Visuals
                 else if (foundAttack == null && name.Contains("attack"))
                     foundAttack = state.name;
 
+                // Look for Attack02 or secondary attack for abilities
+                if (name.Contains("attack02") || name.Contains("attack_02") || name.Contains("ability") || name.Contains("spell") || name.Contains("cast"))
+                    foundAbility = state.name;
+
                 if (name.Contains("gethit") || name.Contains("hit") || name.Contains("hurt"))
                     foundHit = state.name;
 
@@ -218,6 +250,7 @@ namespace Crestforge.Visuals
             if (!string.IsNullOrEmpty(foundIdle)) idleClip = foundIdle;
             if (!string.IsNullOrEmpty(foundWalk)) walkClip = foundWalk;
             if (!string.IsNullOrEmpty(foundAttack)) attackClip = foundAttack;
+            if (!string.IsNullOrEmpty(foundAbility)) abilityClip = foundAbility;
             if (!string.IsNullOrEmpty(foundHit)) hitClip = foundHit;
             if (!string.IsNullOrEmpty(foundDeath)) deathClip = foundDeath;
             if (!string.IsNullOrEmpty(foundVictory)) victoryClip = foundVictory;
@@ -305,6 +338,7 @@ namespace Crestforge.Visuals
             isPlayingHit = false;
 
             // Cancel any pending return-to-idle
+            waitingForAttackEnd = false;
             if (returnToIdleCoroutine != null)
             {
                 StopCoroutine(returnToIdleCoroutine);
@@ -325,32 +359,70 @@ namespace Crestforge.Visuals
                 speed = Mathf.Clamp(speed, 0.5f, 6f); // Clamp to reasonable range
             }
 
-            // Calculate actual duration at this speed
-            float actualDuration = clipDuration / speed;
-
             if (useLegacy)
             {
+                float actualDuration = clipDuration / speed;
                 PlayClipWithSpeed(attackClip, speed);
-                // Return to idle after animation completes
                 returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterAttack(actualDuration));
             }
             else if (animator != null)
             {
-                if (HasParameter(Attack))
-                {
-                    animator.speed = speed;
-                    // Reset trigger first to prevent queuing multiple attacks
-                    animator.ResetTrigger(Attack);
-                    animator.SetTrigger(Attack);
-                    // Return to idle after animation completes
-                    returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterAttack(actualDuration));
-                }
-                else
-                {
-                    PlayClipWithSpeed(attackClip, speed);
-                    // Return to idle after animation completes
-                    returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterAttack(actualDuration));
-                }
+                PlayClipWithSpeed(attackClip, speed);
+                // Use Update() to watch normalizedTime for frame-accurate idle transition
+                waitingForAttackEnd = true;
+            }
+        }
+
+        /// <summary>
+        /// Play ability animation (uses abilityClip if available, falls back to attackClip)
+        /// Similar to PlayAttack but uses a different animation.
+        /// </summary>
+        public void PlayAbility(float unitAttackSpeed = 0f)
+        {
+            // Calculate duration from attack speed and delegate
+            float duration = unitAttackSpeed > 0 ? 1f / unitAttackSpeed : 1f;
+            PlayAbilityWithDuration(duration);
+        }
+
+        /// <summary>
+        /// Play ability animation with a fixed duration (does not scale with attack speed)
+        /// </summary>
+        public void PlayAbilityWithDuration(float targetDuration)
+        {
+            if (!isInitialized) return;
+
+            // Ability takes priority - interrupt any hit animation
+            isPlayingHit = false;
+
+            // Cancel any pending return-to-idle
+            waitingForAttackEnd = false;
+            if (returnToIdleCoroutine != null)
+            {
+                StopCoroutine(returnToIdleCoroutine);
+                returnToIdleCoroutine = null;
+            }
+
+            // Use ability clip if available, otherwise fall back to attack
+            string clipToUse = !string.IsNullOrEmpty(abilityClip) ? abilityClip : attackClip;
+
+            // Calculate animation speed to match target duration
+            float clipDuration = GetClipDuration(clipToUse);
+            if (clipDuration <= 0) clipDuration = 0.5f;
+
+            // Scale animation speed so clip plays in targetDuration
+            float speed = clipDuration / targetDuration;
+            speed = Mathf.Clamp(speed, 0.5f, 6f);
+
+            if (useLegacy)
+            {
+                float actualDuration = clipDuration / speed;
+                PlayClipWithSpeed(clipToUse, speed);
+                returnToIdleCoroutine = StartCoroutine(ReturnToIdleAfterAttack(actualDuration));
+            }
+            else if (animator != null)
+            {
+                PlayClipWithSpeed(clipToUse, speed);
+                waitingForAttackEnd = true;
             }
         }
 
@@ -360,13 +432,7 @@ namespace Crestforge.Visuals
         private System.Collections.IEnumerator ReturnToIdleAfterAttack(float delay)
         {
             yield return new WaitForSeconds(delay);
-            // Reset speed to normal
-            if (animator != null)
-            {
-                animator.speed = 1f;
-            }
-            // Play idle
-            PlayClip(idleClip);
+            ResetToIdle();
             returnToIdleCoroutine = null;
         }
 
@@ -764,6 +830,7 @@ namespace Crestforge.Visuals
             if (!isInitialized) return;
 
             isPlayingHit = false;
+            waitingForAttackEnd = false;
             ResetSpeed();
 
             // Force play idle animation immediately

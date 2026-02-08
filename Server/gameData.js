@@ -4,35 +4,36 @@
 
 const GameConstants = {
     Grid: {
-        WIDTH: 7,
+        WIDTH: 5,
         HEIGHT: 4
     },
     Player: {
         BENCH_SIZE: 7,
         STARTING_LEVEL: 1,
-        MAX_LEVEL: 9
+        MAX_LEVEL: 6
     },
     Economy: {
-        STARTING_GOLD: 10,
-        BASE_GOLD_PER_TURN: 5,
-        MAX_INTEREST: 5,
+        STARTING_GOLD: 4,
+        BASE_GOLD_PER_TURN: 4,
+        MAX_INTEREST: 3,
         REROLL_COST: 2,
         XP_COST: 4,
-        XP_PER_PURCHASE: 4,
-        SHOP_SIZE: 5
+        XP_PER_PURCHASE: 2,
+        SHOP_SIZE: 4
     },
     Units: {
         POOL_SIZE: 20,
         MAX_STAR_LEVEL: 3
     },
     Leveling: {
+        FREE_XP_PER_ROUND: 2,
         // Units allowed per level
         UNITS_PER_LEVEL: {
-            1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9
+            1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6
         },
         // XP required to reach each level
         XP_REQUIRED: {
-            1: 0, 2: 2, 3: 6, 4: 10, 5: 20, 6: 36, 7: 56, 8: 80, 9: 100
+            1: 0, 2: 2, 3: 6, 4: 12, 5: 24, 6: 36
         }
     },
     // Shop odds by player level (% for 1-cost, 2-cost, 3-cost, 4-cost, 5-cost)
@@ -41,11 +42,8 @@ const GameConstants = {
         2: [100, 0, 0, 0, 0],
         3: [75, 25, 0, 0, 0],
         4: [55, 30, 15, 0, 0],
-        5: [45, 33, 20, 2, 0],
-        6: [30, 40, 25, 5, 0],
-        7: [20, 35, 30, 12, 3],
-        8: [15, 25, 30, 22, 8],
-        9: [10, 15, 25, 30, 20]
+        5: [30, 40, 25, 5, 0],
+        6: [15, 25, 30, 20, 10]
     },
     Rounds: {
         MAX_ROUNDS: 14,

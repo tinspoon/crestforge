@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: a2551dc00b2bdc041b248f1ce80da76c
+timeCreated: 1580699495
+licenseType: Store
+ShaderImporter:
+  defaultTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Warband PBR/Shader/PBRMaskTint.shader
+  uploadId: 534720

@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 8c8966dd68b8988449f56734497f2ddc
+timeCreated: 1560139114
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 100100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 236235
+  packageName: RTS Mini Legions Fantasy PBR
+  packageVersion: 1.0
+  assetPath: Assets/RTS Mini Legion Fantasy PBR/Mini Legion Sentinel PBR/Prefabs/Druid
+    StandardPBR.prefab
+  uploadId: 534720

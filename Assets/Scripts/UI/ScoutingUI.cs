@@ -43,6 +43,23 @@ namespace Crestforge.UI
         private string viewedOpponentId;
         private Dictionary<string, HexBoard3D> serverOpponentBoards = new Dictionary<string, HexBoard3D>();
 
+        // Track selected player button for highlighting
+        private string selectedPlayerId;
+        private Dictionary<string, Image> playerButtonBgs = new Dictionary<string, Image>();
+        private static readonly Color SELECTED_BUTTON_COLOR = new Color(0.3f, 0.6f, 0.8f);
+        private static readonly Color SELF_BUTTON_COLOR = new Color(0.3f, 0.5f, 0.3f);
+        private static readonly Color OPPONENT_BUTTON_COLOR = new Color(0.35f, 0.35f, 0.45f);
+
+        /// <summary>Offset from top of screen to bottom edge of scout panel, computed from actual rect</summary>
+        public float PanelBottomOffset
+        {
+            get
+            {
+                if (opponentButtonsPanel == null || !opponentButtonsPanel.gameObject.activeInHierarchy) return 0f;
+                return Mathf.Abs(opponentButtonsPanel.anchoredPosition.y) + opponentButtonsPanel.sizeDelta.y;
+            }
+        }
+
         // Refresh tracking for scouting
         private float scoutRefreshTimer = 0f;
         private const float SCOUT_REFRESH_INTERVAL = 0.5f;
@@ -53,6 +70,7 @@ namespace Crestforge.UI
         // Combat visualization tracking (now using unified system)
         private CombatPlayback scoutCombatPlayback;
         private bool isViewingCombat = false;
+        private bool wasShowingLastFrame = false;
 
         /// <summary>
         /// Returns true if the scout combat is in victory pose
@@ -78,6 +96,18 @@ namespace Crestforge.UI
         private void Update()
         {
             UpdateVisibility();
+
+            // Track visibility changes for top bar offset
+            bool isShowing = scoutingCanvas != null && scoutingCanvas.gameObject.activeSelf;
+            if (wasShowingLastFrame && !isShowing && GameUI.Instance != null)
+            {
+                GameUI.Instance.SetTopBarOffset(0f);
+            }
+            else if (isShowing && GameUI.Instance != null)
+            {
+                GameUI.Instance.SetTopBarOffset(PanelBottomOffset);
+            }
+            wasShowingLastFrame = isShowing;
 
             // Periodically refresh scouting visuals when viewing an opponent
             if (isViewingOpponent && IsServerMultiplayer && !string.IsNullOrEmpty(viewedOpponentId))
@@ -171,39 +201,24 @@ namespace Crestforge.UI
             panelObj.transform.SetParent(scoutingCanvas.transform, false);
             opponentButtonsPanel = panelObj.AddComponent<RectTransform>();
 
-            opponentButtonsPanel.anchorMin = new Vector2(1, 0.5f);
-            opponentButtonsPanel.anchorMax = new Vector2(1, 0.5f);
-            opponentButtonsPanel.pivot = new Vector2(1, 0.5f);
-            opponentButtonsPanel.anchoredPosition = new Vector2(-10, 0);
+            // Anchor to top-center, spanning full width
+            opponentButtonsPanel.anchorMin = new Vector2(0, 1);
+            opponentButtonsPanel.anchorMax = new Vector2(1, 1);
+            opponentButtonsPanel.pivot = new Vector2(0.5f, 1);
+            opponentButtonsPanel.anchoredPosition = new Vector2(0, -5);
+            opponentButtonsPanel.sizeDelta = new Vector2(-20, 240); // 10px margin each side, 4x tall for mobile
 
             Image bg = panelObj.AddComponent<Image>();
             bg.color = new Color(0.1f, 0.1f, 0.15f, 0.85f);
 
-            VerticalLayoutGroup vlg = panelObj.AddComponent<VerticalLayoutGroup>();
-            vlg.spacing = 8;
-            vlg.padding = new RectOffset(10, 10, 10, 10);
-            vlg.childAlignment = TextAnchor.MiddleCenter;
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = false;
-            vlg.childForceExpandWidth = true;
-            vlg.childForceExpandHeight = false;
-
-            ContentSizeFitter csf = panelObj.AddComponent<ContentSizeFitter>();
-            csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            GameObject headerObj = new GameObject("Header");
-            headerObj.transform.SetParent(opponentButtonsPanel, false);
-            Text headerText = headerObj.AddComponent<Text>();
-            headerText.text = "SCOUT";
-            headerText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            headerText.fontSize = 16;
-            headerText.fontStyle = FontStyle.Bold;
-            headerText.alignment = TextAnchor.MiddleCenter;
-            headerText.color = new Color(0.9f, 0.85f, 0.7f);
-            LayoutElement headerLE = headerObj.AddComponent<LayoutElement>();
-            headerLE.preferredWidth = 100;
-            headerLE.preferredHeight = 25;
+            HorizontalLayoutGroup hlg = panelObj.AddComponent<HorizontalLayoutGroup>();
+            hlg.spacing = 8;
+            hlg.padding = new RectOffset(10, 10, 10, 10);
+            hlg.childAlignment = TextAnchor.MiddleCenter;
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = true;
+            hlg.childForceExpandHeight = true;
         }
 
         private void CreateBackButton()
@@ -212,11 +227,11 @@ namespace Crestforge.UI
             panelObj.transform.SetParent(scoutingCanvas.transform, false);
             backButtonPanel = panelObj.AddComponent<RectTransform>();
 
-            backButtonPanel.anchorMin = new Vector2(0.5f, 1);
-            backButtonPanel.anchorMax = new Vector2(0.5f, 1);
-            backButtonPanel.pivot = new Vector2(0.5f, 1);
-            backButtonPanel.anchoredPosition = new Vector2(0, -60);
-            backButtonPanel.sizeDelta = new Vector2(250, 80);
+            backButtonPanel.anchorMin = new Vector2(0.5f, 0);
+            backButtonPanel.anchorMax = new Vector2(0.5f, 0);
+            backButtonPanel.pivot = new Vector2(0.5f, 0);
+            backButtonPanel.anchoredPosition = new Vector2(0, 220);
+            backButtonPanel.sizeDelta = new Vector2(250, 60);
 
             Image bg = panelObj.AddComponent<Image>();
             bg.color = new Color(0.15f, 0.15f, 0.2f, 0.95f);
@@ -237,7 +252,7 @@ namespace Crestforge.UI
             viewingLabel = labelObj.AddComponent<Text>();
             viewingLabel.text = "Viewing: Opponent";
             viewingLabel.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            viewingLabel.fontSize = 14;
+            viewingLabel.fontSize = 22;
             viewingLabel.alignment = TextAnchor.MiddleCenter;
             viewingLabel.color = new Color(0.8f, 0.8f, 0.9f);
             LayoutElement labelLE = labelObj.AddComponent<LayoutElement>();
@@ -270,7 +285,7 @@ namespace Crestforge.UI
             Text btnText = textObj.AddComponent<Text>();
             btnText.text = "← BACK TO MY BOARD";
             btnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            btnText.fontSize = 14;
+            btnText.fontSize = 28;
             btnText.fontStyle = FontStyle.Bold;
             btnText.alignment = TextAnchor.MiddleCenter;
             btnText.color = Color.white;
@@ -287,6 +302,7 @@ namespace Crestforge.UI
                 if (btn != null) Destroy(btn.gameObject);
             }
             opponentButtons.Clear();
+            playerButtonBgs.Clear();
 
             if (IsServerMultiplayer)
             {
@@ -331,6 +347,10 @@ namespace Crestforge.UI
         {
             if (serverState == null) return;
 
+            // Create self button first
+            CreateSelfButton();
+
+            // Then create opponent buttons
             foreach (var opponent in serverState.otherPlayers)
             {
                 if (opponent == null || opponent.isEliminated) continue;
@@ -344,6 +364,57 @@ namespace Crestforge.UI
 
                 CreateServerOpponentButton(opponent, board);
             }
+
+            // Default: select self if not viewing anyone
+            if (!isViewingOpponent)
+            {
+                selectedPlayerId = serverState.localPlayerId;
+            }
+            UpdateButtonHighlights();
+        }
+
+        private void CreateSelfButton()
+        {
+            string playerName = serverState.localPlayerName ?? "You";
+            string playerId = serverState.localPlayerId;
+
+            GameObject btnObj = new GameObject($"Btn_Self");
+            btnObj.transform.SetParent(opponentButtonsPanel, false);
+
+            Image btnBg = btnObj.AddComponent<Image>();
+            btnBg.color = SELF_BUTTON_COLOR;
+
+            Button btn = btnObj.AddComponent<Button>();
+            btn.targetGraphic = btnBg;
+
+            LayoutElement le = btnObj.AddComponent<LayoutElement>();
+            le.flexibleWidth = 1;
+            le.preferredHeight = 50;
+
+            GameObject textObj = new GameObject("Text");
+            textObj.transform.SetParent(btnObj.transform, false);
+            RectTransform textRT = textObj.AddComponent<RectTransform>();
+            textRT.anchorMin = Vector2.zero;
+            textRT.anchorMax = Vector2.one;
+            textRT.offsetMin = new Vector2(5, 2);
+            textRT.offsetMax = new Vector2(-5, -2);
+
+            Text btnText = textObj.AddComponent<Text>();
+            btnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            btnText.fontSize = 28;
+            btnText.alignment = TextAnchor.MiddleCenter;
+            btnText.color = Color.white;
+            btnText.text = $"{playerName}\n<color=#8f8>HP:{serverState.health}</color>";
+
+            btn.onClick.AddListener(() => {
+                AudioManager.Instance?.PlayUIClick();
+                ReturnToPlayerBoard();
+                selectedPlayerId = playerId;
+                UpdateButtonHighlights();
+            });
+
+            playerButtonBgs[playerId] = btnBg;
+            opponentButtons.Add(btn);
         }
 
         private void CreateServerOpponentButton(ServerPlayerData opponent, HexBoard3D board)
@@ -358,7 +429,7 @@ namespace Crestforge.UI
             }
             else
             {
-                btnBg.color = new Color(0.3f, 0.5f, 0.3f);
+                btnBg.color = OPPONENT_BUTTON_COLOR;
             }
 
             Button btn = btnObj.AddComponent<Button>();
@@ -366,7 +437,7 @@ namespace Crestforge.UI
             btn.interactable = !opponent.isEliminated;
 
             LayoutElement le = btnObj.AddComponent<LayoutElement>();
-            le.preferredWidth = 100;
+            le.flexibleWidth = 1;
             le.preferredHeight = 50;
 
             GameObject textObj = new GameObject("Text");
@@ -374,12 +445,12 @@ namespace Crestforge.UI
             RectTransform textRT = textObj.AddComponent<RectTransform>();
             textRT.anchorMin = Vector2.zero;
             textRT.anchorMax = Vector2.one;
-            textRT.offsetMin = new Vector2(5, 5);
-            textRT.offsetMax = new Vector2(-5, -5);
+            textRT.offsetMin = new Vector2(5, 2);
+            textRT.offsetMax = new Vector2(-5, -2);
 
             Text btnText = textObj.AddComponent<Text>();
             btnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            btnText.fontSize = 12;
+            btnText.fontSize = 28;
             btnText.alignment = TextAnchor.MiddleCenter;
 
             if (opponent.isEliminated)
@@ -403,12 +474,41 @@ namespace Crestforge.UI
 
             var capturedOpponent = opponent;
             var capturedBoard = board;
+            var capturedId = opponent.clientId;
             btn.onClick.AddListener(() => {
                 AudioManager.Instance?.PlayUIClick();
                 ViewServerOpponentBoard(capturedOpponent, capturedBoard);
+                selectedPlayerId = capturedId;
+                UpdateButtonHighlights();
             });
 
+            if (!opponent.isEliminated)
+            {
+                playerButtonBgs[opponent.clientId] = btnBg;
+            }
             opponentButtons.Add(btn);
+        }
+
+        private void UpdateButtonHighlights()
+        {
+            foreach (var kvp in playerButtonBgs)
+            {
+                bool isSelected = kvp.Key == selectedPlayerId;
+                bool isSelf = serverState != null && kvp.Key == serverState.localPlayerId;
+
+                if (isSelected)
+                {
+                    kvp.Value.color = SELECTED_BUTTON_COLOR;
+                }
+                else if (isSelf)
+                {
+                    kvp.Value.color = SELF_BUTTON_COLOR;
+                }
+                else
+                {
+                    kvp.Value.color = OPPONENT_BUTTON_COLOR;
+                }
+            }
         }
 
         /// <summary>
@@ -624,7 +724,7 @@ namespace Crestforge.UI
             btn.targetGraphic = btnBg;
 
             LayoutElement le = btnObj.AddComponent<LayoutElement>();
-            le.preferredWidth = 100;
+            le.flexibleWidth = 1;
             le.preferredHeight = 50;
 
             GameObject textObj = new GameObject("Text");
@@ -632,12 +732,12 @@ namespace Crestforge.UI
             RectTransform textRT = textObj.AddComponent<RectTransform>();
             textRT.anchorMin = Vector2.zero;
             textRT.anchorMax = Vector2.one;
-            textRT.offsetMin = new Vector2(5, 5);
-            textRT.offsetMax = new Vector2(-5, -5);
+            textRT.offsetMin = new Vector2(5, 2);
+            textRT.offsetMax = new Vector2(-5, -2);
 
             Text btnText = textObj.AddComponent<Text>();
             btnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            btnText.fontSize = 12;
+            btnText.fontSize = 28;
             btnText.alignment = TextAnchor.MiddleCenter;
             btnText.color = Color.white;
 
@@ -712,7 +812,7 @@ namespace Crestforge.UI
             btn.interactable = !opponent.isEliminated;
 
             LayoutElement le = btnObj.AddComponent<LayoutElement>();
-            le.preferredWidth = 100;
+            le.flexibleWidth = 1;
             le.preferredHeight = 50;
 
             GameObject textObj = new GameObject("Text");
@@ -720,12 +820,12 @@ namespace Crestforge.UI
             RectTransform textRT = textObj.AddComponent<RectTransform>();
             textRT.anchorMin = Vector2.zero;
             textRT.anchorMax = Vector2.one;
-            textRT.offsetMin = new Vector2(5, 5);
-            textRT.offsetMax = new Vector2(-5, -5);
+            textRT.offsetMin = new Vector2(5, 2);
+            textRT.offsetMax = new Vector2(-5, -2);
 
             Text btnText = textObj.AddComponent<Text>();
             btnText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            btnText.fontSize = 12;
+            btnText.fontSize = 28;
             btnText.alignment = TextAnchor.MiddleCenter;
 
             if (opponent.isEliminated)
@@ -838,6 +938,13 @@ namespace Crestforge.UI
             currentViewedBoard = null;
             viewedOpponentId = null;
 
+            // Select self and update highlights
+            if (serverState != null)
+            {
+                selectedPlayerId = serverState.localPlayerId;
+                UpdateButtonHighlights();
+            }
+
             backButtonPanel.gameObject.SetActive(false);
 
             StopScoutCombatVisualization();
@@ -930,17 +1037,8 @@ namespace Crestforge.UI
                 return;
             }
 
-            bool shouldShow = false;
             var phase = state.round.phase;
-
-            if (showDuringPlanning && phase == GamePhase.Planning)
-            {
-                shouldShow = true;
-            }
-            else if (showDuringCombat && phase == GamePhase.Combat)
-            {
-                shouldShow = true;
-            }
+            bool shouldShow = true;
 
             if (shouldShow && (opponentButtons.Count == 0 || phase != lastPhase))
             {
@@ -967,16 +1065,7 @@ namespace Crestforge.UI
             bool hasOtherPlayers = serverState.otherPlayers != null && serverState.otherPlayers.Count > 0;
 
             string phase = serverState.phase;
-            bool shouldShow = false;
-
-            if (showDuringPlanning && phase == "planning")
-            {
-                shouldShow = hasOtherPlayers;
-            }
-            else if (showDuringCombat && phase == "combat")
-            {
-                shouldShow = hasOtherPlayers;
-            }
+            bool shouldShow = hasOtherPlayers;
 
             if (shouldShow && (opponentButtons.Count == 0 || phase != lastMultiplayerPhase))
             {
@@ -1018,6 +1107,8 @@ namespace Crestforge.UI
             if (scoutingCanvas != null)
             {
                 scoutingCanvas.gameObject.SetActive(false);
+                if (GameUI.Instance != null)
+                    GameUI.Instance.SetTopBarOffset(0f);
             }
 
             if (isViewingOpponent)
