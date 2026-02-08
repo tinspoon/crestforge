@@ -16,33 +16,50 @@ MonoBehaviour:
   unitName: Little Demon
   description: 
   cost: 1
+  damageAffinity: 1
+  elementalAutoattacks: 1
   traits:
-  - {fileID: 11400000, guid: 2fb9479b5705943c887c5773286fb33f, type: 2}
-  - {fileID: 11400000, guid: 8f86335b26ba944a6a82cb0853072138, type: 2}
   - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 400
+    health: 380
     armor: 15
     magicResist: 20
-    attack: 60
-    attackSpeed: 0.71
+    attack: 55
+    abilityPower: 25
+    attackSpeed: 0.75
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
-    maxMana: 45
+    maxMana: 50
   ability:
-    abilityName: Shadow Bolt
-    description: Fires a dark bolt dealing 180 damage
+    abilityName: Hellfire Bolt
+    description: 250 Fire to lowest HP enemy
     type: 0
-    damageType: 2
-    baseDamage: 180
+    damageType: 1
+    baseDamage: 250
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 1
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

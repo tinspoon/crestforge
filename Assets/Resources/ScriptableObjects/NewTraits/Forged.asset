@@ -14,14 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   traitId: forged
   traitName: Forged
-  description: Forged units gain permanent stats for every round of combat they participate
-    in.
+  description: Forged units gain permanent stats after each combat round
   icon: {fileID: 0}
   isUnique: 0
+  isAlwaysActive: 0
   tierThresholds: 0200000004000000
   tierBonuses:
   - bonusHealth: 0
-    bonusAttack: 2
+    bonusAttack: 0
     bonusArmor: 0
     bonusMagicResist: 0
     bonusAttackSpeed: 0
@@ -30,13 +30,13 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
-    effectValue1: 0
-    effectValue2: 0
+    specialEffect: 14
+    effectValue1: 3
+    effectValue2: 15
     effectValue3: 0
-    bonusDescription: +2 AD, +2 AP per round
-  - bonusHealth: 20
-    bonusAttack: 4
+    bonusDescription: +3 AD/AP, +15 HP per round (Forged units)
+  - bonusHealth: 0
+    bonusAttack: 0
     bonusArmor: 0
     bonusMagicResist: 0
     bonusAttackSpeed: 0
@@ -45,8 +45,8 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
-    effectValue1: 0
-    effectValue2: 0
-    effectValue3: 0
-    bonusDescription: +4 AD, +4 AP, +20 HP per round
+    specialEffect: 14
+    effectValue1: 2
+    effectValue2: 10
+    effectValue3: 1
+    bonusDescription: ALL units +2/2/10 per round, Forged double

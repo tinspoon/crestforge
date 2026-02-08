@@ -138,7 +138,7 @@ namespace Crestforge.Systems
             {
                 if (unit != null && !string.IsNullOrEmpty(unit.unitId))
                 {
-                    pool[unit.unitId] = GameConstants.Units.POOL_SIZE;
+                    pool[unit.unitId] = GameConstants.Units.GetPoolSize(unit.cost);
                 }
             }
         }
@@ -186,7 +186,7 @@ namespace Crestforge.Systems
             {
                 pool[unit.unitId] = 0;
             }
-            pool[unit.unitId] = Mathf.Min(GameConstants.Units.POOL_SIZE, pool[unit.unitId] + count);
+            pool[unit.unitId] = Mathf.Min(GameConstants.Units.GetPoolSize(unit.cost), pool[unit.unitId] + count);
         }
 
         public int GetAvailable(string unitId)

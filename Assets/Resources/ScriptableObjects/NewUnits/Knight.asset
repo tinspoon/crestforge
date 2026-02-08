@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Knight
+  m_EditorClassIdentifier: 
+  unitId: knight
+  unitName: Knight
+  description: 
+  cost: 2
+  damageAffinity: 0
+  elementalAutoattacks: 0
+  traits:
+  - {fileID: 11400000, guid: cd415da628045f7087a21753c920388d, type: 2}
+  - {fileID: 11400000, guid: a45cde1560348b854595cfad37fee326, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
+  baseStats:
+    health: 700
+    armor: 40
+    magicResist: 25
+    attack: 55
+    abilityPower: 0
+    attackSpeed: 0.6
+    range: 1
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 65
+  ability:
+    abilityName: Shield Wall
+    description: 30% DR 3s, next attack 200% AD Physical
+    type: 9
+    damageType: 0
+    baseDamage: 0
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 10
+    effectDuration: 3
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 8
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

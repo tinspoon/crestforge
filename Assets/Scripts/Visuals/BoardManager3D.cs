@@ -41,6 +41,7 @@ namespace Crestforge.Visuals
         private bool isDragging;
         private bool isPendingDrag; // Waiting to see if this becomes a drag or tap
         private bool isDraggingFromBench;
+        private bool pointerDownWasValid; // True when OnPointerDownMultiplayer processed a non-UI-blocked down
         private int benchDragIndex;
         private GameObject dragPlaceholder;
         private Vector3 dragStartMousePos;
@@ -1033,7 +1034,18 @@ namespace Crestforge.Visuals
             {
                 OnPointerDrag(ray);
             }
-            else if (Input.GetMouseButtonUp(0))
+
+            // Process Up independently (not else-if) because the Device Simulator
+            // can fire GetMouseButtonDown and GetMouseButtonUp on the same frame for taps.
+            if (Input.GetMouseButtonUp(0))
+            {
+                OnPointerUpMultiplayer(ray);
+            }
+            // Fallback: detect button release when GetMouseButtonUp was missed.
+            // The Device Simulator can drop GetMouseButtonUp events entirely for some taps.
+            // Input.GetMouseButton(0) returns the current held state — if it's false and we
+            // still have unresolved state from a PointerDown, the Up event was lost.
+            else if (!Input.GetMouseButton(0) && (pointerDownWasValid || isPendingDrag))
             {
                 OnPointerUpMultiplayer(ray);
             }
@@ -1153,15 +1165,49 @@ namespace Crestforge.Visuals
         private ServerUnitData draggedServerUnit;
         private string draggedServerUnitInstanceId;
 
+        /// <summary>
+        /// Check if the pointer is over any UI element using explicit raycast.
+        /// More reliable than IsPointerOverGameObject() which can return stale results
+        /// in the Device Simulator and with simulated touch input.
+        /// </summary>
+        private bool IsPointerOverUI(out List<UnityEngine.EventSystems.RaycastResult> uiHits)
+        {
+            uiHits = new List<UnityEngine.EventSystems.RaycastResult>();
+            var eventSystem = UnityEngine.EventSystems.EventSystem.current;
+            if (eventSystem == null) return false;
+
+            var pointerData = new UnityEngine.EventSystems.PointerEventData(eventSystem)
+            {
+                position = Input.mousePosition
+            };
+            eventSystem.RaycastAll(pointerData, uiHits);
+            return uiHits.Count > 0;
+        }
+
         private void OnPointerDownMultiplayer(Ray ray)
         {
-            // Don't process 3D clicks when pointer is over UI (prevents grabbing bench units behind UI panels)
-            if (UnityEngine.EventSystems.EventSystem.current != null &&
-                UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            // Resolve stale pending drag as a tap. The Device Simulator can lose
+            // GetMouseButtonUp events for some taps, leaving isPendingDrag set
+            // with no way to resolve it. When the next PointerDown arrives,
+            // treat the previous pending drag as a completed tap.
+            if (isPendingDrag && !isDragging && draggedUnit != null)
             {
+                SelectUnitMultiplayer(draggedUnit);
+                isPendingDrag = false;
+                isDraggingFromBench = false;
+                draggedUnit = null;
+                draggedServerUnitInstanceId = null;
+                benchDragIndex = -1;
+            }
+
+            // Don't process 3D clicks when pointer is over UI (prevents grabbing bench units behind UI panels)
+            if (IsPointerOverUI(out var uiHits))
+            {
+                pointerDownWasValid = false;
                 return;
             }
 
+            pointerDownWasValid = true;
             RaycastHit hit;
             if (Physics.Raycast(ray, out hit, 100f))
             {
@@ -1234,9 +1280,17 @@ namespace Crestforge.Visuals
         {
             if (!isDragging && !isPendingDrag)
             {
+                // Only process the simple-click path if we had a valid (non-UI-blocked) PointerDown.
+                // Prevents phantom PointerUp events (common in Device Simulator after drag-equip)
+                // from triggering unwanted 3D raycasts.
+                if (!pointerDownWasValid)
+                {
+                    return;
+                }
+                pointerDownWasValid = false;
+
                 // Don't process 3D clicks if clicking on UI (let UI handle its own clicks)
-                if (UnityEngine.EventSystems.EventSystem.current != null &&
-                    UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+                if (IsPointerOverUI(out var uiResults))
                 {
                     return;
                 }
@@ -1260,6 +1314,7 @@ namespace Crestforge.Visuals
             }
 
             // Handle pending drag that never activated (tap/click on unit)
+            pointerDownWasValid = false;
             if (isPendingDrag && !isDragging && draggedUnit != null)
             {
                 isPendingDrag = false;
@@ -2775,13 +2830,6 @@ namespace Crestforge.Visuals
         /// </summary>
         private void SelectUnitMultiplayer(UnitVisual3D unitVis)
         {
-            // Skip selection if an item was just equipped (prevents tooltip showing after item drop)
-            if (Crestforge.UI.ItemSlotUI.JustEquippedItem)
-            {
-                Crestforge.UI.ItemSlotUI.JustEquippedItem = false;
-                return;
-            }
-
             // Delegate all selection/tooltip logic to GameUI (single source of truth)
             Crestforge.UI.GameUI.Instance?.HandleUnitClicked(unitVis);
         }

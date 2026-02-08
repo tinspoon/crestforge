@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Crawler
   description: 
   cost: 1
+  damageAffinity: 3
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 686c8c0d0c0de42b6a852878a9044af6, type: 2}
-  - {fileID: 11400000, guid: 43bf2e8f9ed5e44dfa377e77c3c5e04b, type: 2}
+  - {fileID: 11400000, guid: a45cde1560348b854595cfad37fee326, type: 2}
+  - {fileID: 11400000, guid: 3d4e44928a334e4946d61fdf615238d6, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 420
-    armor: 25
+    health: 450
+    armor: 30
     magicResist: 15
-    attack: 50
+    attack: 48
+    abilityPower: 0
     attackSpeed: 0.7
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
-    maxMana: 50
+    maxMana: 55
   ability:
-    abilityName: Frenzy
-    description: Gains 50% attack speed for 5 seconds
-    type: 3
-    damageType: 0
+    abilityName: Burrow Strike
+    description: Emerge under target, 200% AD Nature, stun 0.5s
+    type: 0
+    damageType: 3
     baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 5
+    duration: 0
     radius: 0
     projectileCount: 0
-    attackSpeedBonus: 0.5
-    targeting: 8
+    attackSpeedBonus: 0
+    appliesEffect: 5
+    effectDuration: 0.5
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 1
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 0
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

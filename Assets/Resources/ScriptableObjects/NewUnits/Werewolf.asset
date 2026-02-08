@@ -16,33 +16,50 @@ MonoBehaviour:
   unitName: Werewolf
   description: 
   cost: 3
+  damageAffinity: 4
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: a9c420798e49b41fdbb53608c66434a8, type: 2}
-  - {fileID: 11400000, guid: 2fb9479b5705943c887c5773286fb33f, type: 2}
+  - {fileID: 11400000, guid: 5896f6c94d3d811b8a3a329732de6a64, type: 2}
+  - {fileID: 11400000, guid: 3d4e44928a334e4946d61fdf615238d6, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 750
-    armor: 30
+    health: 700
+    armor: 25
     magicResist: 25
-    attack: 85
-    attackSpeed: 0.74
+    attack: 80
+    abilityPower: 0
+    attackSpeed: 0.85
     range: 1
-    moveSpeed: 2
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2.25
     startingMana: 0
     maxMana: 55
   ability:
-    abilityName: Savage Leap
-    description: Leaps to target dealing 300 damage, gaining 40% attack speed for
-      4s
-    type: 8
-    damageType: 0
-    baseDamage: 300
+    abilityName: Savage Lunge
+    description: Leap lowest HP, 280% AD Shadow, on kill +30% AS permanent
+    type: 0
+    damageType: 4
+    baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 4
+    duration: 0
     radius: 0
     projectileCount: 0
-    attackSpeedBonus: 0.4
-    targeting: 0
+    attackSpeedBonus: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 1
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 1
+    permStatAmount: 30
+    targeting: 1
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

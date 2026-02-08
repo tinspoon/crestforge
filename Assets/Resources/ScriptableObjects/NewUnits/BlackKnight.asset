@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Black Knight
   description: 
   cost: 4
+  damageAffinity: 4
+  elementalAutoattacks: 0
   traits:
   - {fileID: 11400000, guid: 2f07304126dae4c1587718b20a0e82c4, type: 2}
   - {fileID: 11400000, guid: b69a8b2bca1c045baae64cb18a5a6f1c, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
     health: 1000
-    armor: 55
-    magicResist: 35
+    armor: 45
+    magicResist: 30
     attack: 95
-    attackSpeed: 0.68
+    abilityPower: 0
+    attackSpeed: 0.65
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
-    maxMana: 80
+    maxMana: 70
   ability:
-    abilityName: Executioner
-    description: Deals 400 damage, +50% to targets below 50% HP
-    type: 0
-    damageType: 0
-    baseDamage: 400
+    abilityName: Dark Cleave
+    description: 250% AD Shadow target+adj, Bleed 80 over 3s
+    type: 7
+    damageType: 4
+    baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
-    radius: 0
+    radius: 1
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 0
+    appliesEffect: 1
+    effectDuration: 3
+    effectDamagePerSecond: 27
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 12
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

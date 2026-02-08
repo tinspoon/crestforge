@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97a84588212144e908e2529be8d7ba76, type: 3}
+  m_Name: Shadow
+  m_EditorClassIdentifier: 
+  traitId: shadow
+  traitName: Shadow
+  description: Shadow units gain crit chance, first attack bonus damage, and brief stealth
+  icon: {fileID: 0}
+  isUnique: 0
+  isAlwaysActive: 0
+  tierThresholds: 0200000004000000
+  tierBonuses:
+  - bonusHealth: 0
+    bonusAttack: 0
+    bonusArmor: 0
+    bonusMagicResist: 0
+    bonusAttackSpeed: 0
+    globalBonusHealth: 0
+    globalBonusAttack: 0
+    globalBonusArmor: 0
+    globalBonusMagicResist: 0
+    globalBonusAttackSpeed: 0
+    specialEffect: 4
+    effectValue1: 15
+    effectValue2: 50
+    effectValue3: 1
+    bonusDescription: +15% crit, first attack +50% dmg, untargetable 1s
+  - bonusHealth: 0
+    bonusAttack: 0
+    bonusArmor: 0
+    bonusMagicResist: 0
+    bonusAttackSpeed: 0
+    globalBonusHealth: 0
+    globalBonusAttack: 0
+    globalBonusArmor: 0
+    globalBonusMagicResist: 0
+    globalBonusAttackSpeed: 0
+    specialEffect: 4
+    effectValue1: 25
+    effectValue2: 100
+    effectValue3: 1.5
+    bonusDescription: +25% crit, first attack +100% dmg, untargetable 1.5s

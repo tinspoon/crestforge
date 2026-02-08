@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Mushroom
   description: 
   cost: 1
+  damageAffinity: 3
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: f86399ff9c2c9453fa49bd5bfe49164a, type: 2}
+  - {fileID: 11400000, guid: 30ab4bd9819bf30bebb01f5c190872ab, type: 2}
   - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 480
+    health: 460
     armor: 20
     magicResist: 30
-    attack: 35
-    attackSpeed: 0.66
-    range: 2
+    attack: 30
+    abilityPower: 25
+    attackSpeed: 0.55
+    range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
-    maxMana: 60
+    maxMana: 65
   ability:
-    abilityName: Healing Spores
-    description: Heals all adjacent allies for 120 HP over 4 seconds
-    type: 1
-    damageType: 1
-    baseDamage: 0
-    baseHealing: 120
+    abilityName: Spore Cloud
+    description: Heal adjacent allies 100 HP + 80 Nature dmg adj enemies
+    type: 6
+    damageType: 3
+    baseDamage: 80
+    baseHealing: 100
     baseShieldAmount: 0
-    duration: 4
-    radius: 0
+    duration: 0
+    radius: 1
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 7
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 6
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Crestforge.Core;
 using Crestforge.Data;
 using Crestforge.Networking;
 using Crestforge.Visuals;
@@ -197,10 +198,15 @@ namespace Crestforge.Systems
                     case "unitDamage":
                         ProcessUnitDamageInstant(evt);
                         break;
+                    case "unitHeal":
+                        // During fast-forward, just update health instantly
+                        if (combatUnits.TryGetValue(evt.instanceId, out var healVisual) && healVisual != null)
+                            healVisual.SetHealthInstant(evt.currentHealth, evt.maxHealth);
+                        break;
                     case "unitDeath":
                         ProcessUnitDeathInstant(evt);
                         break;
-                    // Skip unitAttack and unitAbility during fast-forward (just visual)
+                    // Skip unitAttack, unitAbility, unitStatusEffect, unitBuff, unitShield during fast-forward (just visual)
                 }
                 eventIndex++;
             }
@@ -305,6 +311,18 @@ namespace Crestforge.Systems
                     break;
                 case "unitDeath":
                     ProcessUnitDeath(evt);
+                    break;
+                case "unitHeal":
+                    ProcessUnitHeal(evt);
+                    break;
+                case "unitStatusEffect":
+                    // Visual stub - just log for now
+                    break;
+                case "unitBuff":
+                    // Visual stub - just log for now
+                    break;
+                case "unitShield":
+                    // Visual stub - just log for now
                     break;
                 case "combatEnd":
                     ProcessCombatEnd(evt);
@@ -565,7 +583,7 @@ namespace Crestforge.Systems
             if (attacker == null || target == null) return;
 
             // Update mana display (unit gains mana when attacking)
-            attacker.GainMana(10);
+            attacker.GainMana(GameConstants.Combat.MANA_PER_ATTACK);
 
             attacker.PlayAttackAnimation(target.transform.position);
         }
@@ -592,7 +610,19 @@ namespace Crestforge.Systems
             visual.TakeDamage(evt.damage, evt.currentHealth, evt.maxHealth);
             OnUnitDamaged?.Invoke(evt.instanceId, evt.damage);
 
-            SpawnDamageNumber(visual.transform.position, evt.damage);
+            SpawnDamageNumber(visual.transform.position, evt.damage, evt.isCrit);
+        }
+
+        private void ProcessUnitHeal(ServerCombatEvent evt)
+        {
+            if (!combatUnits.TryGetValue(evt.instanceId, out var visual)) return;
+            if (visual == null) return;
+
+            // Update health bar
+            visual.SetHealthInstant(evt.currentHealth, evt.maxHealth);
+
+            // Spawn green healing number
+            SpawnHealNumber(visual.transform.position, evt.healAmount);
         }
 
         private void ProcessUnitDamageInstant(ServerCombatEvent evt)
@@ -709,18 +739,18 @@ namespace Crestforge.Systems
             CombatWinner = evt.winner;
         }
 
-        private void SpawnDamageNumber(Vector3 position, int damage)
+        private void SpawnDamageNumber(Vector3 position, int damage, bool isCrit = false)
         {
             GameObject dmgObj = new GameObject("DamageNumber");
             dmgObj.transform.position = position + Vector3.up * 1f;
 
             TextMesh tm = dmgObj.AddComponent<TextMesh>();
-            tm.text = damage.ToString();
-            tm.fontSize = 48;
-            tm.characterSize = 0.05f;
+            tm.text = isCrit ? damage.ToString() + "!" : damage.ToString();
+            tm.fontSize = isCrit ? 56 : 48;
+            tm.characterSize = isCrit ? 0.06f : 0.05f;
             tm.anchor = TextAnchor.MiddleCenter;
             tm.alignment = TextAlignment.Center;
-            tm.color = Color.red;
+            tm.color = isCrit ? new Color(1f, 0.8f, 0f) : Color.red; // Gold for crits
             tm.fontStyle = FontStyle.Bold;
             tm.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (tm.font == null)
@@ -730,6 +760,31 @@ namespace Crestforge.Systems
 
             dmgObj.AddComponent<BillboardUI>();
             var floater = dmgObj.AddComponent<FloatingText>();
+            floater.lifetime = 0.8f;
+            floater.floatSpeed = 1.5f;
+        }
+
+        private void SpawnHealNumber(Vector3 position, int healAmount)
+        {
+            GameObject healObj = new GameObject("HealNumber");
+            healObj.transform.position = position + Vector3.up * 1f;
+
+            TextMesh tm = healObj.AddComponent<TextMesh>();
+            tm.text = "+" + healAmount.ToString();
+            tm.fontSize = 48;
+            tm.characterSize = 0.05f;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.color = Color.green;
+            tm.fontStyle = FontStyle.Bold;
+            tm.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            if (tm.font == null)
+            {
+                tm.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            }
+
+            healObj.AddComponent<BillboardUI>();
+            var floater = healObj.AddComponent<FloatingText>();
             floater.lifetime = 0.8f;
             floater.floatSpeed = 1.5f;
         }

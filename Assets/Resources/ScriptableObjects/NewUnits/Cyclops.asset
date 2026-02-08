@@ -16,31 +16,49 @@ MonoBehaviour:
   unitName: Cyclops
   description: 
   cost: 3
+  damageAffinity: 0
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 8f86335b26ba944a6a82cb0853072138, type: 2}
-  - {fileID: 11400000, guid: b69a8b2bca1c045baae64cb18a5a6f1c, type: 2}
+  - {fileID: 11400000, guid: fb7a6523384837bf83cd6dc213ae87ee, type: 2}
+  - {fileID: 11400000, guid: 7180b30fd91eb1b06ff2952d3c474e89, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 850
+    health: 950
     armor: 35
     magicResist: 25
-    attack: 90
-    attackSpeed: 0.57
+    attack: 85
+    abilityPower: 0
+    attackSpeed: 0.55
     range: 1
-    moveSpeed: 2
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 1.75
     startingMana: 0
     maxMana: 70
   ability:
-    abilityName: Boulder Hurl
-    description: Hurls a boulder dealing 450 damage
+    abilityName: Boulder Toss
+    description: 350 Physical, stun 1s
     type: 0
     damageType: 0
-    baseDamage: 450
+    baseDamage: 350
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
+    appliesEffect: 5
+    effectDuration: 1
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
     targeting: 0
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}

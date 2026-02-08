@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Warlock
+  m_EditorClassIdentifier: 
+  unitId: warlock
+  unitName: Warlock
+  description: 
+  cost: 3
+  damageAffinity: 1
+  elementalAutoattacks: 0
+  traits:
+  - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
+  baseStats:
+    health: 600
+    armor: 20
+    magicResist: 35
+    attack: 50
+    abilityPower: 45
+    attackSpeed: 0.6
+    range: 3
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 70
+  ability:
+    abilityName: Chaos Bolt
+    description: 300 Fire to highest HP. On kill: chains 150 to nearest
+    type: 0
+    damageType: 1
+    baseDamage: 300
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 1
+    chainDamage: 150
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 2
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

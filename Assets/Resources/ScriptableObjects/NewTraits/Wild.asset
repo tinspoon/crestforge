@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 97a84588212144e908e2529be8d7ba76, type: 3}
+  m_Name: Wild
+  m_EditorClassIdentifier: 
+  traitId: wild
+  traitName: Wild
+  description: Wild units gain attack speed with each attack (ramping)
+  icon: {fileID: 0}
+  isUnique: 0
+  isAlwaysActive: 0
+  tierThresholds: 0200000004000000
+  tierBonuses:
+  - bonusHealth: 0
+    bonusAttack: 0
+    bonusArmor: 0
+    bonusMagicResist: 0
+    bonusAttackSpeed: 0
+    globalBonusHealth: 0
+    globalBonusAttack: 0
+    globalBonusArmor: 0
+    globalBonusMagicResist: 0
+    globalBonusAttackSpeed: 0
+    specialEffect: 3
+    effectValue1: 3
+    effectValue2: 30
+    effectValue3: 0
+    bonusDescription: +3% AS per attack, max +30%
+  - bonusHealth: 0
+    bonusAttack: 0
+    bonusArmor: 0
+    bonusMagicResist: 0
+    bonusAttackSpeed: 0
+    globalBonusHealth: 0
+    globalBonusAttack: 0
+    globalBonusArmor: 0
+    globalBonusMagicResist: 0
+    globalBonusAttackSpeed: 0
+    specialEffect: 3
+    effectValue1: 5
+    effectValue2: 50
+    effectValue3: 0
+    bonusDescription: +5% AS per attack, max +50%

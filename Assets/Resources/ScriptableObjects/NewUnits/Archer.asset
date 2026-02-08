@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Archer
   description: 
   cost: 1
+  damageAffinity: 0
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 2fb9479b5705943c887c5773286fb33f, type: 2}
-  - {fileID: 11400000, guid: 43bf2e8f9ed5e44dfa377e77c3c5e04b, type: 2}
+  - {fileID: 11400000, guid: cd415da628045f7087a21753c920388d, type: 2}
+  - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 400
+    health: 380
     armor: 15
     magicResist: 15
     attack: 55
-    attackSpeed: 0.72
+    abilityPower: 0
+    attackSpeed: 0.8
     range: 4
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
     maxMana: 50
   ability:
-    abilityName: Piercing Arrow
-    description: Fires a powerful shot at lowest health enemy dealing 220 damage
+    abilityName: Piercing Shot
+    description: Line pierce dealing 200% AD (Attuned element)
     type: 0
     damageType: 0
-    baseDamage: 220
+    baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 1
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 1
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 13
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

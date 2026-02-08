@@ -178,10 +178,11 @@ namespace Crestforge.Data
 
         /// <summary>
         /// Get the sell value of this unit
+        /// 1-star: cost, 2-star: (2*cost)-1, 3-star: (4*cost)-1
         /// </summary>
         public int GetSellValue()
         {
-            return template.cost * starLevel;
+            return GameConstants.Selling.GetSellPrice(template.cost, starLevel);
         }
 
         /// <summary>

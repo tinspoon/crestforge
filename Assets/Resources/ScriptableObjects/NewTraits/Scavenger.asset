@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   traitId: scavenger
   traitName: Scavenger
-  description: After each round, chance to gain a random unit. Cost equals your level
-    minus 1 (max 4).
+  description: After each round, receive a guaranteed unit
   icon: {fileID: 0}
   isUnique: 0
+  isAlwaysActive: 0
   tierThresholds: 0200000004000000
   tierBonuses:
   - bonusHealth: 0
@@ -30,11 +30,11 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
-    effectValue1: 0.5
-    effectValue2: 0
+    specialEffect: 15
+    effectValue1: 1
+    effectValue2: 2
     effectValue3: 0
-    bonusDescription: 50% chance to gain a unit
+    bonusDescription: Gain a random 1-2 cost unit
   - bonusHealth: 0
     bonusAttack: 0
     bonusArmor: 0
@@ -45,8 +45,8 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
-    effectValue1: 1
-    effectValue2: 0
-    effectValue3: 0
-    bonusDescription: 100% chance to gain a unit
+    specialEffect: 15
+    effectValue1: 3
+    effectValue2: 4
+    effectValue3: 1
+    bonusDescription: Gain a random 3-4 cost unit + 1g

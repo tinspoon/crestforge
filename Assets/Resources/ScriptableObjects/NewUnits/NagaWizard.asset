@@ -16,33 +16,50 @@ MonoBehaviour:
   unitName: Naga Wizard
   description: 
   cost: 3
+  damageAffinity: 2
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 26a0790c6660743649b1f9b7f55f4a4c, type: 2}
-  - {fileID: 11400000, guid: 686c8c0d0c0de42b6a852878a9044af6, type: 2}
-  - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  - {fileID: 11400000, guid: 7169dd956b85d435ea45631c3ce3498a, type: 2}
+  - {fileID: 11400000, guid: 5896f6c94d3d811b8a3a329732de6a64, type: 2}
+  blessedStatType: 4
+  isBlessed: 1
   baseStats:
     health: 650
-    armor: 25
-    magicResist: 50
-    attack: 55
-    attackSpeed: 0.59
-    range: 4
+    armor: 20
+    magicResist: 40
+    attack: 50
+    abilityPower: 40
+    attackSpeed: 0.6
+    range: 3
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
-    startingMana: 30
-    maxMana: 90
+    startingMana: 0
+    maxMana: 80
   ability:
-    abilityName: Tidal Wave
-    description: Summons a wave dealing 250 damage and STUNNING all enemies for 1.5s
+    abilityName: Mystic Vortex
+    description: 150 Arcane DPS nearby 3s, allies +10% crit
     type: 7
-    damageType: 1
-    baseDamage: 250
+    damageType: 2
+    baseDamage: 150
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 1.5
-    radius: 0
+    duration: 3
+    radius: 2
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 4
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 6
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

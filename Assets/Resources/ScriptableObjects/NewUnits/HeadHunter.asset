@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: HeadHunter
+  m_EditorClassIdentifier: 
+  unitId: headhunter
+  unitName: Head Hunter
+  description: 
+  cost: 2
+  damageAffinity: 0
+  elementalAutoattacks: 0
+  traits:
+  - {fileID: 11400000, guid: b69a8b2bca1c045baae64cb18a5a6f1c, type: 2}
+  - {fileID: 11400000, guid: 5896f6c94d3d811b8a3a329732de6a64, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
+  baseStats:
+    health: 550
+    armor: 25
+    magicResist: 20
+    attack: 65
+    abilityPower: 0
+    attackSpeed: 0.7
+    range: 1
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 55
+  ability:
+    abilityName: Whirling Axes
+    description: 150 Physical cone + Bleed 40 over 3s
+    type: 7
+    damageType: 0
+    baseDamage: 150
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 1
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 1
+    effectDuration: 3
+    effectDamagePerSecond: 13
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 12
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Drake
+  m_EditorClassIdentifier: 
+  unitId: drake
+  unitName: Drake
+  description: 
+  cost: 5
+  damageAffinity: 1
+  elementalAutoattacks: 1
+  traits:
+  - {fileID: 11400000, guid: a7a050d51123fdc21be161f9a280c555, type: 2}
+  - {fileID: 11400000, guid: a73b170b031047bae8f93e69fb4d9c14, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
+  baseStats:
+    health: 1100
+    armor: 40
+    magicResist: 40
+    attack: 100
+    abilityPower: 40
+    attackSpeed: 0.6
+    range: 1
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2.5
+    startingMana: 0
+    maxMana: 80
+  ability:
+    abilityName: Inferno Charge
+    description: Charge farthest, 300 Fire trail + Burn 100 over 3s, stun 1s
+    type: 0
+    damageType: 1
+    baseDamage: 300
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 3
+    effectDuration: 3
+    effectDamagePerSecond: 33
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 11
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

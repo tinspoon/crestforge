@@ -532,7 +532,7 @@ namespace Crestforge.Combat
                             duration = item.effectValue2,
                             remainingDuration = item.effectValue2,
                             damagePerTick = Mathf.RoundToInt(item.effectValue1 / (item.effectValue2 / tickRate)),
-                            damageType = DamageType.Elemental
+                            damageType = DamageType.Fire
                         };
                         target.statusEffects.Add(burn);
                         break;

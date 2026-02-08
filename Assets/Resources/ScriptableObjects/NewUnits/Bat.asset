@@ -16,32 +16,49 @@ MonoBehaviour:
   unitName: Bat
   description: 
   cost: 1
+  damageAffinity: 4
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 43bf2e8f9ed5e44dfa377e77c3c5e04b, type: 2}
-  - {fileID: 11400000, guid: a9c420798e49b41fdbb53608c66434a8, type: 2}
+  - {fileID: 11400000, guid: 3d4e44928a334e4946d61fdf615238d6, type: 2}
+  - {fileID: 11400000, guid: 5896f6c94d3d811b8a3a329732de6a64, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 400
+    health: 380
     armor: 15
     magicResist: 15
-    attack: 55
-    attackSpeed: 0.8
+    attack: 50
+    abilityPower: 15
+    attackSpeed: 0.9
     range: 1
-    moveSpeed: 3
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2.25
     startingMana: 0
-    maxMana: 40
+    maxMana: 45
   ability:
     abilityName: Sonic Screech
-    description: Screeches dealing 100 damage to nearby enemies, reducing attack
-      speed by 20%
+    description: AoE 100 Shadow + Frost 20% slow 2s
     type: 7
-    damageType: 0
+    damageType: 4
     baseDamage: 100
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 3
+    duration: 0
     radius: 1
     projectileCount: 0
     attackSpeedBonus: 0
+    appliesEffect: 2
+    effectDuration: 2
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0.2
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
     targeting: 6
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}

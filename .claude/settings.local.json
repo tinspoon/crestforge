@@ -22,7 +22,23 @@
       "Bash(xargs -I {} sh -c 'echo \"\"\"\"$\\(grep -c \"\"\"\"Debug\\\\.Log\\(\"\"\"\" {} | grep -v LogWarning | grep -v LogError\\) {}\"\"\"\"')",
       "Bash(xargs -I {} sh -c 'echo \"\"\"\"$\\(grep -c \"\"\"\"Debug\\\\.Log\\(\"\"\"\" {}\\) {}\"\"\"\"')",
       "Bash(git status:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(node:*)",
+      "Bash(echo:*)",
+      "Bash(ipconfig getifaddr:*)",
+      "Bash(git checkout:*)",
+      "Bash(claude update:*)",
+      "Bash(claude install:*)",
+      "Bash(bun:*)",
+      "Bash(npm start)",
+      "Bash(while read f)",
+      "Bash(do basename \"$f\")",
+      "Bash(done)",
+      "Bash(do echo \"=== $f ===\")",
+      "Bash(python3:*)",
+      "Bash(xargs:*)"
     ]
   }
 }

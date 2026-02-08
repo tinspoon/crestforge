@@ -159,8 +159,6 @@ namespace Crestforge.UI
                 return;
             }
 
-            Debug.Log($"[ServerTooltipItemSlot] OnBeginDrag started for {serverItem.name}");
-
             isDragging = true;
             originalPosition = rectTransform.position;
             originalParent = transform.parent;
@@ -195,8 +193,6 @@ namespace Crestforge.UI
                 return;
             }
 
-            Debug.Log($"[ServerTooltipItemSlot] OnEndDrag for {serverItem?.name}");
-
             isDragging = false;
             canvasGroup.blocksRaycasts = true;
             canvasGroup.alpha = 1f;
@@ -209,7 +205,6 @@ namespace Crestforge.UI
             // Send unequip action to server
             if (!string.IsNullOrEmpty(unitInstanceId) && serverItem != null)
             {
-                Debug.Log($"[ServerTooltipItemSlot] Unequipping item {serverItem.itemId} from unit {unitInstanceId} slot {itemSlot}");
                 ServerGameState.Instance?.UnequipItem(unitInstanceId, itemSlot);
 
                 // Destroy this slot - the server will update the state

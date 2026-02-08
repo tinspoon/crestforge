@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Fishman
   description: 
   cost: 2
+  damageAffinity: 3
+  elementalAutoattacks: 0
   traits:
   - {fileID: 11400000, guid: 686c8c0d0c0de42b6a852878a9044af6, type: 2}
   - {fileID: 11400000, guid: b69a8b2bca1c045baae64cb18a5a6f1c, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
     health: 600
-    armor: 30
+    armor: 25
     magicResist: 20
     attack: 55
-    attackSpeed: 0.64
+    abilityPower: 0
+    attackSpeed: 0.7
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
     maxMana: 60
   ability:
     abilityName: Tidal Slash
-    description: Slashes dealing 180 damage to up to 3 enemies
-    type: 7
-    damageType: 0
-    baseDamage: 180
+    description: 180% AD Nature target+adj, self-heal 50% of damage
+    type: 6
+    damageType: 3
+    baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
-    radius: 0
-    projectileCount: 3
+    radius: 1
+    projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 6
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0.5
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 12
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

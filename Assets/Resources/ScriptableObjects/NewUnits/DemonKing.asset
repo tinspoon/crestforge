@@ -16,31 +16,49 @@ MonoBehaviour:
   unitName: Demon King
   description: 
   cost: 5
+  damageAffinity: 1
+  elementalAutoattacks: 1
   traits:
-  - {fileID: 11400000, guid: 8f86335b26ba944a6a82cb0853072138, type: 2}
-  - {fileID: 11400000, guid: a9c420798e49b41fdbb53608c66434a8, type: 2}
+  - {fileID: 11400000, guid: a7a050d51123fdc21be161f9a280c555, type: 2}
+  - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 1100
-    armor: 45
-    magicResist: 45
-    attack: 120
-    attackSpeed: 0.61
+    health: 1050
+    armor: 35
+    magicResist: 40
+    attack: 95
+    abilityPower: 50
+    attackSpeed: 0.6
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
-    startingMana: 30
-    maxMana: 100
+    startingMana: 0
+    maxMana: 90
   ability:
     abilityName: Infernal Storm
-    description: Unleashes hellfire dealing 500 damage to ALL enemies + 200 burn
+    description: All enemies 200 Fire + Burn 100 over 3s + 20% armor shred 4s
     type: 7
-    damageType: 2
-    baseDamage: 700
+    damageType: 1
+    baseDamage: 200
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 4
+    duration: 0
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
+    appliesEffect: 3
+    effectDuration: 3
+    effectDamagePerSecond: 33
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
     targeting: 4
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}

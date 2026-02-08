@@ -14,9 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   traitId: volatile
   traitName: Volatile
-  description: Volatile units explode on death, dealing damage to nearby enemies.
+  description: Volatile units explode on death dealing fire damage to adjacent enemies
   icon: {fileID: 0}
   isUnique: 0
+  isAlwaysActive: 0
   tierThresholds: 0200000004000000
   tierBonuses:
   - bonusHealth: 0
@@ -29,11 +30,11 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 14
+    specialEffect: 9
     effectValue1: 100
     effectValue2: 0
     effectValue3: 0
-    bonusDescription: Explode for 100 damage on death
+    bonusDescription: On death: 100 Fire to adjacent
   - bonusHealth: 0
     bonusAttack: 0
     bonusArmor: 0
@@ -44,8 +45,8 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 14
+    specialEffect: 9
     effectValue1: 250
     effectValue2: 0
     effectValue3: 0
-    bonusDescription: Explode for 250 damage on death
+    bonusDescription: On death: 250 Fire to adjacent

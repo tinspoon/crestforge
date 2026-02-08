@@ -148,7 +148,7 @@ namespace Crestforge.Visuals
                 }
 
                 // Find walk/move
-                if (name.Contains("walk") || name.Contains("movefwd") || name.Contains("move_fwd") || name.Contains("run"))
+                if (name.Contains("walk") || name.Contains("movefwd") || name.Contains("move_fwd") || name.Contains("run") || name.Contains("fly"))
                 {
                     foundWalk = clip.name;
                 }
@@ -225,7 +225,7 @@ namespace Crestforge.Visuals
                 else if (foundIdle == null && name.Contains("idle"))
                     foundIdle = state.name;
 
-                if (name.Contains("walk") || name.Contains("movefwd") || name.Contains("run"))
+                if (name.Contains("walk") || name.Contains("movefwd") || name.Contains("run") || name.Contains("fly"))
                     foundWalk = state.name;
 
                 if (name.Contains("attack01") || name.Contains("attack_01"))

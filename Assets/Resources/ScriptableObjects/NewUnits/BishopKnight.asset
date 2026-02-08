@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Bishop Knight
   description: 
   cost: 4
+  damageAffinity: 2
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 3fc19abad78dd4791a003bdfe51e0142, type: 2}
-  - {fileID: 11400000, guid: 5df92838b66794417917e48201eac1bf, type: 2}
+  - {fileID: 11400000, guid: 7169dd956b85d435ea45631c3ce3498a, type: 2}
+  - {fileID: 11400000, guid: cd415da628045f7087a21753c920388d, type: 2}
+  blessedStatType: 6
+  isBlessed: 1
   baseStats:
-    health: 1100
-    armor: 60
+    health: 1050
+    armor: 45
     magicResist: 50
-    attack: 70
-    attackSpeed: 0.56
+    attack: 60
+    abilityPower: 35
+    attackSpeed: 0.5
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
-    maxMana: 90
+    maxMana: 80
   ability:
-    abilityName: Sacred Shield
-    description: Grants lowest health ally 500 shield and 30 armor for 4s
-    type: 2
-    damageType: 0
-    baseDamage: 0
-    baseHealing: 0
-    baseShieldAmount: 500
-    duration: 4
-    radius: 0
+    abilityName: Holy Judgment
+    description: 300 Arcane, allies within 2 hex heal 150
+    type: 6
+    damageType: 2
+    baseDamage: 300
+    baseHealing: 150
+    baseShieldAmount: 0
+    duration: 0
+    radius: 2
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 3
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 0
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

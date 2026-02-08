@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   traitId: crestmaker
   traitName: Crestmaker
-  description: Crafts a crest token after 3 rounds. Crafts a major crest token after
-    6 rounds.
+  description: Crafts a minor crest token every 2 rounds
   icon: {fileID: 0}
   isUnique: 1
+  isAlwaysActive: 0
   tierThresholds: 01000000
   tierBonuses:
   - bonusHealth: 0
@@ -30,8 +30,8 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
-    effectValue1: 3
-    effectValue2: 6
+    specialEffect: 17
+    effectValue1: 2
+    effectValue2: 0
     effectValue3: 0
-    bonusDescription: Craft crest tokens over time
+    bonusDescription: Minor crest token every 2 rounds

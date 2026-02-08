@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   traitId: attuned
   traitName: Attuned
-  description: At game start, a random element pair is chosen. Attuned units deal
-    that damage type and gain bonus damage.
+  description: A random element is chosen each game. Attuned units convert and boost that damage type for ALL allies.
   icon: {fileID: 0}
   isUnique: 0
+  isAlwaysActive: 0
   tierThresholds: 0200000004000000
   tierBonuses:
   - bonusHealth: 0
@@ -30,11 +30,11 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 18
+    specialEffect: 11
     effectValue1: 0.15
     effectValue2: 0
     effectValue3: 0
-    bonusDescription: +15% damage with attuned element
+    bonusDescription: +15% global Attuned element damage
   - bonusHealth: 0
     bonusAttack: 0
     bonusArmor: 0
@@ -45,8 +45,8 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 18
+    specialEffect: 11
     effectValue1: 0.3
     effectValue2: 0
     effectValue3: 0
-    bonusDescription: +30% damage with attuned element
+    bonusDescription: +30% global Attuned element damage

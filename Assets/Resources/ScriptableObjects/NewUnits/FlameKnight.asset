@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Flame Knight
   description: 
   cost: 5
+  damageAffinity: 1
+  elementalAutoattacks: 1
   traits:
-  - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
-  - {fileID: 11400000, guid: 8f86335b26ba944a6a82cb0853072138, type: 2}
+  - {fileID: 11400000, guid: 2f07304126dae4c1587718b20a0e82c4, type: 2}
+  - {fileID: 11400000, guid: b69a8b2bca1c045baae64cb18a5a6f1c, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
     health: 950
-    armor: 40
-    magicResist: 45
+    armor: 35
+    magicResist: 35
     attack: 105
-    attackSpeed: 0.69
+    abilityPower: 30
+    attackSpeed: 0.7
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
-    startingMana: 25
-    maxMana: 85
+    startingMana: 0
+    maxMana: 75
   ability:
-    abilityName: Inferno Blade
-    description: Ignites blade dealing 600 damage to adjacent enemies, leaving fire
-    type: 7
+    abilityName: Blazing Cleave
+    description: Next 3 attacks hit adj for 150% as Fire, Bleed 50 over 2s
+    type: 3
     damageType: 1
-    baseDamage: 600
+    baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 3
-    radius: 1
+    duration: 0
+    radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 6
+    appliesEffect: 1
+    effectDuration: 2
+    effectDamagePerSecond: 25
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 8
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

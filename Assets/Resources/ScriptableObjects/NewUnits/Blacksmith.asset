@@ -16,30 +16,49 @@ MonoBehaviour:
   unitName: Blacksmith
   description: 
   cost: 2
+  damageAffinity: 1
+  elementalAutoattacks: 0
   traits:
   - {fileID: 11400000, guid: 6cf2b56392a4f4ffc9630ae5b1bae5fd, type: 2}
+  - {fileID: 11400000, guid: 2f07304126dae4c1587718b20a0e82c4, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
     health: 650
     armor: 30
-    magicResist: 30
-    attack: 50
-    attackSpeed: 0.6
+    magicResist: 25
+    attack: 45
+    abilityPower: 0
+    attackSpeed: 0.55
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
     maxMana: 80
   ability:
-    abilityName: Blessed Weapons
-    description: Buffs all allies' attack damage by 25% for 5 seconds
-    type: 3
-    damageType: 3
+    abilityName: Forge Weapons
+    description: All allies +15 AD rest of combat
+    type: 11
+    damageType: 1
     baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 5
+    duration: 0
     radius: 0
     projectileCount: 0
-    attackSpeedBonus: 0.25
+    attackSpeedBonus: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
     targeting: 5
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}

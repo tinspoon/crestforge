@@ -5,6 +5,10 @@
 const { v4: uuidv4 } = require('uuid');
 const {
     GameConstants,
+    DamageTypes,
+    StatusEffects,
+    ATTUNED_ELEMENTS,
+    PerGameVariables,
     UnitTemplates,
     TraitDefinitions,
     ItemTemplates,
@@ -15,7 +19,9 @@ const {
     calculateActiveTraits,
     applyTraitBonuses,
     applyItemBonuses,
-    applyCrestBonuses
+    applyCrestBonuses,
+    applyBlessedBonuses,
+    rollPerGameVariables
 } = require('./gameData');
 
 // Loot types for PvE enemies
@@ -36,7 +42,7 @@ class UnitPool {
     initialize() {
         this.pool.clear();
         for (const unit of getAllUnits()) {
-            this.pool.set(unit.unitId, GameConstants.Units.POOL_SIZE);
+            this.pool.set(unit.unitId, GameConstants.Units.getPoolSize(unit.cost));
         }
     }
 
@@ -55,7 +61,9 @@ class UnitPool {
 
     returnUnit(unitId, count = 1) {
         const current = this.pool.get(unitId) || 0;
-        this.pool.set(unitId, Math.min(GameConstants.Units.POOL_SIZE, current + count));
+        const template = UnitTemplates[unitId];
+        const maxPool = template ? GameConstants.Units.getPoolSize(template.cost) : 8;
+        this.pool.set(unitId, Math.min(maxPool, current + count));
     }
 
     rollUnit(playerLevel) {
@@ -103,8 +111,8 @@ class PlayerState {
 
         // Economy
         this.gold = GameConstants.Economy.STARTING_GOLD;
-        this.health = 15;
-        this.maxHealth = 20;
+        this.health = GameConstants.Player.STARTING_HEALTH;
+        this.maxHealth = GameConstants.Player.STARTING_HEALTH;
         this.level = GameConstants.Player.STARTING_LEVEL;
         this.xp = 0;
 
@@ -236,9 +244,13 @@ class PlayerState {
         // Interest: 1 gold per 5 gold saved, max 3 (at 15 gold)
         const interest = Math.min(Math.floor(this.gold / 5), GameConstants.Economy.MAX_INTEREST);
         income += interest;
-        // Win/loss streak bonus
+        // Win/loss streak bonus: +1 at 2, +2 at 4+
         const streak = Math.max(this.winStreak, this.lossStreak);
-        if (streak >= 2) income += Math.min(streak, 5);
+        if (streak >= 4) {
+            income += GameConstants.Economy.STREAK_BONUS_AT_4;
+        } else if (streak >= 2) {
+            income += GameConstants.Economy.STREAK_BONUS_AT_2;
+        }
         return income;
     }
 
@@ -367,6 +379,10 @@ const CombatEventType = {
     UNIT_DAMAGE: 'unitDamage',
     UNIT_DEATH: 'unitDeath',
     UNIT_ABILITY: 'unitAbility',
+    UNIT_HEAL: 'unitHeal',
+    UNIT_STATUS_EFFECT: 'unitStatusEffect',
+    UNIT_BUFF: 'unitBuff',
+    UNIT_SHIELD: 'unitShield',
     COMBAT_END: 'combatEnd'
 };
 
@@ -390,9 +406,9 @@ class CombatUnit {
         this.stats = combatStats;
         this.currentHealth = combatStats.health;
         // Mana for abilities - starts at 0, fills from auto attacks
-        this.maxMana = combatStats.maxMana || 40;
+        this.maxMana = combatStats.maxMana || combatStats.mana || 40;
         this.currentMana = 0; // Always start at 0 mana
-        this.manaPerAttack = 10; // Mana gained per auto attack
+        this.manaPerAttack = GameConstants.Combat.MANA_PER_ATTACK;
         // No initial delay - attack immediately when in range, then at constant rate
         this.attackCooldown = 0;
         this.moveCooldown = 0; // Movement cooldown
@@ -407,6 +423,28 @@ class CombatUnit {
         this.lootTypes = unit.lootTypes || null; // Array for multiple drops (boss)
         // Copy items for display
         this.items = unit.items || [];
+
+        // --- New fields for expanded combat ---
+        this.traits = unit.traits || [];
+        this.template = UnitTemplates[unit.unitId] || null;
+        this.ability = this.template ? this.template.ability || null : null;
+        this.damageAffinity = this.template ? this.template.damageAffinity || 'physical' : 'physical';
+        this.elementalAutoattacks = this.template ? this.template.elementalAutoattacks || false : false;
+        this.attunedElement = null; // Set by simulator from per-game vars
+        this.totalAttacks = 0; // For Wild ramping
+        this.hasCharged = false; // For Cavalry first-contact stun
+        this.firstAttackDone = false; // For Shadow first-attack bonus
+        this.activeBuffs = []; // Temp stat buffs: [{ stat, value, remainingTicks, isPermanent }]
+        this.shield = 0; // Absorbs damage before HP
+        this.untargetableUntilTick = 0; // Shadow stealth / Griffin dive
+        this.itemEffects = {}; // Extracted from items: { lifesteal, reflect, revive, hpRegen }
+        this.hasRevived = false; // Guardian Angel one-shot
+        this.bonusGold = 0; // Gold earned from on-kill effects (Chest Monster)
+        this.enhancedAttacksRemaining = 0; // Flame Knight enhanced attacks
+        this.enhancedAttackData = null; // Data for enhanced attacks (hitAdjacentForPercent, etc.)
+        this.appliesBleedOnAttack = false; // Berserker Blood Frenzy
+        this.bleedOnAttackDps = 0;
+        this.bleedOnAttackDuration = 0;
     }
 
     // Check if unit has enough mana to cast ability
@@ -428,7 +466,7 @@ class CombatUnit {
 }
 
 class CombatSimulator {
-    constructor(player1Board, player2Board, player1State, player2State) {
+    constructor(player1Board, player2Board, player1State, player2State, options = {}) {
         this.units = [];
         this.events = [];
         this.pendingAttacks = []; // Attacks that have started but haven't landed yet
@@ -436,9 +474,24 @@ class CombatSimulator {
         this.maxTicks = 1200; // 60 seconds at 20 ticks/sec
         this.tickRate = 0.05; // 50ms per tick (20Hz)
 
+        // Team traits for combat effects
+        this.teamTraits = {
+            player1: player1State.activeTraits || {},
+            player2: player2State.activeTraits || {}
+        };
+
+        // Per-game variables (attuned element, blessed bonus, warlord enhancement)
+        this.perGameVars = options.perGameVars || {};
+
+        // Status effects: instanceId -> [{ type, remainingTicks, sourceId, dps, slowPercent }]
+        this.statusEffects = new Map();
+
         // Initialize combat units from both players
         this.initializeUnits(player1Board, player1State, 'player1');
         this.initializeUnits(player2Board, player2State, 'player2');
+
+        // Post-initialization pass: apply Legion adjacency bonuses and other init-time effects
+        this.applyInitTimeEffects();
     }
 
     initializeUnits(board, playerState, teamId) {
@@ -455,7 +508,84 @@ class CombatSimulator {
                         ? (GameConstants.Grid.HEIGHT * 2 - 1 - y)  // Maps 0->7, 1->6, 2->5, 3->4
                         : y;
                     const combatUnit = new CombatUnit(unit, teamId, x, combatY, combatStats);
+
+                    // Set attuned element from per-game vars
+                    if (this.perGameVars.attunedElement) {
+                        combatUnit.attunedElement = this.perGameVars.attunedElement;
+                    }
+
+                    // Extract item combat effects
+                    if (unit.items && unit.items.length > 0) {
+                        for (const item of unit.items) {
+                            const itemTemplate = ItemTemplates[item.itemId];
+                            if (itemTemplate && itemTemplate.effects) {
+                                if (itemTemplate.effects.lifesteal) {
+                                    combatUnit.itemEffects.lifesteal = (combatUnit.itemEffects.lifesteal || 0) + itemTemplate.effects.lifesteal;
+                                }
+                                if (itemTemplate.effects.reflect) {
+                                    combatUnit.itemEffects.reflect = (combatUnit.itemEffects.reflect || 0) + itemTemplate.effects.reflect;
+                                }
+                                if (itemTemplate.effects.revive) {
+                                    combatUnit.itemEffects.revive = true;
+                                }
+                                if (itemTemplate.effects.hpRegen) {
+                                    combatUnit.itemEffects.hpRegen = (combatUnit.itemEffects.hpRegen || 0) + itemTemplate.effects.hpRegen;
+                                }
+                            }
+                        }
+                    }
+
+                    // Crest lifesteal (from major_bloodlust crest applied via stats)
+                    if (combatStats.lifesteal) {
+                        combatUnit.itemEffects.lifesteal = (combatUnit.itemEffects.lifesteal || 0) + combatStats.lifesteal;
+                    }
+
                     this.units.push(combatUnit);
+                }
+            }
+        }
+    }
+
+    // Post-init effects: Legion adjacency, Shadow stealth, Cavalry move bonus
+    applyInitTimeEffects() {
+        for (const unit of this.units) {
+            const teamTraits = this.getTeamActiveTraits(unit);
+
+            // Shadow: untargetable at combat start
+            if (this.unitHasTrait(unit, 'shadow')) {
+                const shadowTier = this.getTraitTier(unit, 'shadow');
+                if (shadowTier && shadowTier.bonus && shadowTier.bonus.untargetable) {
+                    const untargetableTicks = Math.ceil(shadowTier.bonus.untargetable / this.tickRate);
+                    unit.untargetableUntilTick = untargetableTicks;
+                }
+            }
+
+            // Cavalry: bonus move speed at combat start
+            if (this.unitHasTrait(unit, 'cavalry')) {
+                const cavTier = this.getTraitTier(unit, 'cavalry');
+                if (cavTier && cavTier.bonus && cavTier.bonus.moveBonus) {
+                    unit.stats.moveSpeed = (unit.stats.moveSpeed || 2) + cavTier.bonus.moveBonus;
+                }
+            }
+        }
+
+        // Legion: adjacent Legion units get AD bonus at combat start
+        for (const unit of this.units) {
+            if (!this.unitHasTrait(unit, 'legion')) continue;
+            const legionTier = this.getTraitTier(unit, 'legion');
+            if (!legionTier || !legionTier.bonus || !legionTier.bonus.adjAttackPercent) continue;
+
+            const neighbors = this.getHexNeighbors(unit.x, unit.y);
+            for (const neighbor of neighbors) {
+                const adjUnit = this.getAliveUnits().find(u =>
+                    u.x === neighbor.x && u.y === neighbor.y && u.playerId === unit.playerId
+                );
+                if (adjUnit && this.unitHasTrait(adjUnit, 'legion')) {
+                    const bonusAD = Math.round(adjUnit.stats.attack * (legionTier.bonus.adjAttackPercent / 100));
+                    adjUnit.stats.attack += bonusAD;
+                    if (legionTier.bonus.adjArmor) {
+                        adjUnit.stats.armor += legionTier.bonus.adjArmor;
+                    }
                 }
             }
         }
@@ -497,7 +627,16 @@ class CombatSimulator {
         while (this.tick < this.maxTicks) {
             this.tick++;
 
-            // Process pending attacks (damage lands)
+            // Process status effects (DoT damage, expiry)
+            this.processStatusEffects();
+
+            // Process buff expiry
+            this.processBuffs();
+
+            // Process aura effects (Nature heal, item regen) - gated 1/sec internally
+            this.processAuraEffects();
+
+            // Process pending attacks (damage lands, death, lifesteal, reflect)
             this.processPendingAttacks();
 
             // Snapshot positions at start of tick for simultaneous movement decisions
@@ -507,8 +646,11 @@ class CombatSimulator {
             }
 
             // Phase 1: Collect movement decisions (using snapshot positions)
+            // Skip stunned/rooted units
             const pendingMoves = [];
             for (const unit of this.getAliveUnits()) {
+                if (this.hasStatusEffect(unit, StatusEffects.STUN)) continue;
+                if (this.hasStatusEffect(unit, StatusEffects.ROOT)) continue;
                 const moveDecision = this.getUnitMoveDecision(unit, positionSnapshot);
                 if (moveDecision) {
                     pendingMoves.push(moveDecision);
@@ -521,7 +663,9 @@ class CombatSimulator {
             }
 
             // Phase 3: Process attacks (after all movement is complete)
+            // Skip stunned units
             for (const unit of this.getAliveUnits()) {
+                if (this.hasStatusEffect(unit, StatusEffects.STUN)) continue;
                 this.processUnitAttack(unit);
             }
 
@@ -583,6 +727,635 @@ class CombatSimulator {
 
     getEnemyUnits(unit) {
         return this.getAliveUnits().filter(u => u.playerId !== unit.playerId);
+    }
+
+    getFriendlyUnits(unit) {
+        return this.getAliveUnits().filter(u => u.playerId === unit.playerId);
+    }
+
+    // ========== TRAIT HELPERS ==========
+
+    getTeamActiveTraits(unit) {
+        return this.teamTraits[unit.playerId] || {};
+    }
+
+    getTraitTier(unit, traitId) {
+        const teamTraits = this.getTeamActiveTraits(unit);
+        const traitInfo = teamTraits[traitId];
+        if (!traitInfo || !traitInfo.tier) return null;
+        return traitInfo.tier;
+    }
+
+    unitHasTrait(unit, traitId) {
+        return unit.traits && unit.traits.includes(traitId);
+    }
+
+    isUntargetable(unit) {
+        return unit.untargetableUntilTick > this.tick;
+    }
+
+    // ========== DAMAGE CALCULATION ==========
+
+    calculateDamage(attacker, target, rawDamage, damageType, options = {}) {
+        let finalDamage = rawDamage;
+        let isCrit = false;
+        let resolvedDamageType = damageType;
+
+        // Resolve 'attuned' damage type to actual element
+        if (resolvedDamageType === 'attuned') {
+            resolvedDamageType = attacker.attunedElement || 'arcane';
+        }
+
+        // Crit check
+        const critChance = (attacker.stats.critChance || 0) / 100;
+        if (options.guaranteedCrit || (critChance > 0 && Math.random() < critChance)) {
+            isCrit = true;
+            const critMultiplier = attacker.stats.critDamage || 1.5;
+            finalDamage = Math.round(finalDamage * critMultiplier);
+        }
+
+        // Bonus damage % (Dragon trait)
+        if (attacker.stats.bonusDamagePercent) {
+            finalDamage = Math.round(finalDamage * (1 + attacker.stats.bonusDamagePercent / 100));
+        }
+
+        // Attuned global element bonus: when dealing attuned element damage, all allies get bonus
+        if (this.perGameVars.attunedElement && resolvedDamageType === this.perGameVars.attunedElement) {
+            const teamTraits = this.getTeamActiveTraits(attacker);
+            const attunedTrait = teamTraits['attuned'];
+            if (attunedTrait && attunedTrait.tier && attunedTrait.tier.bonus && attunedTrait.tier.bonus.globalElementPercent) {
+                finalDamage = Math.round(finalDamage * (1 + attunedTrait.tier.bonus.globalElementPercent / 100));
+            }
+        }
+
+        // Resistance
+        if (resolvedDamageType === 'physical') {
+            // Physical: armor reduction
+            const armor = Math.max(0, target.stats.armor);
+            const armorReduction = armor / (armor + 100);
+            finalDamage = Math.round(finalDamage * (1 - armorReduction));
+        } else {
+            // Non-physical (fire, arcane, nature, shadow): magic resist reduction
+            const mr = Math.max(0, target.stats.magicResist || 0);
+            const mrReduction = mr / (mr + 100);
+            finalDamage = Math.round(finalDamage * (1 - mrReduction));
+
+            // Fire damage also checks fireResist (Dragon trait, %-based)
+            if (resolvedDamageType === 'fire' && target.stats.fireResist) {
+                finalDamage = Math.round(finalDamage * (1 - target.stats.fireResist / 100));
+            }
+        }
+
+        // Damage reduction (Ironclad trait, %-based)
+        if (target.stats.damageReduction) {
+            finalDamage = Math.round(finalDamage * (1 - target.stats.damageReduction / 100));
+        }
+
+        // Minimum 1 damage
+        finalDamage = Math.max(1, finalDamage);
+
+        return { finalDamage, isCrit, damageType: resolvedDamageType };
+    }
+
+    // ========== STATUS EFFECTS ==========
+
+    applyStatusEffect(unit, type, duration, sourceId, options = {}) {
+        if (unit.isDead) return;
+
+        let effects = this.statusEffects.get(unit.instanceId);
+        if (!effects) {
+            effects = [];
+            this.statusEffects.set(unit.instanceId, effects);
+        }
+
+        const durationTicks = Math.ceil(duration / this.tickRate);
+
+        // CC effects (stun/root/frost) refresh duration, don't stack
+        if (type === StatusEffects.STUN || type === StatusEffects.ROOT || type === StatusEffects.FROST) {
+            const existing = effects.find(e => e.type === type);
+            if (existing) {
+                existing.remainingTicks = Math.max(existing.remainingTicks, durationTicks);
+                if (options.slowPercent) existing.slowPercent = options.slowPercent;
+                return;
+            }
+        }
+
+        // DoTs stack from different sources
+        if (type === StatusEffects.BLEED || type === StatusEffects.BURN || type === StatusEffects.POISON) {
+            const existing = effects.find(e => e.type === type && e.sourceId === sourceId);
+            if (existing) {
+                existing.remainingTicks = durationTicks;
+                return;
+            }
+        }
+
+        effects.push({
+            type,
+            remainingTicks: durationTicks,
+            sourceId: sourceId || null,
+            dps: options.dps || 0,
+            slowPercent: options.slowPercent || 0,
+            lastDotTick: 0 // Track last DoT tick to apply once per second
+        });
+
+        this.events.push({
+            type: CombatEventType.UNIT_STATUS_EFFECT,
+            tick: this.tick,
+            instanceId: unit.instanceId,
+            effect: type,
+            duration: duration,
+            sourceId: sourceId || null
+        });
+    }
+
+    processStatusEffects() {
+        for (const [instanceId, effects] of this.statusEffects.entries()) {
+            const unit = this.getUnitByInstanceId(instanceId);
+            if (!unit || unit.isDead) {
+                this.statusEffects.delete(instanceId);
+                continue;
+            }
+
+            const expiredIndices = [];
+            for (let i = 0; i < effects.length; i++) {
+                const effect = effects[i];
+                effect.remainingTicks--;
+
+                // Process DoT damage (once per second = every 20 ticks)
+                if (effect.dps > 0 && (this.tick - effect.lastDotTick) >= 20) {
+                    effect.lastDotTick = this.tick;
+                    let dotDamageType = 'physical';
+                    if (effect.type === StatusEffects.BURN) dotDamageType = 'fire';
+                    else if (effect.type === StatusEffects.POISON) dotDamageType = 'nature';
+
+                    const dotDamage = Math.round(effect.dps);
+                    if (dotDamage > 0) {
+                        unit.currentHealth -= dotDamage;
+
+                        this.events.push({
+                            type: CombatEventType.UNIT_DAMAGE,
+                            tick: this.tick,
+                            instanceId: unit.instanceId,
+                            damage: dotDamage,
+                            currentHealth: Math.max(0, unit.currentHealth),
+                            maxHealth: unit.stats.health,
+                            damageType: dotDamageType,
+                            isDot: true
+                        });
+
+                        if (unit.currentHealth <= 0) {
+                            this.handleDeath(unit, effect.sourceId ? this.getUnitByInstanceId(effect.sourceId) : null);
+                        }
+                    }
+                }
+
+                if (effect.remainingTicks <= 0) {
+                    expiredIndices.push(i);
+                }
+            }
+
+            // Remove expired effects (iterate in reverse)
+            for (let i = expiredIndices.length - 1; i >= 0; i--) {
+                effects.splice(expiredIndices[i], 1);
+            }
+
+            if (effects.length === 0) {
+                this.statusEffects.delete(instanceId);
+            }
+        }
+    }
+
+    hasStatusEffect(unit, type) {
+        const effects = this.statusEffects.get(unit.instanceId);
+        if (!effects) return false;
+        return effects.some(e => e.type === type);
+    }
+
+    getStatusEffect(unit, type) {
+        const effects = this.statusEffects.get(unit.instanceId);
+        if (!effects) return null;
+        return effects.find(e => e.type === type);
+    }
+
+    getFrostSlowPercent(unit) {
+        const frost = this.getStatusEffect(unit, StatusEffects.FROST);
+        if (!frost) return 0;
+        return frost.slowPercent || GameConstants.Combat.FROST_AS_SLOW;
+    }
+
+    // ========== BUFF SYSTEM ==========
+
+    applyBuff(unit, stat, value, durationSeconds, isPermanent = false) {
+        if (unit.isDead) return;
+
+        // Apply the stat change immediately
+        if (stat === 'attackSpeed') {
+            unit.stats.attackSpeed = (unit.stats.attackSpeed || 0.5) + value;
+        } else if (stat === 'attack') {
+            unit.stats.attack += value;
+        } else if (stat === 'armor') {
+            unit.stats.armor += value;
+        } else if (stat === 'magicResist') {
+            unit.stats.magicResist += value;
+        } else if (stat === 'critChance') {
+            unit.stats.critChance = (unit.stats.critChance || 0) + value * 100;
+        } else if (stat === 'damageReduction') {
+            unit.stats.damageReduction = (unit.stats.damageReduction || 0) + value * 100;
+        }
+
+        if (!isPermanent) {
+            const durationTicks = Math.ceil(durationSeconds / this.tickRate);
+            unit.activeBuffs.push({ stat, value, remainingTicks: durationTicks });
+        }
+
+        this.events.push({
+            type: CombatEventType.UNIT_BUFF,
+            tick: this.tick,
+            instanceId: unit.instanceId,
+            stat,
+            value,
+            duration: isPermanent ? -1 : durationSeconds
+        });
+    }
+
+    processBuffs() {
+        for (const unit of this.getAliveUnits()) {
+            const expiredIndices = [];
+            for (let i = 0; i < unit.activeBuffs.length; i++) {
+                const buff = unit.activeBuffs[i];
+                buff.remainingTicks--;
+                if (buff.remainingTicks <= 0) {
+                    // Call onExpire callback if present
+                    if (buff.onExpire) {
+                        buff.onExpire();
+                    }
+                    // Reverse the stat change (skip special marker stats)
+                    if (buff.stat.startsWith('_')) {
+                        // Special marker buff, no stat to reverse
+                    } else if (buff.stat === 'attackSpeed') {
+                        unit.stats.attackSpeed = Math.max(0.1, unit.stats.attackSpeed - buff.value);
+                    } else if (buff.stat === 'attack') {
+                        unit.stats.attack = Math.max(0, unit.stats.attack - buff.value);
+                    } else if (buff.stat === 'armor') {
+                        unit.stats.armor = Math.max(0, unit.stats.armor - buff.value);
+                    } else if (buff.stat === 'magicResist') {
+                        unit.stats.magicResist = Math.max(0, unit.stats.magicResist - buff.value);
+                    } else if (buff.stat === 'critChance') {
+                        unit.stats.critChance = Math.max(0, (unit.stats.critChance || 0) - buff.value * 100);
+                    } else if (buff.stat === 'damageReduction') {
+                        unit.stats.damageReduction = Math.max(0, (unit.stats.damageReduction || 0) - buff.value * 100);
+                    }
+                    expiredIndices.push(i);
+                }
+            }
+            for (let i = expiredIndices.length - 1; i >= 0; i--) {
+                unit.activeBuffs.splice(expiredIndices[i], 1);
+            }
+        }
+    }
+
+    // ========== SHIELD SYSTEM ==========
+
+    applyShield(unit, amount) {
+        if (unit.isDead) return;
+        unit.shield += amount;
+        this.events.push({
+            type: CombatEventType.UNIT_SHIELD,
+            tick: this.tick,
+            instanceId: unit.instanceId,
+            shieldAmount: amount,
+            currentShield: unit.shield
+        });
+    }
+
+    // ========== AURA EFFECTS ==========
+
+    processAuraEffects() {
+        // Gate most effects to once per second (every 20 ticks)
+        if (this.tick % 20 !== 0) return;
+
+        for (const unit of this.getAliveUnits()) {
+            // Nature trait: heal adjacent allies
+            if (this.unitHasTrait(unit, 'nature')) {
+                const natureTier = this.getTraitTier(unit, 'nature');
+                if (natureTier && natureTier.bonus && natureTier.bonus.adjHealPerSec) {
+                    const healPerSec = natureTier.bonus.adjHealPerSec;
+                    const neighbors = this.getHexNeighbors(unit.x, unit.y);
+                    for (const neighbor of neighbors) {
+                        const adjUnit = this.getAliveUnits().find(u =>
+                            u.x === neighbor.x && u.y === neighbor.y && u.playerId === unit.playerId && u !== unit
+                        );
+                        if (adjUnit && adjUnit.currentHealth < adjUnit.stats.health) {
+                            this.healUnit(adjUnit, healPerSec, unit.instanceId);
+                        }
+                    }
+                }
+            }
+
+            // Warmog's regen (item)
+            if (unit.itemEffects.hpRegen && unit.currentHealth < unit.stats.health) {
+                const regenAmount = Math.round(unit.stats.health * unit.itemEffects.hpRegen / 100);
+                if (regenAmount > 0) {
+                    this.healUnit(unit, regenAmount, unit.instanceId);
+                }
+            }
+        }
+    }
+
+    healUnit(unit, amount, sourceId) {
+        if (unit.isDead) return;
+        const oldHealth = unit.currentHealth;
+        unit.currentHealth = Math.min(unit.stats.health, unit.currentHealth + amount);
+        const healed = unit.currentHealth - oldHealth;
+        if (healed > 0) {
+            this.events.push({
+                type: CombatEventType.UNIT_HEAL,
+                tick: this.tick,
+                instanceId: unit.instanceId,
+                healAmount: healed,
+                currentHealth: unit.currentHealth,
+                maxHealth: unit.stats.health,
+                sourceId: sourceId || null
+            });
+        }
+    }
+
+    // ========== DEATH HANDLING ==========
+
+    handleDeath(unit, killer) {
+        if (unit.isDead) return; // Guard against re-entrance
+
+        unit.isDead = true;
+
+        // Guardian Angel revive check
+        if (unit.itemEffects.revive && !unit.hasRevived) {
+            unit.hasRevived = true;
+            unit.isDead = false;
+            unit.currentHealth = Math.round(unit.stats.health * 0.3);
+
+            this.events.push({
+                type: CombatEventType.UNIT_HEAL,
+                tick: this.tick,
+                instanceId: unit.instanceId,
+                healAmount: unit.currentHealth,
+                currentHealth: unit.currentHealth,
+                maxHealth: unit.stats.health,
+                sourceId: unit.instanceId
+            });
+            return;
+        }
+
+        const deathEvent = {
+            type: CombatEventType.UNIT_DEATH,
+            tick: this.tick,
+            instanceId: unit.instanceId,
+            killerId: killer ? killer.instanceId : null
+        };
+
+        console.log(`[COMBAT] Tick ${this.tick}: ${unit.unitId} DIED (killed by ${killer ? killer.unitId : 'unknown'})`);
+
+        // Loot drops
+        if (unit.lootTypes && unit.lootTypes.length > 0) {
+            deathEvent.lootDrops = unit.lootTypes.map((lootType, index) => ({
+                lootType,
+                lootPosition: { x: unit.x, y: unit.y },
+                lootId: uuidv4(),
+                offsetIndex: index
+            }));
+        } else if (unit.lootType && unit.lootType !== LootType.None) {
+            deathEvent.lootType = unit.lootType;
+            deathEvent.lootPosition = { x: unit.x, y: unit.y };
+            deathEvent.lootId = uuidv4();
+        }
+        this.events.push(deathEvent);
+
+        // Process on-kill effects for killer
+        if (killer && !killer.isDead && killer.ability && killer.ability.onKill) {
+            this.processOnKillEffect(killer, unit);
+        }
+
+        // Chain on kill (Warlock)
+        if (killer && !killer.isDead && killer.ability && killer.ability.chainsOnKill && killer.ability.chainDamage) {
+            const enemies = this.getEnemyUnits(killer).filter(e => e !== unit);
+            if (enemies.length > 0) {
+                // Find nearest enemy to the killed unit
+                let nearest = null;
+                let nearestDist = Infinity;
+                for (const enemy of enemies) {
+                    const dist = this.getDistance(unit, enemy);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearest = enemy;
+                    }
+                }
+                if (nearest) {
+                    const chainResult = this.calculateDamage(killer, nearest, killer.ability.chainDamage, killer.ability.damageType);
+                    nearest.currentHealth -= chainResult.finalDamage;
+                    this.events.push({
+                        type: CombatEventType.UNIT_DAMAGE,
+                        tick: this.tick,
+                        instanceId: nearest.instanceId,
+                        damage: chainResult.finalDamage,
+                        currentHealth: Math.max(0, nearest.currentHealth),
+                        maxHealth: nearest.stats.health,
+                        damageType: chainResult.damageType
+                    });
+                    if (nearest.currentHealth <= 0) {
+                        this.handleDeath(nearest, killer);
+                    }
+                }
+            }
+        }
+
+        // Volatile trait: explode on death
+        if (this.unitHasTrait(unit, 'volatile')) {
+            const volatileTier = this.getTraitTier(unit, 'volatile');
+            if (volatileTier && volatileTier.bonus && volatileTier.bonus.explosionDamage) {
+                const neighbors = this.getHexNeighbors(unit.x, unit.y);
+                const enemies = this.getAliveUnits().filter(u => u.playerId !== unit.playerId);
+                for (const enemy of enemies) {
+                    if (neighbors.some(n => n.x === enemy.x && n.y === enemy.y)) {
+                        const explosionResult = this.calculateDamage(unit, enemy, volatileTier.bonus.explosionDamage, 'fire');
+                        enemy.currentHealth -= explosionResult.finalDamage;
+                        this.events.push({
+                            type: CombatEventType.UNIT_DAMAGE,
+                            tick: this.tick,
+                            instanceId: enemy.instanceId,
+                            damage: explosionResult.finalDamage,
+                            currentHealth: Math.max(0, enemy.currentHealth),
+                            maxHealth: enemy.stats.health,
+                            damageType: 'fire'
+                        });
+                        if (enemy.currentHealth <= 0) {
+                            this.handleDeath(enemy, unit);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Clear status effects for dead unit
+        this.statusEffects.delete(unit.instanceId);
+    }
+
+    processOnKillEffect(killer, victim) {
+        const onKill = killer.ability.onKill;
+        if (!onKill) return;
+
+        if (onKill.buff) {
+            // Temporary stat buff (e.g., Grunt +20% AS for 5s)
+            this.applyBuff(killer, onKill.buff, onKill.value, onKill.duration || 5);
+        }
+        if (onKill.permBuff) {
+            // Permanent stat buff (e.g., Werewolf +30% AS permanent)
+            this.applyBuff(killer, onKill.permBuff, onKill.value, 0, true);
+        }
+        if (onKill.gold) {
+            killer.bonusGold += onKill.gold;
+        }
+        if (onKill.mana) {
+            killer.currentMana = Math.min(killer.maxMana * 2, killer.currentMana + onKill.mana);
+        }
+        if (onKill.shield) {
+            this.applyShield(killer, onKill.shield);
+        }
+    }
+
+    // ========== ABILITY TARGETING ==========
+
+    getAbilityTargets(attacker, ability) {
+        const targeting = ability.targeting;
+        const enemies = this.getEnemyUnits(attacker).filter(e => !this.isUntargetable(e));
+        const allies = this.getFriendlyUnits(attacker);
+
+        switch (targeting) {
+            case 'currentTarget':
+                return attacker.target && !attacker.target.isDead && !this.isUntargetable(attacker.target)
+                    ? [attacker.target] : (enemies.length > 0 ? [enemies[0]] : []);
+
+            case 'lowestHealthEnemy': {
+                if (enemies.length === 0) return [];
+                const sorted = [...enemies].sort((a, b) => a.currentHealth - b.currentHealth);
+                return [sorted[0]];
+            }
+
+            case 'highestHealthEnemy': {
+                if (enemies.length === 0) return [];
+                const sorted = [...enemies].sort((a, b) => b.currentHealth - a.currentHealth);
+                return [sorted[0]];
+            }
+
+            case 'farthestEnemy': {
+                if (enemies.length === 0) return [];
+                const sorted = [...enemies].sort((a, b) =>
+                    this.getDistance(attacker, b) - this.getDistance(attacker, a)
+                );
+                return [sorted[0]];
+            }
+
+            case 'backlineEnemy': {
+                if (enemies.length === 0) return [];
+                // Backline = farthest row from attacker's side
+                const isPlayer1 = attacker.playerId === 'player1';
+                const sorted = [...enemies].sort((a, b) => {
+                    const aBack = isPlayer1 ? b.y - a.y : a.y - b.y;
+                    return aBack;
+                });
+                return [sorted[0]];
+            }
+
+            case 'lowestHealthAlly': {
+                if (allies.length === 0) return [];
+                const sorted = [...allies].sort((a, b) =>
+                    (a.currentHealth / a.stats.health) - (b.currentHealth / b.stats.health)
+                );
+                return [sorted[0]];
+            }
+
+            case 'nearbyEnemies': {
+                const radius = ability.radius || 1;
+                return enemies.filter(e => this.getDistance(attacker, e) <= radius);
+            }
+
+            case 'adjacentEnemies': {
+                const target = attacker.target && !attacker.target.isDead ? attacker.target : null;
+                if (!target) return enemies.filter(e => this.getDistance(attacker, e) <= 1);
+                // Get enemies adjacent to the target (including target)
+                const neighbors = this.getHexNeighbors(target.x, target.y);
+                const result = [target];
+                for (const enemy of enemies) {
+                    if (enemy !== target && neighbors.some(n => n.x === enemy.x && n.y === enemy.y)) {
+                        result.push(enemy);
+                    }
+                }
+                return result;
+            }
+
+            case 'allEnemies':
+                return enemies;
+
+            case 'allAllies':
+                return allies;
+
+            case 'randomEnemy': {
+                const count = ability.projectileCount || 1;
+                const targets = [];
+                for (let i = 0; i < count; i++) {
+                    if (enemies.length > 0) {
+                        targets.push(enemies[Math.floor(Math.random() * enemies.length)]);
+                    }
+                }
+                return targets;
+            }
+
+            case 'lineFromCaster': {
+                const target = attacker.target && !attacker.target.isDead ? attacker.target : null;
+                if (!target) return enemies.length > 0 ? [enemies[0]] : [];
+                return this.getUnitsInLine(attacker, target, enemies, ability.pierces);
+            }
+
+            case 'self':
+                return [attacker];
+
+            default:
+                // Fallback to current target
+                return attacker.target && !attacker.target.isDead ? [attacker.target] : [];
+        }
+    }
+
+    getUnitsInLine(source, target, candidates, pierces) {
+        // Simple line: get all candidates between source and target (and beyond if pierces)
+        const hit = [];
+        const dx = target.x - source.x;
+        const dy = target.y - source.y;
+        const maxDist = pierces ? 8 : this.getDistance(source, target);
+
+        for (const candidate of candidates) {
+            const dist = this.getDistance(source, candidate);
+            if (dist > maxDist) continue;
+
+            // Check if candidate is roughly on the line from source to target
+            const cdx = candidate.x - source.x;
+            const cdy = candidate.y - source.y;
+
+            // Simple proximity check: is the unit close to the line?
+            if (dx === 0 && dy === 0) continue;
+            const lineDist = Math.abs(cdx * dy - cdy * dx) / Math.sqrt(dx * dx + dy * dy);
+            if (lineDist <= 1.0) {
+                // Must be in the forward direction
+                const dot = cdx * dx + cdy * dy;
+                if (dot > 0) {
+                    hit.push(candidate);
+                }
+            }
+        }
+
+        // Always include the primary target
+        if (!hit.includes(target)) {
+            hit.unshift(target);
+        }
+
+        return hit;
     }
 
     processUnit(unit) {
@@ -798,7 +1571,12 @@ class CombatSimulator {
         unit.x = newX;
         unit.y = newY;
 
-        const moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
+        let moveSpeed = unit.stats.moveSpeed || DEFAULT_MOVE_SPEED;
+        // Frost slow affects movement speed
+        const frostSlow = this.getFrostSlowPercent(unit);
+        if (frostSlow > 0) {
+            moveSpeed = moveSpeed * (1 - frostSlow);
+        }
         const moveDuration = 1 / moveSpeed;
         const moveDurationTicks = Math.ceil(moveDuration / this.tickRate);
         unit.arrivalTick = this.tick + moveDurationTicks;
@@ -821,7 +1599,10 @@ class CombatSimulator {
 
     // Process attacks for a unit (after all movement is complete)
     processUnitAttack(unit) {
-        if (!unit.target || unit.target.isDead) {
+        // Skip untargetable units (they can't attack while stealthed)
+        if (this.isUntargetable(unit) && unit.totalAttacks === 0) return;
+
+        if (!unit.target || unit.target.isDead || this.isUntargetable(unit.target)) {
             unit.target = this.findTarget(unit);
         }
         if (!unit.target) return;
@@ -836,16 +1617,35 @@ class CombatSimulator {
                 && (isRanged || unit.target.arrivalTick <= this.tick);
 
             if (canAttack) {
+                // Calculate effective attack speed for cooldown
+                let effectiveAS = unit.stats.attackSpeed;
+
+                // Wild trait ramp
+                if (this.unitHasTrait(unit, 'wild')) {
+                    const wildTier = this.getTraitTier(unit, 'wild');
+                    if (wildTier && wildTier.bonus) {
+                        const rampBonus = Math.min(
+                            unit.totalAttacks * (wildTier.bonus.asPerAttack || 0) / 100,
+                            (wildTier.bonus.asMaxPercent || 50) / 100
+                        );
+                        effectiveAS = effectiveAS * (1 + rampBonus);
+                    }
+                }
+
+                // Frost slow
+                const frostSlow = this.getFrostSlowPercent(unit);
+                if (frostSlow > 0) {
+                    effectiveAS = effectiveAS * (1 - frostSlow);
+                }
+
                 // Check if unit can cast ability (mana is full)
                 if (unit.canCastAbility()) {
                     const abilityDuration = this.performAbility(unit, unit.target);
-                    // Use the longer of ability duration or normal attack cooldown
-                    unit.attackCooldown = Math.max(abilityDuration, 1 / unit.stats.attackSpeed);
-                    // Also prevent movement during ability animation
+                    unit.attackCooldown = Math.max(abilityDuration, 1 / effectiveAS);
                     unit.moveCooldown = abilityDuration;
                 } else {
                     this.performAttack(unit, unit.target);
-                    unit.attackCooldown = 1 / unit.stats.attackSpeed;
+                    unit.attackCooldown = 1 / effectiveAS;
                 }
                 unit.stuckTicks = 0;
             }
@@ -865,6 +1665,8 @@ class CombatSimulator {
         for (const enemy of enemies) {
             // Skip excluded target (used when re-evaluating due to being stuck)
             if (excludeTarget && enemy === excludeTarget) continue;
+            // Skip untargetable enemies
+            if (this.isUntargetable(enemy)) continue;
 
             const dist = this.getDistance(unit, enemy);
             const xDiff = Math.abs(unit.x - enemy.x); // For tie-breaking
@@ -873,6 +1675,20 @@ class CombatSimulator {
                 closestDist = dist;
                 closestXDiff = xDiff;
                 closest = enemy;
+            }
+        }
+
+        // If all enemies are untargetable, target the closest one anyway (they'll become targetable soon)
+        if (!closest) {
+            for (const enemy of enemies) {
+                if (excludeTarget && enemy === excludeTarget) continue;
+                const dist = this.getDistance(unit, enemy);
+                const xDiff = Math.abs(unit.x - enemy.x);
+                if (dist < closestDist || (dist === closestDist && xDiff < closestXDiff)) {
+                    closestDist = dist;
+                    closestXDiff = xDiff;
+                    closest = enemy;
+                }
             }
         }
 
@@ -1074,42 +1890,200 @@ class CombatSimulator {
     }
 
     performAttack(attacker, target) {
-        // Calculate damage
+        // Track attack count for Wild trait
+        attacker.totalAttacks++;
+
+        // Determine auto-attack damage type
+        let autoAttackDamageType = 'physical';
+        if (attacker.elementalAutoattacks) {
+            autoAttackDamageType = attacker.damageAffinity || 'fire';
+        }
+        // Attuned units with elementalAutoattacks convert to attuned element
+        if (attacker.elementalAutoattacks && this.unitHasTrait(attacker, 'attuned') && attacker.attunedElement) {
+            autoAttackDamageType = attacker.attunedElement;
+        }
+
+        // Calculate damage using the central method
         const baseDamage = attacker.stats.attack;
-        const armorReduction = target.stats.armor / (target.stats.armor + 100);
-        const damage = Math.round(baseDamage * (1 - armorReduction));
+
+        // Shadow first attack bonus
+        let firstAttackMultiplier = 1;
+        if (!attacker.firstAttackDone && this.unitHasTrait(attacker, 'shadow')) {
+            const shadowTier = this.getTraitTier(attacker, 'shadow');
+            if (shadowTier && shadowTier.bonus && shadowTier.bonus.firstAttackBonus) {
+                firstAttackMultiplier = 1 + shadowTier.bonus.firstAttackBonus / 100;
+            }
+            attacker.firstAttackDone = true;
+        }
+
+        const rawDamage = Math.round(baseDamage * firstAttackMultiplier);
+        const damageResult = this.calculateDamage(attacker, target, rawDamage, autoAttackDamageType);
+
+        // Calculate effective attack speed (with Wild ramping and frost slow)
+        let effectiveAS = attacker.stats.attackSpeed;
+
+        // Wild trait: ramp AS with each attack
+        if (this.unitHasTrait(attacker, 'wild')) {
+            const wildTier = this.getTraitTier(attacker, 'wild');
+            if (wildTier && wildTier.bonus) {
+                const rampBonus = Math.min(
+                    attacker.totalAttacks * (wildTier.bonus.asPerAttack || 0) / 100,
+                    (wildTier.bonus.asMaxPercent || 50) / 100
+                );
+                effectiveAS = effectiveAS * (1 + rampBonus);
+            }
+        }
+
+        // Frost slow
+        const frostSlow = this.getFrostSlowPercent(attacker);
+        if (frostSlow > 0) {
+            effectiveAS = effectiveAS * (1 - frostSlow);
+        }
 
         // Calculate when the attack will land (hit point in animation)
-        const attackDuration = 1 / attacker.stats.attackSpeed;
+        const attackDuration = 1 / effectiveAS;
         const hitDelay = attackDuration * DEFAULT_HIT_POINT;
         const hitTick = this.tick + Math.ceil(hitDelay / this.tickRate);
 
         // Determine if this is a ranged attack (range > 1)
         const isRanged = attacker.stats.range > 1;
 
-        // Debug logging for attack timing analysis
-        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} starts attack on ${target.unitId} (${isRanged ? 'ranged' : 'melee'}, lands at tick ${hitTick})`);
+        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} starts attack on ${target.unitId} (${isRanged ? 'ranged' : 'melee'}, ${damageResult.damageType}, ${damageResult.isCrit ? 'CRIT ' : ''}lands at tick ${hitTick})`);
 
-        // Emit attack start event (for client to begin animation)
+        // Emit attack start event
         this.events.push({
             type: CombatEventType.UNIT_ATTACK,
             tick: this.tick,
             attackerId: attacker.instanceId,
             targetId: target.instanceId,
-            damage,
-            hitTick // Include hit tick so client knows when damage lands
+            damage: damageResult.finalDamage,
+            hitTick,
+            damageType: damageResult.damageType,
+            isCrit: damageResult.isCrit
         });
 
         // Queue the attack to land later
         this.pendingAttacks.push({
             attackerId: attacker.instanceId,
-            attackerUnitId: attacker.unitId, // For logging
+            attackerUnitId: attacker.unitId,
             targetId: target.instanceId,
-            targetUnitId: target.unitId, // For logging
-            damage,
+            targetUnitId: target.unitId,
+            damage: damageResult.finalDamage,
+            damageType: damageResult.damageType,
+            isCrit: damageResult.isCrit,
             hitTick,
             isRanged
         });
+
+        // Cavalry: first attack stun
+        if (!attacker.hasCharged && this.unitHasTrait(attacker, 'cavalry')) {
+            attacker.hasCharged = true;
+            const cavTier = this.getTraitTier(attacker, 'cavalry');
+            if (cavTier && cavTier.bonus) {
+                if (cavTier.bonus.chargeStun) {
+                    this.applyStatusEffect(target, StatusEffects.STUN, cavTier.bonus.chargeStun, attacker.instanceId);
+                }
+                // Charge damage bonus applied as extra pending attack
+                if (cavTier.bonus.chargeDamageBonus) {
+                    const bonusDamage = Math.round(damageResult.finalDamage * cavTier.bonus.chargeDamageBonus / 100);
+                    if (bonusDamage > 0) {
+                        this.pendingAttacks.push({
+                            attackerId: attacker.instanceId,
+                            attackerUnitId: attacker.unitId,
+                            targetId: target.instanceId,
+                            targetUnitId: target.unitId,
+                            damage: bonusDamage,
+                            damageType: damageResult.damageType,
+                            hitTick,
+                            isRanged
+                        });
+                    }
+                }
+            }
+        }
+
+        // Dragon tier 4: auto-attacks apply burn
+        if (this.unitHasTrait(attacker, 'dragon')) {
+            const dragonTier = this.getTraitTier(attacker, 'dragon');
+            if (dragonTier && dragonTier.bonus && dragonTier.bonus.burnOnHit) {
+                this.applyStatusEffect(target, StatusEffects.BURN, dragonTier.bonus.burnDuration || 3, attacker.instanceId, {
+                    dps: dragonTier.bonus.burnOnHit / (dragonTier.bonus.burnDuration || 3)
+                });
+            }
+        }
+
+        // Cleave trait: splash to adjacent enemies
+        if (this.unitHasTrait(attacker, 'cleave')) {
+            const cleaveTier = this.getTraitTier(attacker, 'cleave');
+            if (cleaveTier && cleaveTier.bonus && cleaveTier.bonus.cleavePercent) {
+                const splashDamage = Math.round(damageResult.finalDamage * cleaveTier.bonus.cleavePercent / 100);
+                if (splashDamage > 0) {
+                    const neighbors = this.getHexNeighbors(target.x, target.y);
+                    const enemies = this.getEnemyUnits(attacker);
+                    for (const enemy of enemies) {
+                        if (enemy !== target && neighbors.some(n => n.x === enemy.x && n.y === enemy.y)) {
+                            this.pendingAttacks.push({
+                                attackerId: attacker.instanceId,
+                                attackerUnitId: attacker.unitId,
+                                targetId: enemy.instanceId,
+                                targetUnitId: enemy.unitId,
+                                damage: splashDamage,
+                                damageType: damageResult.damageType,
+                                hitTick,
+                                isRanged: true, // Splash always lands
+                                isCleave: true
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Enhanced attacks (Flame Knight)
+        if (attacker.enhancedAttacksRemaining > 0 && attacker.enhancedAttackData) {
+            attacker.enhancedAttacksRemaining--;
+            const enhData = attacker.enhancedAttackData;
+            if (enhData.hitAdjacentForPercent) {
+                const enhDamage = Math.round(attacker.stats.attack * enhData.hitAdjacentForPercent);
+                const neighbors = this.getHexNeighbors(target.x, target.y);
+                const enemies = this.getEnemyUnits(attacker);
+                for (const enemy of enemies) {
+                    if (enemy !== target && neighbors.some(n => n.x === enemy.x && n.y === enemy.y)) {
+                        const enhResult = this.calculateDamage(attacker, enemy, enhDamage, 'fire');
+                        this.pendingAttacks.push({
+                            attackerId: attacker.instanceId,
+                            attackerUnitId: attacker.unitId,
+                            targetId: enemy.instanceId,
+                            targetUnitId: enemy.unitId,
+                            damage: enhResult.finalDamage,
+                            damageType: 'fire',
+                            hitTick,
+                            isRanged: true
+                        });
+                    }
+                }
+            }
+        }
+
+        // Berserker Blood Frenzy: attacks apply bleed
+        if (attacker.appliesBleedOnAttack && attacker.bleedOnAttackDps > 0) {
+            this.applyStatusEffect(target, StatusEffects.BLEED, attacker.bleedOnAttackDuration, attacker.instanceId, {
+                dps: attacker.bleedOnAttackDps
+            });
+        }
+
+        // Warlord tier 4: attacks apply bleed
+        if (this.unitHasTrait(attacker, 'warlord')) {
+            const warlordTier = this.getTraitTier(attacker, 'warlord');
+            // Tier 4 (count >= 4) adds bleed
+            const teamTraits = this.getTeamActiveTraits(attacker);
+            const warlordInfo = teamTraits['warlord'];
+            if (warlordInfo && warlordInfo.count >= 4) {
+                this.applyStatusEffect(target, StatusEffects.BLEED, 3, attacker.instanceId, {
+                    dps: 10 // 30 over 3s
+                });
+            }
+        }
 
         // Generate mana for attacker (on attack start, not on hit)
         attacker.gainMana(attacker.manaPerAttack);
@@ -1119,44 +2093,431 @@ class CombatSimulator {
         // Use mana (resets to 0, or keeps overfill)
         attacker.useAbility();
 
-        // Default ability: 3x auto attack damage
-        const baseDamage = attacker.stats.attack * 3;
-        const armorReduction = target.stats.armor / (target.stats.armor + 100);
-        const damage = Math.round(baseDamage * (1 - armorReduction));
+        const ability = attacker.ability;
 
         // Abilities use a fixed duration (does not scale with attack speed)
         const hitDelay = ABILITY_DURATION * DEFAULT_HIT_POINT;
         const hitTick = this.tick + Math.ceil(hitDelay / this.tickRate);
-
         const isRanged = attacker.stats.range > 1;
 
-        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} casts ABILITY on ${target.unitId} (${damage} damage, lands at tick ${hitTick}, duration ${ABILITY_DURATION}s)`);
+        // No ability template: fallback to generic 3x attack damage
+        if (!ability) {
+            const fallbackDamage = attacker.stats.attack * 3;
+            const fallbackResult = this.calculateDamage(attacker, target, fallbackDamage, 'physical');
 
-        // Emit ability event (for client to play ability animation)
+            this.events.push({
+                type: CombatEventType.UNIT_ABILITY,
+                tick: this.tick,
+                attackerId: attacker.instanceId,
+                targetId: target.instanceId,
+                damage: fallbackResult.finalDamage,
+                hitTick,
+                abilityName: 'default',
+                abilityDuration: ABILITY_DURATION
+            });
+            this.pendingAttacks.push({
+                attackerId: attacker.instanceId,
+                attackerUnitId: attacker.unitId,
+                targetId: target.instanceId,
+                targetUnitId: target.unitId,
+                damage: fallbackResult.finalDamage,
+                damageType: 'physical',
+                hitTick,
+                isRanged,
+                isAbility: true
+            });
+            return ABILITY_DURATION;
+        }
+
+        // Resolve damage type
+        let damageType = ability.damageType || 'physical';
+        if (damageType === 'attuned') {
+            damageType = attacker.attunedElement || 'arcane';
+        }
+
+        // Calculate ability damage: baseDamage + adRatio * attack + apRatio * AP
+        const rawAbilityDamage = (ability.baseDamage || 0)
+            + (ability.adRatio || 0) * attacker.stats.attack
+            + (ability.apRatio || 0) * (attacker.stats.abilityPower || 0);
+
+        // Get targets
+        const targets = this.getAbilityTargets(attacker, ability);
+        const primaryTarget = targets.length > 0 ? targets[0] : target;
+
+        // Emit ability event (for client animation)
         this.events.push({
             type: CombatEventType.UNIT_ABILITY,
             tick: this.tick,
             attackerId: attacker.instanceId,
-            targetId: target.instanceId,
-            damage,
+            targetId: primaryTarget.instanceId,
+            damage: Math.round(rawAbilityDamage),
             hitTick,
-            abilityName: 'default', // Future: unit-specific abilities
-            abilityDuration: ABILITY_DURATION // Fixed duration for client animation
+            abilityName: ability.name || 'ability',
+            abilityDuration: ABILITY_DURATION,
+            damageType
         });
 
-        // Queue the ability damage to land later (using same pending attacks system)
-        this.pendingAttacks.push({
-            attackerId: attacker.instanceId,
-            attackerUnitId: attacker.unitId,
-            targetId: target.instanceId,
-            targetUnitId: target.unitId,
-            damage,
-            hitTick,
-            isRanged,
-            isAbility: true // Flag for logging
-        });
+        console.log(`[COMBAT] Tick ${this.tick}: ${attacker.unitId} casts ${ability.name} (type: ${ability.type}, targets: ${targets.length})`);
 
-        // Return the ability duration so caller can set appropriate cooldown
+        // Teleport to target if ability has teleports flag
+        if (ability.teleports && primaryTarget !== attacker) {
+            // Move attacker adjacent to target
+            const neighbors = this.getHexNeighbors(primaryTarget.x, primaryTarget.y);
+            const emptyNeighbor = neighbors.find(n =>
+                n.x >= 0 && n.x < 7 && n.y >= 0 && n.y < 8 &&
+                !this.isOccupied(n.x, n.y, attacker)
+            );
+            if (emptyNeighbor) {
+                attacker.x = emptyNeighbor.x;
+                attacker.y = emptyNeighbor.y;
+                this.events.push({
+                    type: CombatEventType.UNIT_MOVE,
+                    tick: this.tick,
+                    instanceId: attacker.instanceId,
+                    x: emptyNeighbor.x,
+                    y: emptyNeighbor.y,
+                    duration: 0.1 // Fast teleport
+                });
+            }
+        }
+
+        // Charge to target if ability has charges flag
+        if (ability.charges && primaryTarget !== attacker) {
+            const neighbors = this.getHexNeighbors(primaryTarget.x, primaryTarget.y);
+            const emptyNeighbor = neighbors.find(n =>
+                n.x >= 0 && n.x < 7 && n.y >= 0 && n.y < 8 &&
+                !this.isOccupied(n.x, n.y, attacker)
+            );
+            if (emptyNeighbor) {
+                attacker.x = emptyNeighbor.x;
+                attacker.y = emptyNeighbor.y;
+                this.events.push({
+                    type: CombatEventType.UNIT_MOVE,
+                    tick: this.tick,
+                    instanceId: attacker.instanceId,
+                    x: emptyNeighbor.x,
+                    y: emptyNeighbor.y,
+                    duration: 0.2 // Fast charge
+                });
+            }
+
+            // Stun from ability's stun field (e.g., Drake)
+            if (ability.stun && primaryTarget) {
+                this.applyStatusEffect(primaryTarget, StatusEffects.STUN, ability.stun, attacker.instanceId);
+            }
+        }
+
+        // Untargetable during (Griffin Sky Dive)
+        if (ability.untargetableDuring) {
+            attacker.untargetableUntilTick = this.tick + Math.ceil(ABILITY_DURATION / this.tickRate);
+        }
+
+        // Process by ability type
+        switch (ability.type) {
+            case 'damage':
+            case 'areaDamage': {
+                for (const t of targets) {
+                    if (t.isDead) continue;
+                    const dmgResult = this.calculateDamage(attacker, t, rawAbilityDamage, damageType, {
+                        guaranteedCrit: ability.guaranteedCrit
+                    });
+                    this.pendingAttacks.push({
+                        attackerId: attacker.instanceId,
+                        attackerUnitId: attacker.unitId,
+                        targetId: t.instanceId,
+                        targetUnitId: t.unitId,
+                        damage: dmgResult.finalDamage,
+                        damageType: dmgResult.damageType,
+                        isCrit: dmgResult.isCrit,
+                        hitTick,
+                        isRanged: true,
+                        isAbility: true,
+                        abilityRef: ability // For on-kill processing
+                    });
+
+                    // Apply status effect if specified
+                    if (ability.effect && ability.effect !== 'none' && ability.effectDuration) {
+                        const effectOptions = {};
+                        if (ability.effectDps) effectOptions.dps = ability.effectDps;
+                        if (ability.effectSlowPercent) effectOptions.slowPercent = ability.effectSlowPercent;
+                        this.applyStatusEffect(t, ability.effect, ability.effectDuration, attacker.instanceId, effectOptions);
+                    }
+
+                    // Mana burn (Demon Hunter)
+                    if (ability.manaBurn) {
+                        const manaBeforeBurn = t.currentMana;
+                        t.currentMana = Math.max(0, t.currentMana - ability.manaBurn);
+                        // If target was at full mana, deal bonus damage
+                        if (ability.fullManaBonusDamage && manaBeforeBurn >= t.maxMana) {
+                            const bonusResult = this.calculateDamage(attacker, t, ability.fullManaBonusDamage, damageType);
+                            this.pendingAttacks.push({
+                                attackerId: attacker.instanceId,
+                                attackerUnitId: attacker.unitId,
+                                targetId: t.instanceId,
+                                targetUnitId: t.unitId,
+                                damage: bonusResult.finalDamage,
+                                damageType: bonusResult.damageType,
+                                hitTick: hitTick + 1,
+                                isRanged: true,
+                                isAbility: true
+                            });
+                        }
+                    }
+                }
+
+                // Armor shred (Demon King)
+                if (ability.armorShred && ability.armorShredDuration) {
+                    for (const t of targets) {
+                        if (t.isDead) continue;
+                        const shredAmount = Math.round(t.stats.armor * ability.armorShred);
+                        if (shredAmount > 0) {
+                            t.stats.armor -= shredAmount;
+                            t.activeBuffs.push({
+                                stat: 'armor',
+                                value: -shredAmount, // Negative = restore on expiry
+                                remainingTicks: Math.ceil(ability.armorShredDuration / this.tickRate)
+                            });
+                        }
+                    }
+                }
+                break;
+            }
+
+            case 'heal': {
+                for (const t of targets) {
+                    if (t.isDead) continue;
+                    let healAmount = ability.baseHealing || 0;
+                    // Double healing for below 50% HP (Druid Rejuvenation)
+                    if (t.currentHealth < t.stats.health * 0.5) {
+                        healAmount *= 2;
+                    }
+                    // Nature heal effectiveness bonus
+                    const natureTier = this.getTraitTier(attacker, 'nature');
+                    if (natureTier && natureTier.bonus && natureTier.bonus.healEffectiveness) {
+                        healAmount = Math.round(healAmount * (1 + natureTier.bonus.healEffectiveness / 100));
+                    }
+                    this.healUnit(t, healAmount, attacker.instanceId);
+                }
+                break;
+            }
+
+            case 'healAndDamage': {
+                // Heal adjacent allies
+                if (ability.baseHealing) {
+                    const allies = this.getFriendlyUnits(attacker);
+                    const neighbors = this.getHexNeighbors(attacker.x, attacker.y);
+                    for (const ally of allies) {
+                        if (ally !== attacker && neighbors.some(n => n.x === ally.x && n.y === ally.y)) {
+                            this.healUnit(ally, ability.baseHealing, attacker.instanceId);
+                        }
+                    }
+                }
+                // Damage targets
+                for (const t of targets) {
+                    if (t.isDead) continue;
+                    const dmgResult = this.calculateDamage(attacker, t, rawAbilityDamage, damageType);
+                    this.pendingAttacks.push({
+                        attackerId: attacker.instanceId,
+                        attackerUnitId: attacker.unitId,
+                        targetId: t.instanceId,
+                        targetUnitId: t.unitId,
+                        damage: dmgResult.finalDamage,
+                        damageType: dmgResult.damageType,
+                        hitTick,
+                        isRanged: true,
+                        isAbility: true,
+                        abilityRef: ability
+                    });
+                }
+                break;
+            }
+
+            case 'damageAndHeal': {
+                let totalDamageDealt = 0;
+                for (const t of targets) {
+                    if (t.isDead) continue;
+                    const dmgResult = this.calculateDamage(attacker, t, rawAbilityDamage, damageType);
+                    totalDamageDealt += dmgResult.finalDamage;
+                    this.pendingAttacks.push({
+                        attackerId: attacker.instanceId,
+                        attackerUnitId: attacker.unitId,
+                        targetId: t.instanceId,
+                        targetUnitId: t.unitId,
+                        damage: dmgResult.finalDamage,
+                        damageType: dmgResult.damageType,
+                        hitTick,
+                        isRanged: true,
+                        isAbility: true,
+                        abilityRef: ability
+                    });
+                    if (ability.effect && ability.effect !== 'none' && ability.effectDuration) {
+                        const effectOptions = {};
+                        if (ability.effectDps) effectOptions.dps = ability.effectDps;
+                        if (ability.effectSlowPercent) effectOptions.slowPercent = ability.effectSlowPercent;
+                        this.applyStatusEffect(t, ability.effect, ability.effectDuration, attacker.instanceId, effectOptions);
+                    }
+                }
+                // Self-heal based on damage dealt
+                if (ability.selfHealPercent && totalDamageDealt > 0) {
+                    const healAmount = Math.round(totalDamageDealt * ability.selfHealPercent);
+                    this.healUnit(attacker, healAmount, attacker.instanceId);
+                }
+                // Heal nearby allies (Bishop Knight)
+                if (ability.baseHealing && ability.radius) {
+                    const allies = this.getFriendlyUnits(attacker);
+                    for (const ally of allies) {
+                        if (this.getDistance(attacker, ally) <= ability.radius) {
+                            this.healUnit(ally, ability.baseHealing, attacker.instanceId);
+                        }
+                    }
+                }
+                break;
+            }
+
+            case 'healAndBuff': {
+                for (const t of targets) {
+                    if (t.isDead) continue;
+                    if (ability.baseHealing) {
+                        this.healUnit(t, ability.baseHealing, attacker.instanceId);
+                    }
+                    if (ability.buff) {
+                        const duration = ability.duration || ability.buff.duration || 4;
+                        for (const [stat, value] of Object.entries(ability.buff)) {
+                            if (stat === 'duration') continue;
+                            this.applyBuff(t, stat, value, duration);
+                        }
+                    }
+                }
+                break;
+            }
+
+            case 'damageAndBuff': {
+                // Damage targets
+                for (const t of targets) {
+                    if (t.isDead || t === attacker) continue;
+                    if (rawAbilityDamage > 0) {
+                        const dmgResult = this.calculateDamage(attacker, t, rawAbilityDamage, damageType);
+                        this.pendingAttacks.push({
+                            attackerId: attacker.instanceId,
+                            attackerUnitId: attacker.unitId,
+                            targetId: t.instanceId,
+                            targetUnitId: t.unitId,
+                            damage: dmgResult.finalDamage,
+                            damageType: dmgResult.damageType,
+                            hitTick,
+                            isRanged: true,
+                            isAbility: true,
+                            abilityRef: ability
+                        });
+                    }
+                    if (ability.effect && ability.effect !== 'none' && ability.effectDuration) {
+                        const effectOptions = {};
+                        if (ability.effectDps) effectOptions.dps = ability.effectDps;
+                        if (ability.effectSlowPercent) effectOptions.slowPercent = ability.effectSlowPercent;
+                        if (ability.effectValue) effectOptions.value = ability.effectValue;
+                        this.applyStatusEffect(t, ability.effect, ability.effectDuration, attacker.instanceId, effectOptions);
+                    }
+                }
+                // Self buff (Knight Shield Wall)
+                if (ability.buff && ability.targeting === 'self') {
+                    const duration = ability.effectDuration || ability.buff.duration || 4;
+                    if (ability.effect === 'damageReduction' && ability.effectValue) {
+                        this.applyBuff(attacker, 'damageReduction', ability.effectValue, duration);
+                    }
+                }
+                // Ally buff (Treeant Ancient Roots, Naga Wizard, Fat Dragon)
+                if (ability.allyBuff) {
+                    const allyDuration = ability.allyBuff.duration || ability.duration || 4;
+                    const allies = this.getFriendlyUnits(attacker);
+                    for (const ally of allies) {
+                        for (const [stat, value] of Object.entries(ability.allyBuff)) {
+                            if (stat === 'duration') continue;
+                            if (stat === 'damagePercent') {
+                                // Temporary bonus damage percent
+                                this.applyBuff(ally, 'attack', Math.round(ally.stats.attack * value), allyDuration);
+                            } else {
+                                this.applyBuff(ally, stat, value, allyDuration);
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+
+            case 'buff': {
+                // Self buff (Berserker Blood Frenzy, Flame Knight Blazing Cleave)
+                if (ability.buff) {
+                    const duration = ability.buff.duration || 4;
+                    if (ability.buff.attackSpeed) {
+                        this.applyBuff(attacker, 'attackSpeed', ability.buff.attackSpeed, duration);
+                    }
+                    // Berserker: attacks apply bleed during buff
+                    if (ability.buff.appliesBleed) {
+                        attacker.appliesBleedOnAttack = true;
+                        attacker.bleedOnAttackDps = ability.buff.bleedDps || 20;
+                        attacker.bleedOnAttackDuration = ability.buff.bleedDuration || 2;
+                        // Clear after buff expires
+                        const bleedBuffTicks = Math.ceil(duration / this.tickRate);
+                        attacker.activeBuffs.push({
+                            stat: '_bleedOnAttack',
+                            value: 0,
+                            remainingTicks: bleedBuffTicks,
+                            onExpire: () => {
+                                attacker.appliesBleedOnAttack = false;
+                            }
+                        });
+                    }
+                    // Flame Knight: enhanced attacks
+                    if (ability.buff.enhancedAttacks) {
+                        attacker.enhancedAttacksRemaining = ability.buff.enhancedAttacks;
+                        attacker.enhancedAttackData = {
+                            hitAdjacentForPercent: ability.buff.hitAdjacentForPercent || 1.5
+                        };
+                        // Apply effect to enhanced attacks
+                        if (ability.effect === 'bleed' && ability.effectDuration) {
+                            attacker.bleedOnAttackDps = ability.effectDps || 25;
+                            attacker.bleedOnAttackDuration = ability.effectDuration;
+                            attacker.appliesBleedOnAttack = true;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case 'teamBuff': {
+                // Buff all allies (Blacksmith Forge Weapons)
+                if (ability.buff) {
+                    const allies = this.getFriendlyUnits(attacker);
+                    for (const ally of allies) {
+                        for (const [stat, value] of Object.entries(ability.buff)) {
+                            if (stat === 'duration') continue;
+                            // Team buffs are permanent for rest of combat
+                            this.applyBuff(ally, stat, value, 0, true);
+                        }
+                    }
+                }
+                break;
+            }
+
+            default: {
+                // Unknown type: fallback to generic damage
+                const fallbackDamage = attacker.stats.attack * 3;
+                const fallbackResult = this.calculateDamage(attacker, target, fallbackDamage, 'physical');
+                this.pendingAttacks.push({
+                    attackerId: attacker.instanceId,
+                    attackerUnitId: attacker.unitId,
+                    targetId: target.instanceId,
+                    targetUnitId: target.unitId,
+                    damage: fallbackResult.finalDamage,
+                    damageType: 'physical',
+                    hitTick,
+                    isRanged,
+                    isAbility: true
+                });
+                break;
+            }
+        }
+
         return ABILITY_DURATION;
     }
 
@@ -1180,54 +2541,89 @@ class CombatSimulator {
                 continue;
             }
 
-            // Check if target is still alive
+            // Check if target is still alive or untargetable
             if (!target || target.isDead) {
                 console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s attack on ${attack.targetUnitId} missed (target already dead)`);
                 continue;
             }
 
+            let damage = attack.damage;
+
+            // Shield absorption
+            if (target.shield > 0) {
+                if (target.shield >= damage) {
+                    target.shield -= damage;
+                    this.events.push({
+                        type: CombatEventType.UNIT_SHIELD,
+                        tick: this.tick,
+                        instanceId: target.instanceId,
+                        shieldAmount: -damage,
+                        currentShield: target.shield
+                    });
+                    damage = 0;
+                } else {
+                    damage -= target.shield;
+                    this.events.push({
+                        type: CombatEventType.UNIT_SHIELD,
+                        tick: this.tick,
+                        instanceId: target.instanceId,
+                        shieldAmount: -target.shield,
+                        currentShield: 0
+                    });
+                    target.shield = 0;
+                }
+            }
+
+            if (damage <= 0) continue;
+
             // Apply damage
-            const attackType = attack.isAbility ? 'ABILITY' : 'attack';
-            console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s ${attackType} LANDS on ${attack.targetUnitId} for ${attack.damage} damage`);
-            target.currentHealth -= attack.damage;
+            const attackType = attack.isAbility ? 'ABILITY' : (attack.isCleave ? 'cleave' : 'attack');
+            console.log(`[COMBAT] Tick ${this.tick}: ${attack.attackerUnitId}'s ${attackType} LANDS on ${attack.targetUnitId} for ${damage} damage${attack.isCrit ? ' (CRIT)' : ''}`);
+            target.currentHealth -= damage;
 
             this.events.push({
                 type: CombatEventType.UNIT_DAMAGE,
                 tick: this.tick,
                 instanceId: target.instanceId,
-                damage: attack.damage,
+                damage: damage,
                 currentHealth: Math.max(0, target.currentHealth),
-                maxHealth: target.stats.health
+                maxHealth: target.stats.health,
+                damageType: attack.damageType || 'physical',
+                isCrit: attack.isCrit || false,
+                isDot: false
             });
+
+            // Lifesteal: heal attacker for % of damage dealt
+            if (attacker && !attacker.isDead && attacker.itemEffects.lifesteal && !attack.isCleave) {
+                const healAmount = Math.round(damage * attacker.itemEffects.lifesteal / 100);
+                if (healAmount > 0) {
+                    this.healUnit(attacker, healAmount, attacker.instanceId);
+                }
+            }
+
+            // Thornmail reflect: deal % of damage back to attacker
+            if (target.itemEffects.reflect && attacker && !attacker.isDead && !attack.isAbility) {
+                const reflectDamage = Math.round(damage * target.itemEffects.reflect / 100);
+                if (reflectDamage > 0) {
+                    attacker.currentHealth -= reflectDamage;
+                    this.events.push({
+                        type: CombatEventType.UNIT_DAMAGE,
+                        tick: this.tick,
+                        instanceId: attacker.instanceId,
+                        damage: reflectDamage,
+                        currentHealth: Math.max(0, attacker.currentHealth),
+                        maxHealth: attacker.stats.health,
+                        damageType: 'physical'
+                    });
+                    if (attacker.currentHealth <= 0) {
+                        this.handleDeath(attacker, target);
+                    }
+                }
+            }
 
             // Check for death
             if (target.currentHealth <= 0) {
-                target.isDead = true;
-                const deathEvent = {
-                    type: CombatEventType.UNIT_DEATH,
-                    tick: this.tick,
-                    instanceId: target.instanceId,
-                    killerId: attack.attackerId
-                };
-                console.log(`[COMBAT] Tick ${this.tick}: ${target.unitId} DIED (killed by ${attack.attackerUnitId})`);
-
-                // Support multiple loot drops (for bosses) or single loot drop
-                if (target.lootTypes && target.lootTypes.length > 0) {
-                    // Multiple loot drops - spawn each with slight position offset
-                    deathEvent.lootDrops = target.lootTypes.map((lootType, index) => ({
-                        lootType,
-                        lootPosition: { x: target.x, y: target.y },
-                        lootId: uuidv4(),
-                        offsetIndex: index // Client uses this to offset orb positions
-                    }));
-                    console.log(`[COMBAT] ${target.unitId} drops ${target.lootTypes.length} loot orbs: ${target.lootTypes.join(', ')}`);
-                } else if (target.lootType && target.lootType !== LootType.None) {
-                    // Single loot drop (backwards compatible)
-                    deathEvent.lootType = target.lootType;
-                    deathEvent.lootPosition = { x: target.x, y: target.y };
-                    deathEvent.lootId = uuidv4();
-                }
-                this.events.push(deathEvent);
+                this.handleDeath(target, attacker);
             }
         }
     }
@@ -1397,15 +2793,16 @@ class GameRoom {
         this.state = 'playing';
         this.round = 1;
         this.unitPool.initialize();
-        console.log(`[GameRoom] Unit pool initialized`);
+        this.perGameVars = rollPerGameVariables();
+        console.log(`[GameRoom] Unit pool initialized, per-game vars: attuned=${this.perGameVars.attunedElement}, blessed=${this.perGameVars.blessedBonus?.id}, warlord=${this.perGameVars.warlordEnhancement?.id}`);
 
         // Initialize all players
         for (const player of this.players.values()) {
             console.log(`[GameRoom] Initializing player: ${player.name} (boardIndex: ${player.boardIndex})`);
             player.gold = GameConstants.Economy.STARTING_GOLD;
             console.log(`[GameRoom] ${player.name} starting gold set to: ${player.gold}`);
-            player.health = 20;
-            player.level = 1;
+            player.health = GameConstants.Player.STARTING_HEALTH;
+            player.level = GameConstants.Player.STARTING_LEVEL;
             player.xp = 0;
             player.isReady = false;
             player.isEliminated = false;
@@ -1617,7 +3014,8 @@ class GameRoom {
                     player.board,
                     pveBoard,
                     player,
-                    pveState
+                    pveState,
+                    { perGameVars: this.perGameVars || {} }
                 );
                 const result = simulator.run();
                 console.log(`[GameRoom] PvE Combat result: ${result.events.length} events, winner=${result.winner}, duration=${result.durationTicks} ticks`);
@@ -1766,7 +3164,8 @@ class GameRoom {
                 player1.board,
                 player2.board,
                 player1,
-                player2
+                player2,
+                { perGameVars: this.perGameVars || {} }
             );
             const result = simulator.run();
 
@@ -2370,8 +3769,8 @@ class GameRoom {
             }
         }
 
-        // Calculate sell value
-        const sellValue = unit.cost * Math.pow(3, unit.starLevel - 1);
+        // Calculate sell value: 1-star=cost, 2-star=2*cost-1, 3-star=4*cost-1
+        const sellValue = GameConstants.Selling.getSellPrice(unit.cost, unit.starLevel);
         player.gold += sellValue;
 
         // Remove unit
@@ -2381,8 +3780,8 @@ class GameRoom {
             player.bench[location.slot] = null;
         }
 
-        // Return to pool
-        const unitsToReturn = Math.pow(3, unit.starLevel - 1);
+        // Return to pool: 1 for 1-star, 2 for 2-star, 4 for 3-star (2-copy merge)
+        const unitsToReturn = Math.pow(2, unit.starLevel - 1);
         this.unitPool.returnUnit(unit.unitId, unitsToReturn);
 
         return {

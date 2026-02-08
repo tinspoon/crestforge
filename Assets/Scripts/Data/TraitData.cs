@@ -1,5 +1,6 @@
 using UnityEngine;
 using System;
+using Crestforge.Core;
 
 namespace Crestforge.Data
 {
@@ -18,11 +19,12 @@ namespace Crestforge.Data
         public Sprite icon;
 
         [Header("Trait Type")]
-        public bool isUnique;  // If true, only one unit has this trait (always active)
+        public bool isUnique;  // If true, only one unit has this trait (always active at 1)
+        public bool isAlwaysActive; // For Blessed: individual buffs always on, tier bonuses at 2/4
 
         [Header("Tier Thresholds")]
-        [Tooltip("Number of units needed to activate each tier (e.g., 2, 4, 6)")]
-        public int[] tierThresholds = { 2, 4, 6 };
+        [Tooltip("Number of units needed to activate each tier (e.g., 2, 4)")]
+        public int[] tierThresholds = { 2, 4 };
 
         [Header("Tier Bonuses")]
         public TraitBonus[] tierBonuses;
@@ -32,6 +34,8 @@ namespace Crestforge.Data
         /// </summary>
         public int GetActiveTier(int unitCount)
         {
+            if (isUnique && unitCount >= 1) return 0;
+
             int activeTier = -1;
             for (int i = 0; i < tierThresholds.Length; i++)
             {
@@ -82,7 +86,7 @@ namespace Crestforge.Data
         public int bonusAttack;
         public int bonusArmor;
         public int bonusMagicResist;
-        public float bonusAttackSpeed; // Percentage (0.2 = 20%)
+        public float bonusAttackSpeed;
 
         [Header("Stat Bonuses (applied to ALL friendly units)")]
         public int globalBonusHealth;
@@ -108,45 +112,67 @@ namespace Crestforge.Data
     public enum TraitEffect
     {
         None,
-        
-        // Combat Start Effects
-        JumpToBackline,         // Assassins jump to enemy backline
-        GainShield,             // Start with a shield (value1 = amount)
-        
-        // On Hit Effects
-        Lifesteal,              // Heal for % of damage (value1 = percent)
-        ApplyBurn,              // Deal fire damage over time (value1 = damage, value2 = duration)
-        ApplyPoison,            // Deal poison damage over time
-        ReduceArmor,            // Reduce target armor (value1 = amount, value2 = duration)
-        ChainLightning,         // Attack chains to nearby enemies (value1 = damage %, value2 = targets)
-        
-        // On Damage Taken Effects
-        Thorns,                 // Reflect damage (value1 = percent)
-        GainMana,               // Bonus mana on hit (value1 = amount)
-        
-        // On Kill Effects
-        HealOnKill,             // Heal when killing (value1 = amount)
-        ManaOnKill,             // Gain mana on kill (value1 = amount)
-        SummonOnKill,           // Summon unit on kill (value1 = summon id)
-        
-        // On Death Effects
-        Resurrect,              // Come back to life (value1 = health %)
-        ExplodeOnDeath,         // Deal damage on death (value1 = damage, value2 = radius)
-        BuffAlliesOnDeath,      // Buff remaining allies (value1 = stat boost %)
-        
-        // Periodic Effects
-        Regeneration,           // Heal over time (value1 = amount per second)
-        ManaRegen,              // Gain mana over time
-        
-        // Ability Modifiers
-        AbilityDamageBonus,     // Abilities deal more damage (value1 = percent)
-        ReducedManaCost,        // Abilities cost less mana (value1 = percent)
-        DoubleCast,             // Chance to cast ability twice (value1 = percent)
-        
-        // Unique Mechanics
-        PackHunter,             // Bonus damage per nearby ally with same trait (value1 = % per ally)
-        ExecuteThreshold,       // Instant kill below health % (value1 = threshold)
-        DamageReductionLowHealth, // Take less damage when low (value1 = threshold, value2 = reduction %)
-        BonusDamageHighHealth,  // Deal more damage to high health targets (value1 = threshold, value2 = bonus %)
+
+        // === Vanguard ===
+        VanguardTankiness,      // bonusHealth + bonusArmor at tier 2
+
+        // === Legion ===
+        LegionAdjDamage,        // Adjacent Legion units gain AD% (v1=%), tier 2 also grants Armor to adj (v2=armor)
+
+        // === Wild ===
+        WildRampingAS,          // +v1% AS per attack, max v2% (ramping, not flat)
+
+        // === Shadow ===
+        ShadowCritStealth,      // +v1% crit, first attack +v2% dmg, untargetable v3 seconds
+
+        // === Ironclad ===
+        IroncladDR,             // v1% damage reduction
+
+        // === Cleave ===
+        CleaveAdjSplash,        // v1% splash to adjacent enemies
+
+        // === Cavalry ===
+        CavalryCharge,          // +v1 move speed, charge stun v2 seconds, tier 2: +v3% charge dmg
+
+        // === Dragon ===
+        DragonFirePower,        // +v1% dmg, v2% Fire resist, tier 2: attacks apply Burn v3 dps
+
+        // === Volatile ===
+        VolatileDeathExplosion, // On death deal v1 Fire dmg to adjacent
+
+        // === Nature ===
+        NatureAdjHeal,          // Adjacent allies heal v1 HP/s, tier 2: +v2% heal effectiveness
+
+        // === Attuned ===
+        AttunedConvert,         // Convert ability damage to Attuned element, +v1% global same-type dmg
+
+        // === Blessed ===
+        BlessedPerGame,         // Per-game bonus effect at 2/4 (individual buffs always active)
+
+        // === Warlord ===
+        WarlordPhysical,        // Per-game Physical enhancement (v1 = magnitude)
+
+        // === Forged ===
+        ForgedStacking,         // +v1 AD/AP +v2 HP per round to Forged; tier 2: ALL units get v3 AD/AP/HP, Forged double
+
+        // === Scavenger ===
+        ScavengerReward,        // Guaranteed unit after round (tier 1: 1-2 cost, tier 2: 3-4 cost + 1g)
+
+        // === Unique: Treasure ===
+        TreasureOnWin,          // Random loot on win: gold, reroll, unit, or crest token
+
+        // === Unique: Crestmaker ===
+        CrestmakerCraft,        // Minor crest token every N rounds
+
+        // Legacy effects kept for compatibility
+        Lifesteal,
+        ApplyBurn,
+        Thorns,
+        HealOnKill,
+        Resurrect,
+        ExplodeOnDeath,
+        Regeneration,
+        AbilityDamageBonus,
+        GainShield
     }
 }

@@ -416,6 +416,8 @@ namespace Crestforge.Visuals
                 anim.walkClip = entry.walkClip;
             if (!string.IsNullOrEmpty(entry.attackClip))
                 anim.attackClip = entry.attackClip;
+            if (!string.IsNullOrEmpty(entry.abilityClip))
+                anim.abilityClip = entry.abilityClip;
             if (!string.IsNullOrEmpty(entry.hitClip))
                 anim.hitClip = entry.hitClip;
             if (!string.IsNullOrEmpty(entry.deathClip))

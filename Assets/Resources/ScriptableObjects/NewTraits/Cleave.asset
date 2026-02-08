@@ -14,9 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   traitId: cleave
   traitName: Cleave
-  description: Attacks hit enemies adjacent to target.
+  description: Cleave units' attacks splash to adjacent enemies
   icon: {fileID: 0}
   isUnique: 0
+  isAlwaysActive: 0
   tierThresholds: 0200000004000000
   tierBonuses:
   - bonusHealth: 0
@@ -29,11 +30,11 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
+    specialEffect: 6
     effectValue1: 0.25
     effectValue2: 0
     effectValue3: 0
-    bonusDescription: Cleave for 25% damage
+    bonusDescription: 25% splash to adjacent
   - bonusHealth: 0
     bonusAttack: 0
     bonusArmor: 0
@@ -44,8 +45,8 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
+    specialEffect: 6
     effectValue1: 0.5
     effectValue2: 0
     effectValue3: 0
-    bonusDescription: Cleave for 50% damage
+    bonusDescription: 50% splash to adjacent

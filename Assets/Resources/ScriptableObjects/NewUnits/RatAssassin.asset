@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Rat Assassin
   description: 
   cost: 1
+  damageAffinity: 4
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 2fb9479b5705943c887c5773286fb33f, type: 2}
-  - {fileID: 11400000, guid: a9c420798e49b41fdbb53608c66434a8, type: 2}
+  - {fileID: 11400000, guid: 5896f6c94d3d811b8a3a329732de6a64, type: 2}
+  - {fileID: 11400000, guid: 686c8c0d0c0de42b6a852878a9044af6, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 380
+    health: 350
     armor: 15
     magicResist: 15
-    attack: 65
-    attackSpeed: 0.78
+    attack: 60
+    abilityPower: 0
+    attackSpeed: 0.85
     range: 1
-    moveSpeed: 3.5
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2.25
     startingMana: 0
     maxMana: 40
   ability:
     abilityName: Backstab
-    description: Dashes to furthest enemy dealing 200 damage
-    type: 8
-    damageType: 0
-    baseDamage: 200
+    description: Teleport behind target, 250% AD Shadow, guaranteed crit
+    type: 0
+    damageType: 4
+    baseDamage: 0
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 10
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 1
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 0
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

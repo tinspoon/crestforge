@@ -16,30 +16,49 @@ MonoBehaviour:
   unitName: Chest Monster
   description: 
   cost: 2
+  damageAffinity: 2
+  elementalAutoattacks: 0
   traits:
   - {fileID: 11400000, guid: dac9903d203814ecdaaa23f037577554, type: 2}
+  - {fileID: 11400000, guid: 686c8c0d0c0de42b6a852878a9044af6, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
     health: 600
     armor: 35
     magicResist: 25
-    attack: 55
-    attackSpeed: 0.63
+    attack: 50
+    abilityPower: 15
+    attackSpeed: 0.6
     range: 1
-    moveSpeed: 2
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 1.75
     startingMana: 0
     maxMana: 60
   ability:
-    abilityName: Gold Toss
-    description: Throws coins dealing 250 damage. If kills, gain 1 gold
+    abilityName: Mimic Crunch
+    description: 200 Arcane, on kill gain 1g
     type: 0
-    damageType: 0
-    baseDamage: 250
+    damageType: 2
+    baseDamage: 200
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
     targeting: 0
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}

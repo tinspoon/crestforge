@@ -14,10 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   traitId: treasure
   traitName: Treasure
-  description: 'After winning a round, gain a random reward: gold, item component,
-    or consumable.'
+  description: On victory: receive random loot
   icon: {fileID: 0}
   isUnique: 1
+  isAlwaysActive: 0
   tierThresholds: 01000000
   tierBonuses:
   - bonusHealth: 0
@@ -30,8 +30,8 @@ MonoBehaviour:
     globalBonusArmor: 0
     globalBonusMagicResist: 0
     globalBonusAttackSpeed: 0
-    specialEffect: 0
-    effectValue1: 1
+    specialEffect: 16
+    effectValue1: 0
     effectValue2: 0
     effectValue3: 0
-    bonusDescription: Gain random reward on win
+    bonusDescription: Win: random reward (gold, reroll, unit, or crest token)

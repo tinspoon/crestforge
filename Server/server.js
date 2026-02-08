@@ -6,7 +6,7 @@
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const { GameRoom, CombatSimulator, UnitInstance, PlayerState } = require('./gameRoom');
-const { GameConstants, UnitTemplates, ItemTemplates, CrestTemplates, getStarScaledStats, calculateActiveTraits, applyTraitBonuses, applyItemBonuses, applyCrestBonuses } = require('./gameData');
+const { GameConstants, DamageTypes, PerGameVariables, UnitTemplates, TraitDefinitions, ItemTemplates, CrestTemplates, getStarScaledStats, calculateActiveTraits, applyTraitBonuses, applyItemBonuses, applyCrestBonuses, applyBlessedBonuses, rollPerGameVariables } = require('./gameData');
 
 const PORT = process.env.PORT || 8080;
 
@@ -514,8 +514,9 @@ function handleTestCombat(client, message) {
             }
         }
 
-        // Run combat simulation
-        const simulator = new CombatSimulator(boardA, boardB, stateA, stateB);
+        // Run combat simulation (test combat uses fresh per-game variables)
+        const { rollPerGameVariables } = require('./gameData');
+        const simulator = new CombatSimulator(boardA, boardB, stateA, stateB, { perGameVars: rollPerGameVariables() });
         const result = simulator.run();
 
         console.log(`[TestCombat] Combat complete: ${result.winner || 'draw'} wins with ${result.remainingUnits} units, ${result.events.length} events`);

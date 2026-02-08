@@ -16,22 +16,29 @@ MonoBehaviour:
   unitName: Red Slime
   description: 
   cost: 1
+  damageAffinity: 1
+  elementalAutoattacks: 0
   traits:
   - {fileID: 11400000, guid: 686c8c0d0c0de42b6a852878a9044af6, type: 2}
   - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 450
+    health: 420
     armor: 20
     magicResist: 20
-    attack: 45
-    attackSpeed: 0.63
+    attack: 40
+    abilityPower: 20
+    attackSpeed: 0.65
     range: 1
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
-    maxMana: 50
+    maxMana: 55
   ability:
-    abilityName: Volatile Burst
-    description: Explodes dealing 150 damage to all adjacent enemies
+    abilityName: Volatile Spit
+    description: 150 Fire + burning area 2s
     type: 7
     damageType: 1
     baseDamage: 150
@@ -41,7 +48,18 @@ MonoBehaviour:
     radius: 1
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 6
+    appliesEffect: 3
+    effectDuration: 2
+    effectDamagePerSecond: 30
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 0
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

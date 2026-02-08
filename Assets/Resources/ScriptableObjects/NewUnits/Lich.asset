@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Lich
+  m_EditorClassIdentifier: 
+  unitId: lich
+  unitName: Lich
+  description: 
+  cost: 5
+  damageAffinity: 4
+  elementalAutoattacks: 1
+  traits:
+  - {fileID: 11400000, guid: a7a050d51123fdc21be161f9a280c555, type: 2}
+  - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
+  baseStats:
+    health: 800
+    armor: 25
+    magicResist: 50
+    attack: 70
+    abilityPower: 60
+    attackSpeed: 0.55
+    range: 4
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 90
+  ability:
+    abilityName: Death Coil
+    description: 400 Shadow, on kill 200 HP shield, Frost 40% AS slow 3s
+    type: 0
+    damageType: 4
+    baseDamage: 400
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 2
+    effectDuration: 3
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0.4
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 2
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: DeathKnight
+  m_EditorClassIdentifier: 
+  unitId: deathknight
+  unitName: Death Knight
+  description: 
+  cost: 3
+  damageAffinity: 4
+  elementalAutoattacks: 0
+  traits:
+  - {fileID: 11400000, guid: a45cde1560348b854595cfad37fee326, type: 2}
+  - {fileID: 11400000, guid: 2f07304126dae4c1587718b20a0e82c4, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
+  baseStats:
+    health: 850
+    armor: 45
+    magicResist: 30
+    attack: 70
+    abilityPower: 0
+    attackSpeed: 0.65
+    range: 1
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 65
+  ability:
+    abilityName: Soul Rend
+    description: 250% AD Shadow, self-heal 30%
+    type: 6
+    damageType: 4
+    baseDamage: 0
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0.3
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 0
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

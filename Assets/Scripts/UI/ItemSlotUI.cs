@@ -40,9 +40,6 @@ namespace Crestforge.UI
         // Static drag tracking
         public static ItemSlotUI DraggedItem { get; private set; }
 
-        // Flag to suppress unit selection after item equip
-        public static bool JustEquippedItem { get; set; }
-
         private void Awake()
         {
             rectTransform = GetComponent<RectTransform>();
@@ -489,9 +486,6 @@ namespace Crestforge.UI
 
                     if (!string.IsNullOrEmpty(instanceId) && itemIndex >= 0)
                     {
-                        // Set flag to suppress unit tooltip from showing
-                        JustEquippedItem = true;
-
                         serverState.EquipItem(itemIndex, instanceId);
                         Debug.Log($"[ItemSlotUI] Equipped item {itemIndex} to unit {instanceId}");
                         return true;

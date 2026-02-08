@@ -38,6 +38,9 @@ namespace Crestforge.Visuals
             [Tooltip("Attack animation clip name")]
             public string attackClip;
 
+            [Tooltip("Ability animation clip name (falls back to attack if empty)")]
+            public string abilityClip;
+
             [Tooltip("Hit/hurt animation clip name")]
             public string hitClip;
 

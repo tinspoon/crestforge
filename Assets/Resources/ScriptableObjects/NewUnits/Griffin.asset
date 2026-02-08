@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Griffin
+  m_EditorClassIdentifier: 
+  unitId: griffin
+  unitName: Griffin
+  description: 
+  cost: 4
+  damageAffinity: 2
+  elementalAutoattacks: 0
+  traits:
+  - {fileID: 11400000, guid: a73b170b031047bae8f93e69fb4d9c14, type: 2}
+  - {fileID: 11400000, guid: cd415da628045f7087a21753c920388d, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
+  baseStats:
+    health: 900
+    armor: 35
+    magicResist: 35
+    attack: 80
+    abilityPower: 30
+    attackSpeed: 0.7
+    range: 1
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2.5
+    startingMana: 0
+    maxMana: 70
+  ability:
+    abilityName: Sky Dive
+    description: Leap backline, 300 Arcane, stun 1s, untargetable during
+    type: 0
+    damageType: 2
+    baseDamage: 300
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 5
+    effectDuration: 1
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 1
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 10
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

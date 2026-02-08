@@ -15,33 +15,51 @@ MonoBehaviour:
   unitId: fatdragon
   unitName: Fat Dragon
   description: 
-  cost: 4
+  cost: 5
+  damageAffinity: 3
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 7ec944bdb553c4bd79ce46cf56b0f17f, type: 2}
-  - {fileID: 11400000, guid: b69a8b2bca1c045baae64cb18a5a6f1c, type: 2}
+  - {fileID: 11400000, guid: 3d4e44928a334e4946d61fdf615238d6, type: 2}
+  - {fileID: 11400000, guid: 7180b30fd91eb1b06ff2952d3c474e89, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 1200
-    armor: 45
+    health: 1400
+    armor: 50
     magicResist: 40
-    attack: 85
-    attackSpeed: 0.54
+    attack: 80
+    abilityPower: 35
+    attackSpeed: 0.45
     range: 1
-    moveSpeed: 2
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 1.75
     startingMana: 0
     maxMana: 85
   ability:
-    abilityName: Belly Slam
-    description: Crashes down dealing 350 damage, slowing 40% for 2s
+    abilityName: Earthquake
+    description: 250 Nature all enemies, Frost 30% slow 2s, allies +15% dmg 4s
     type: 7
-    damageType: 1
-    baseDamage: 350
+    damageType: 3
+    baseDamage: 250
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 2
-    radius: 1
+    duration: 0
+    radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 6
+    appliesEffect: 2
+    effectDuration: 2
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0.3
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 4
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

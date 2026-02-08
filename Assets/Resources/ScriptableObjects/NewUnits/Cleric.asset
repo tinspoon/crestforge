@@ -15,33 +15,51 @@ MonoBehaviour:
   unitId: cleric
   unitName: Cleric
   description: 
-  cost: 3
+  cost: 1
+  damageAffinity: 2
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: f86399ff9c2c9453fa49bd5bfe49164a, type: 2}
-  - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  - {fileID: 11400000, guid: 7169dd956b85d435ea45631c3ce3498a, type: 2}
+  - {fileID: 11400000, guid: a45cde1560348b854595cfad37fee326, type: 2}
+  blessedStatType: 0
+  isBlessed: 1
   baseStats:
-    health: 700
-    armor: 30
-    magicResist: 45
-    attack: 45
-    attackSpeed: 0.58
+    health: 500
+    armor: 25
+    magicResist: 30
+    attack: 35
+    abilityPower: 20
+    attackSpeed: 0.55
     range: 3
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
-    startingMana: 30
-    maxMana: 100
+    startingMana: 0
+    maxMana: 70
   ability:
-    abilityName: Divine Radiance
-    description: Heals all allies for 200 HP each
-    type: 1
-    damageType: 3
+    abilityName: Divine Light
+    description: Heal lowest ally 200 HP + 10 Armor/MR 4s
+    type: 10
+    damageType: 2
     baseDamage: 0
     baseHealing: 200
     baseShieldAmount: 0
-    duration: 0
+    duration: 4
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 5
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 3
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

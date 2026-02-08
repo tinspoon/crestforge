@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Golem
   description: 
   cost: 2
+  damageAffinity: 2
+  elementalAutoattacks: 0
   traits:
-  - {fileID: 11400000, guid: 2f07304126dae4c1587718b20a0e82c4, type: 2}
-  - {fileID: 11400000, guid: 7ec944bdb553c4bd79ce46cf56b0f17f, type: 2}
+  - {fileID: 11400000, guid: 7180b30fd91eb1b06ff2952d3c474e89, type: 2}
+  - {fileID: 11400000, guid: a45cde1560348b854595cfad37fee326, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
     health: 800
     armor: 40
     magicResist: 25
-    attack: 50
-    attackSpeed: 0.53
+    attack: 45
+    abilityPower: 20
+    attackSpeed: 0.5
     range: 1
-    moveSpeed: 2
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 1.75
     startingMana: 0
     maxMana: 75
   ability:
-    abilityName: Ground Slam
-    description: Slams the ground dealing 220 damage to all adjacent enemies
+    abilityName: Arcane Slam
+    description: 180 Arcane to target + adj + 20% move slow 2s
     type: 7
-    damageType: 0
-    baseDamage: 220
+    damageType: 2
+    baseDamage: 180
     baseHealing: 0
     baseShieldAmount: 0
     duration: 0
     radius: 1
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 6
+    appliesEffect: 2
+    effectDuration: 2
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0.2
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 12
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

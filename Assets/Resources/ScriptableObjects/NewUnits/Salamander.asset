@@ -16,22 +16,29 @@ MonoBehaviour:
   unitName: Salamander
   description: 
   cost: 2
+  damageAffinity: 1
+  elementalAutoattacks: 1
   traits:
-  - {fileID: 11400000, guid: 2f07304126dae4c1587718b20a0e82c4, type: 2}
-  - {fileID: 11400000, guid: 8f86335b26ba944a6a82cb0853072138, type: 2}
+  - {fileID: 11400000, guid: a7a050d51123fdc21be161f9a280c555, type: 2}
+  - {fileID: 11400000, guid: c8195609e92cf48f3894a7e29e637dd1, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
-    health: 550
+    health: 520
     armor: 25
     magicResist: 30
-    attack: 65
-    attackSpeed: 0.67
+    attack: 60
+    abilityPower: 25
+    attackSpeed: 0.65
     range: 2
+    critChance: 0
+    critDamage: 1.5
     moveSpeed: 2
     startingMana: 0
-    maxMana: 55
+    maxMana: 60
   ability:
-    abilityName: Flame Breath
-    description: Breathes fire dealing 200 damage in a cone
+    abilityName: Fire Breath
+    description: Cone 200 Fire
     type: 7
     damageType: 1
     baseDamage: 200
@@ -41,7 +48,18 @@ MonoBehaviour:
     radius: 2
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 12
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

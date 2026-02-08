@@ -19,7 +19,8 @@ namespace Crestforge.Editor
                 "Assets/RPG Monster Wave PBR",
                 "Assets/RPGMonsterWave02PBR",
                 "Assets/RPGMonsterWave03PBR",
-                "Assets/RPGTinyHeroWavePBR"
+                "Assets/RPGTinyHeroWavePBR",
+                "Assets/RTS Mini Legion Fantasy PBR"
             };
 
             int totalTransitionsRemoved = 0;

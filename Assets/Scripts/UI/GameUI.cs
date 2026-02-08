@@ -371,9 +371,6 @@ namespace Crestforge.UI
                 action.Invoke();
             }
 
-            // Tooltip dismiss logic - uses state machine for clarity
-            HandleTooltipDismiss();
-
             // Check for orientation change
             bool nowPortrait = Screen.height > Screen.width;
             if (nowPortrait != isPortrait)
@@ -389,6 +386,15 @@ namespace Crestforge.UI
             UpdateTraitPanel();
             UpdateTraitTooltip();
             UpdateCrestDisplay();
+        }
+
+        private void LateUpdate()
+        {
+            // Tooltip dismiss runs in LateUpdate so it fires AFTER all EventSystem
+            // click handlers (OnPointerClick) have processed during Update.
+            // Uses GetMouseButtonUp to match touch-up timing (same frame as OnPointerClick),
+            // which is critical for mobile/touch where down and up are separate frames.
+            HandleTooltipDismiss();
         }
 
         private void CreateUI()
@@ -1005,6 +1011,9 @@ namespace Crestforge.UI
             
             Image tooltipBg = tooltipObj.GetComponent<Image>();
             tooltipBg.color = new Color(0.1f, 0.1f, 0.15f, 0.92f);
+            // Background doesn't intercept clicks meant for items/units behind it,
+            // but child elements (like tooltip item slots) can still receive drag events
+            tooltipBg.raycastTarget = false;
 
             // Add outline
             Outline outline = tooltipObj.AddComponent<Outline>();
@@ -3628,6 +3637,7 @@ namespace Crestforge.UI
             if (item == null || tooltipPanel == null) return;
 
             showingTemporaryItemInfo = true;
+            tooltipShownFrame = Time.frameCount; // Prevent HandleTooltipDismiss from hiding this frame
             PopulateItemTooltip(item);
         }
 
@@ -3709,6 +3719,9 @@ namespace Crestforge.UI
             tooltipShownFrame = Time.frameCount;
             tooltipPanel.gameObject.SetActive(true);
 
+            // Ensure tooltip renders on top of all other panels
+            tooltipPanel.transform.SetAsLastSibling();
+
             // Reset to default anchored position
             tooltipPanel.anchoredPosition = new Vector2(-15, 50);
 
@@ -3720,18 +3733,22 @@ namespace Crestforge.UI
 
         public void ToggleServerItemTooltipPin(ServerItemData serverItem)
         {
+            Debug.Log($"[GameUI] ToggleServerItemTooltipPin called - serverItem null? {serverItem == null}, tooltipPanel null? {tooltipPanel == null}");
             if (serverItem == null || tooltipPanel == null) return;
 
             // Check if this same item is already shown and pinned - toggle off
             if (isTooltipPinned && currentTooltipType == TooltipType.ServerItem &&
                 currentTooltipServerItem?.itemId == serverItem.itemId && tooltipPanel.gameObject.activeSelf)
             {
+                Debug.Log($"[GameUI] Toggling OFF tooltip for {serverItem.itemId}");
                 ClearTooltipState();
                 tooltipPanel.gameObject.SetActive(false);
             }
             else
             {
+                Debug.Log($"[GameUI] Showing tooltip for {serverItem.itemId}, calling ShowServerItemTooltipPinned");
                 ShowServerItemTooltipPinned(serverItem);
+                Debug.Log($"[GameUI] After ShowServerItemTooltipPinned - tooltipPanel active? {tooltipPanel.gameObject.activeSelf}, pos: {tooltipPanel.anchoredPosition}, size: {tooltipPanel.sizeDelta}, siblingIndex: {tooltipPanel.transform.GetSiblingIndex()}/{tooltipPanel.transform.parent.childCount}");
             }
         }
 
@@ -4184,8 +4201,8 @@ namespace Crestforge.UI
                 int effectiveFreeRerolls = ss.freeRerolls + optimisticFreeRerollDelta;
 
                 // Can reroll if have free rerolls OR enough gold
-                bool mpCanReroll = effectiveFreeRerolls > 0 || effectiveGold >= 2; // REROLL_COST
-                bool mpCanBuyXP = effectiveGold >= 4 && ss.level < 9; // XP_COST, MAX_LEVEL
+                bool mpCanReroll = effectiveFreeRerolls > 0 || effectiveGold >= GameConstants.Economy.REROLL_COST;
+                bool mpCanBuyXP = effectiveGold >= GameConstants.Economy.XP_COST && ss.level < GameConstants.Leveling.MAX_LEVEL;
 
                 rerollButton.interactable = mpCanReroll;
                 buyXPButton.interactable = mpCanBuyXP;
@@ -5254,6 +5271,11 @@ namespace Crestforge.UI
         {
             if (unitVisual == null)
             {
+                // Don't dismiss a tooltip that was just shown/updated this frame
+                // (e.g., clicking a tooltip item slot deactivates it, causing the 3D raycast
+                // to fall through and call this with null on the same frame)
+                if (Time.frameCount == tooltipShownFrame) return;
+
                 ClearTooltipState();
                 tooltipPanel.gameObject.SetActive(false);
                 return;
@@ -5350,7 +5372,7 @@ namespace Crestforge.UI
         /// </summary>
         private void HandleTooltipDismiss()
         {
-            if (!Input.GetMouseButtonDown(0)) return;
+            if (!Input.GetMouseButtonUp(0)) return;
 
             bool tooltipActive = tooltipPanel != null && tooltipPanel.gameObject.activeSelf;
             bool crestTooltipActive = crestTooltipPanel != null && crestTooltipPanel.gameObject.activeSelf;
@@ -5404,7 +5426,9 @@ namespace Crestforge.UI
                     result.gameObject.GetComponentInParent<CrestSlotUI>() != null ||
                     result.gameObject.GetComponentInParent<TooltipItemSlot>() != null ||
                     result.gameObject.GetComponentInParent<ServerTooltipItemSlot>() != null ||
-                    (tooltipPanel != null && result.gameObject.transform.IsChildOf(tooltipPanel.transform)))
+                    (tooltipPanel != null && result.gameObject.transform.IsChildOf(tooltipPanel.transform)) ||
+                    (crestPanel != null && result.gameObject.transform.IsChildOf(crestPanel.transform)) ||
+                    (crestTooltipPanel != null && result.gameObject.transform.IsChildOf(crestTooltipPanel.transform)))
                 {
                     return true;
                 }
@@ -5566,7 +5590,7 @@ namespace Crestforge.UI
                 else
                 {
                     // Pay gold for reroll
-                    int rerollCost = 2; // GameConstants.Economy.REROLL_COST
+                    int rerollCost = GameConstants.Economy.REROLL_COST;
                     if (serverState.gold + optimisticGoldDelta >= rerollCost)
                     {
                         optimisticGoldDelta -= rerollCost;
@@ -5944,6 +5968,7 @@ namespace Crestforge.UI
             if (serverItem == null || tooltipPanel == null) return;
 
             showingTemporaryItemInfo = true;
+            tooltipShownFrame = Time.frameCount; // Prevent HandleTooltipDismiss from hiding this frame
             PopulateServerItemTooltip(serverItem);
         }
 

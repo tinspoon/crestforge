@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Treeant
+  m_EditorClassIdentifier: 
+  unitId: treeant
+  unitName: Treeant
+  description: 
+  cost: 4
+  damageAffinity: 3
+  elementalAutoattacks: 0
+  traits:
+  - {fileID: 11400000, guid: 7169dd956b85d435ea45631c3ce3498a, type: 2}
+  - {fileID: 11400000, guid: 7180b30fd91eb1b06ff2952d3c474e89, type: 2}
+  blessedStatType: 5
+  isBlessed: 1
+  baseStats:
+    health: 1200
+    armor: 50
+    magicResist: 40
+    attack: 55
+    abilityPower: 30
+    attackSpeed: 0.4
+    range: 1
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 1.75
+    startingMana: 0
+    maxMana: 80
+  ability:
+    abilityName: Ancient Roots
+    description: Root 2 enemies 1.5s, 150 Nature, allies +20 Armor 4s
+    type: 9
+    damageType: 3
+    baseDamage: 150
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 2
+    projectileCount: 0
+    attackSpeedBonus: 0
+    appliesEffect: 6
+    effectDuration: 1.5
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 6
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}

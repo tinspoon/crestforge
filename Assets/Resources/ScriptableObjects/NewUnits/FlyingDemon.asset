@@ -16,32 +16,50 @@ MonoBehaviour:
   unitName: Flying Demon
   description: 
   cost: 4
+  damageAffinity: 4
+  elementalAutoattacks: 1
   traits:
-  - {fileID: 11400000, guid: a9c420798e49b41fdbb53608c66434a8, type: 2}
-  - {fileID: 11400000, guid: 8f86335b26ba944a6a82cb0853072138, type: 2}
+  - {fileID: 11400000, guid: a7a050d51123fdc21be161f9a280c555, type: 2}
+  - {fileID: 11400000, guid: 5896f6c94d3d811b8a3a329732de6a64, type: 2}
+  blessedStatType: 0
+  isBlessed: 0
   baseStats:
     health: 850
-    armor: 30
-    magicResist: 35
-    attack: 100
-    attackSpeed: 0.68
+    armor: 25
+    magicResist: 30
+    attack: 90
+    abilityPower: 30
+    attackSpeed: 0.75
     range: 1
-    moveSpeed: 2
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2.25
     startingMana: 0
-    maxMana: 70
+    maxMana: 65
   ability:
     abilityName: Shadow Dive
-    description: Dives onto furthest enemy dealing 450 damage, gaining 30% lifesteal
-    type: 8
-    damageType: 2
-    baseDamage: 450
+    description: Teleport lowest HP, 350 Shadow, on kill mana = 50
+    type: 0
+    damageType: 4
+    baseDamage: 350
     baseHealing: 0
     baseShieldAmount: 0
-    duration: 4
+    duration: 0
     radius: 0
     projectileCount: 0
     attackSpeedBonus: 0
-    targeting: 10
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 1
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 1
     effectPrefab: {fileID: 0}
     soundEffect: {fileID: 0}
   portrait: {fileID: 0}

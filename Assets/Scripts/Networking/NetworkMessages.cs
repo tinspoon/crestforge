@@ -435,7 +435,7 @@ namespace Crestforge.Networking
     [Serializable]
     public class ServerCombatEvent
     {
-        public string type; // combatStart, unitMove, unitAttack, unitDamage, unitDeath, combatEnd
+        public string type; // combatStart, unitMove, unitAttack, unitDamage, unitDeath, unitHeal, unitStatusEffect, unitBuff, unitShield, combatEnd
         public int tick;
 
         // For combatStart - initial unit positions
@@ -458,6 +458,24 @@ namespace Crestforge.Networking
         // For unitDamage
         public int currentHealth;
         public int maxHealth;
+        public string damageType; // physical, fire, arcane, nature, shadow
+        public bool isCrit;
+        public bool isDot;
+
+        // For unitHeal
+        public int healAmount;
+        public string sourceId;
+
+        // For unitStatusEffect
+        public string effect; // bleed, frost, burn, poison, stun, root
+
+        // For unitBuff
+        public string stat;
+        public float value;
+
+        // For unitShield
+        public int shieldAmount;
+        public int currentShield;
 
         // For unitDeath
         public string killerId;

@@ -1,0 +1,67 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e9aca904100b481c8a163b512cef6be, type: 3}
+  m_Name: Mage
+  m_EditorClassIdentifier: 
+  unitId: mage
+  unitName: Mage
+  description: 
+  cost: 2
+  damageAffinity: 2
+  elementalAutoattacks: 1
+  traits:
+  - {fileID: 11400000, guid: 7169dd956b85d435ea45631c3ce3498a, type: 2}
+  - {fileID: 11400000, guid: 3a113fcf4e51d4ed1a05933f66b8cc54, type: 2}
+  blessedStatType: 2
+  isBlessed: 1
+  baseStats:
+    health: 450
+    armor: 15
+    magicResist: 30
+    attack: 40
+    abilityPower: 40
+    attackSpeed: 0.6
+    range: 4
+    critChance: 0
+    critDamage: 1.5
+    moveSpeed: 2
+    startingMana: 0
+    maxMana: 60
+  ability:
+    abilityName: Arcane Barrage
+    description: 3 missiles at random enemies, 120 Arcane each
+    type: 0
+    damageType: 2
+    baseDamage: 120
+    baseHealing: 0
+    baseShieldAmount: 0
+    duration: 0
+    radius: 0
+    projectileCount: 3
+    attackSpeedBonus: 0
+    appliesEffect: 0
+    effectDuration: 0
+    effectDamagePerSecond: 0
+    effectSlowPercent: 0
+    selfHealPercent: 0
+    teleportsToTarget: 0
+    piercesTargets: 0
+    chainsOnKill: 0
+    chainDamage: 0
+    grantsPermStats: 0
+    permStatAmount: 0
+    targeting: 9
+    effectPrefab: {fileID: 0}
+    soundEffect: {fileID: 0}
+  portrait: {fileID: 0}
+  spriteSheet: []
+  animator: {fileID: 0}
